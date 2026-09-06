@@ -1,9 +1,9 @@
-:root {
-  --font-display:
-    Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,
-    Segoe UI Symbol, Noto Color Emoji;
-  --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
-  --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
-  --font-serif: Georgia, 'Times New Roman', serif;
-}
+/*
+  Placeholder to match your existing src/global.css.
+  This build's screens use React Native StyleSheet (see src/constants/theme.ts
+  for all design tokens), not Tailwind/NativeWind classes — so this file isn't
+  imported by anything here. If your existing project already wires up
+  NativeWind via this file (tailwind.config.js content globs, metro.config.js,
+  babel plugin), just keep your original global.css instead of this stub;
+  nothing in this build depends on it either way.
+*/

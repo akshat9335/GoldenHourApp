@@ -1,96 +1,32 @@
-import React, { useEffect, useRef } from 'react';
-import {
-  Animated,
-  Image,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import { Icon } from '@/components/ui';
 
-export default function HomeScreen() {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 900,
-        useNativeDriver: true,
-      }),
-
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 7,
-        tension: 45,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    const timer = setTimeout(() => {
-      router.replace('/onboarding');
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, []);
-
+export default function Splash() {
   return (
-    <View style={styles.container}>
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
-      >
-        <Image
-          source={require('../../assets/images/golden-hour-logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </Animated.View>
+    <LinearGradient colors={['#D32F2F', '#B71C1C']} style={styles.container}>
+      <View style={styles.logoWrap}>
+        <Icon name="ambulance" size={40} color="#fff" />
+      </View>
+      <Text style={styles.title}>Golden Hour</Text>
+      <Text style={styles.tag}>EVERY SECOND COUNTS</Text>
+      <ActivityIndicator color="#fff" style={{ marginTop: 40 }} />
 
-      <Animated.Text
-        style={[
-          styles.bottomText,
-          {
-            opacity: fadeAnim,
-          },
-        ]}
-      >
-        Real-Time Emergency Response
-      </Animated.Text>
-    </View>
+      <Pressable style={styles.cta} onPress={() => router.replace('/onboarding')}>
+        <Text style={styles.ctaText}>Continue →</Text>
+      </Pressable>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  content: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  logo: {
-    width: 330,
-    height: 330,
-  },
-
-  bottomText: {
-    position: 'absolute',
-    bottom: 48,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
-    letterSpacing: 0.3,
-  },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  logoWrap: { width: 84, height: 84, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  title: { color: '#fff', fontWeight: '800', fontSize: 24 },
+  tag: { color: '#fff', opacity: 0.85, fontSize: 12, marginTop: 6, letterSpacing: 0.5 },
+  cta: { position: 'absolute', bottom: 40, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 100 },
+  ctaText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

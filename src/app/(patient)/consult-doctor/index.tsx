@@ -1,0 +1,122 @@
+import React, { useState } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
+import { colors } from '@/constants/theme';
+import { Screen, TopBar, Card, Pill, Chip, Button, Icon, Input, Banner, PatientNav } from '@/components/ui';
+import { useAppStore } from '@/store/useAppStore';
+import { DOCTORS, SPECIALTIES } from '@/constants/doctorData';
+
+export default function ConsultDoctor() {
+  const selectedSpecialty = useAppStore((s) => s.selectedSpecialty);
+  const setSelectedSpecialty = useAppStore((s) => s.setSelectedSpecialty);
+  const setSelectedDoctorId = useAppStore((s) => s.setSelectedDoctorId);
+  const [query, setQuery] = useState('');
+
+  const doctors = DOCTORS.filter((d) => {
+    const matchesSpecialty = selectedSpecialty === 'All' || d.specialization === selectedSpecialty;
+    const matchesQuery =
+      !query.trim() ||
+      d.name.toLowerCase().includes(query.toLowerCase()) ||
+      d.specialization.toLowerCase().includes(query.toLowerCase());
+    return matchesSpecialty && matchesQuery;
+  });
+
+  function openDoctor(id: string) {
+    setSelectedDoctorId(id);
+    router.push('/(patient)/consult-doctor/doctor-profile');
+  }
+
+  return (
+    <View style={{ flex: 1 }}>
+      <Screen>
+        <TopBar title="Consult Doctor" />
+        <Text style={styles.subtitle}>Find verified doctors and nearby clinics</Text>
+
+        <View style={styles.searchWrap}>
+          <Icon name="search" size={16} color={colors.inkFaint} />
+          <Input
+            placeholder="Search doctors or specialties"
+            value={query}
+            onChangeText={setQuery}
+            style={styles.searchInput}
+          />
+        </View>
+
+        <View style={styles.chips}>
+          {SPECIALTIES.map((s) => (
+            <Chip key={s} label={s} selected={selectedSpecialty === s} onPress={() => setSelectedSpecialty(s)} />
+          ))}
+        </View>
+
+        <Banner color="red" icon={<Icon name="ambulance" size={14} color={colors.red} />}>
+          Need emergency help? Use SOS — Consult Doctor is for non-emergency consultations only.
+        </Banner>
+        <View style={{ height: 14 }} />
+
+        <Text style={styles.eyebrow}>DOCTORS NEAR YOU</Text>
+        {doctors.length === 0 ? (
+          <Text style={styles.empty}>No doctors found for this search.</Text>
+        ) : (
+          doctors.map((d) => (
+            <Pressable key={d.id} onPress={() => openDoctor(d.id)}>
+              <Card style={styles.card}>
+                <View style={styles.rowTop}>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.name}>{d.name}</Text>
+                      {d.verified && <Pill color="success">✓ VERIFIED</Pill>}
+                    </View>
+                    <Text style={styles.sub}>{d.specialization} · {d.qualification}</Text>
+                    <Text style={styles.sub}>{d.experience}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.clinicRow}>
+                  <Icon name="pin" size={14} color={colors.inkFaint} />
+                  <Text style={styles.clinicText}>{d.clinic} · {d.distanceKm} km</Text>
+                </View>
+
+                <View style={styles.tagsRow}>
+                  <Pill color={d.status === 'open' ? 'success' : d.status === 'busy' ? 'amber' : 'grey'}>
+                    {d.status === 'open' ? (d.availableToday ? '🟢 Available Today' : '🟢 Open') : d.status === 'busy' ? '🟡 Busy' : '🔴 Closed'}
+                  </Pill>
+                  <Pill color="blue">₹{d.fee} consultation</Pill>
+                </View>
+
+                {d.status !== 'closed' && (
+                  <View style={styles.queueInfo}>
+                    <Text style={styles.queueText}>Now Serving: {d.servingToken}</Text>
+                    <Text style={styles.queueText}>Current Queue: {d.currentToken}</Text>
+                    <Text style={styles.waitText}>{d.currentToken - d.servingToken} patients ahead · ~{d.estimatedWaitMin} min wait</Text>
+                  </View>
+                )}
+
+                <Button title="View Doctor" variant="secondary" style={{ marginTop: 10 }} onPress={() => openDoctor(d.id)} />
+              </Card>
+            </Pressable>
+          ))
+        )}
+      </Screen>
+      <PatientNav active="/(patient)/consult-doctor" />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  subtitle: { fontSize: 12, color: colors.inkFaint, marginTop: -12, marginBottom: 16 },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line, borderRadius: 14, paddingHorizontal: 14, marginBottom: 14 },
+  searchInput: { flex: 1, borderWidth: 0, paddingLeft: 0 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  eyebrow: { fontSize: 10.5, fontWeight: '700', color: colors.inkFaint, letterSpacing: 1, marginBottom: 10 },
+  empty: { fontSize: 12.5, color: colors.inkFaint, textAlign: 'center', marginTop: 20 },
+  card: { padding: 14, marginBottom: 12 },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  name: { fontWeight: '700', fontSize: 14, color: colors.ink },
+  sub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
+  clinicRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+  clinicText: { fontSize: 11.5, color: colors.ink, fontWeight: '600' },
+  tagsRow: { flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' },
+  queueInfo: { marginTop: 10, backgroundColor: colors.grey, borderRadius: 12, padding: 10 },
+  queueText: { fontSize: 11, fontWeight: '700', color: colors.ink },
+  waitText: { fontSize: 10.5, color: colors.inkFaint, marginTop: 4 },
+});

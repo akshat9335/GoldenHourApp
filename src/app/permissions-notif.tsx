@@ -1,0 +1,19 @@
+import React from 'react';
+import { router } from 'expo-router';
+import { colors } from '@/constants/theme';
+import { Screen, Button, IconPrompt, Icon } from '@/components/ui';
+
+export default function PermissionsNotif() {
+  return (
+    <Screen center>
+      <IconPrompt
+        icon={<Icon name="bell" size={26} color={colors.amber} />}
+        bg={colors.amberBg}
+        title="Enable Notifications"
+        desc="Get real-time updates on ambulance status, hospital acceptance, and emergency contact confirmations."
+      />
+      <Button title="Allow Notifications" onPress={() => router.push('/auth-success')} style={{ marginTop: 24 }} />
+      <Button title="Not Now" variant="ghost" onPress={() => router.push('/auth-success')} />
+    </Screen>
+  );
+}

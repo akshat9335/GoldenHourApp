@@ -1,65 +1,66 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
+// Design tokens ported 1:1 from golden-hour.html :root CSS variables.
+export const colors = {
+  red: '#D32F2F',
+  redDark: '#B71C1C',
+  redGlow: 'rgba(211,47,47,0.18)',
+  bg: '#F8FAFC',
+  ink: '#1A1A1A',
+  inkSoft: '#5B6472',
+  inkFaint: '#98A2AE',
+  success: '#2E7D32',
+  successBg: '#E8F5E9',
+  blue: '#1565C0',
+  blueBg: '#E8F0FB',
+  line: '#E7EBF0',
+  card: '#FFFFFF',
+  amber: '#B8860B',
+  amberBg: '#FDF4E3',
+  orange: '#C2610C',
+  orangeBg: '#FDEEDF',
+  grey: '#EEF1F4',
+  bannerRedBg: '#FDECEC',
+  bannerRedText: '#8C1F1F',
+  bannerAmberText: '#6B4E00',
+  bannerSuccessText: '#1B5E20',
+};
 
-import '@/global.css';
+export type Severity = 'low' | 'medium' | 'high' | 'critical';
 
-import { Platform } from 'react-native';
+export const severityColor = (s: Severity) =>
+  ({ low: colors.success, medium: colors.amber, high: colors.orange, critical: colors.red }[s]);
+export const severityBg = (s: Severity) =>
+  ({ low: colors.successBg, medium: colors.amberBg, high: colors.orangeBg, critical: colors.redGlow }[s]);
+export const severityLabel = (s: Severity) =>
+  ({ low: 'LOW', medium: 'MEDIUM', high: 'HIGH', critical: 'CRITICAL' }[s]);
+export const severityPillColor = (s: Severity) =>
+  ({ low: 'success', medium: 'amber', high: 'orange', critical: 'red' } as const)[s];
 
-export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+export const radii = { sm: 11, md: 14, lg: 16, xl: 18, xxl: 24, pill: 100 };
+export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 26, xxxl: 32 };
+
+// Poppins for headlines (weight 700/800), Inter for everything else.
+// Falls back to system bold fonts if custom fonts aren't loaded — see hooks/useFonts.ts.
+export const fonts = {
+  heading: 'Poppins_700Bold',
+  headingHeavy: 'Poppins_800ExtraBold',
+  body: 'Inter_400Regular',
+  bodyMed: 'Inter_600SemiBold',
+  bodyBold: 'Inter_700Bold',
+};
+
+export const shadow = {
+  card: {
+    shadowColor: '#141E32',
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+  sos: {
+    shadowColor: colors.red,
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
   },
-} as const;
-
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
-
-export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
-} as const;
-
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+};
