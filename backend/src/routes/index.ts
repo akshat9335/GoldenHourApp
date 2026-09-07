@@ -1,5 +1,6 @@
 import { Router } from "express";
 import healthRoutes from "./health.routes";
+import aiRoutes from "./ai.routes";
 
 /**
  * Centralized API routing. Mount every feature router here.
@@ -23,11 +24,12 @@ import healthRoutes from "./health.routes";
  *   router.use("/appointments", appointmentRoutes); (Doctor module)
  *   router.use("/queue", queueRoutes);           (Doctor module)
  *
- * Do NOT implement those business routes in this foundation - only
- * health-check is wired up for now.
+ * Feature owners should keep their business logic in their own router;
+ * the AI router is mounted here because it is the first implemented module.
  */
 const router = Router();
 
 router.use("/health", healthRoutes);
+router.use("/ai", aiRoutes);
 
 export default router;
