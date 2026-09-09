@@ -1,35 +1,53 @@
 import { Router } from "express";
+
 import healthRoutes from "./health.routes";
+import authRoutes from "./auth.routes";
+import userRoutes from "./users.routes";
+import contactRoutes from "./contacts.route";
+import emergencyRoutes from "./emergencies.routes";
+import notificationRoutes from "./notifications.routes";
 import aiRoutes from "./ai.routes";
 
 /**
- * Centralized API routing. Mount every feature router here.
+ * Centralized API routing.
  *
- * Future routes (owners in parentheses) will be added the same way:
- *   router.use("/auth", authRoutes);            (Akshat)
- *   router.use("/users", userRoutes);           (Akshat)
- *   router.use("/emergencies", emergencyRoutes); (Akshat)
- *   router.use("/contacts", contactRoutes);      (Akshat)
- *   router.use("/notifications", notificationRoutes); (Akshat)
- *   router.use("/ai", aiRoutes);                 (Archit)
- *   router.use("/hospitals", hospitalRoutes);    (Aastha)
- *   router.use("/facility", facilityRoutes);     (Aastha)
- *   router.use("/referrals", referralRoutes);    (Aastha)
- *   router.use("/ambulances", ambulanceRoutes);  (Akshita)
- *   router.use("/trips", tripRoutes);            (Akshita)
- *   router.use("/location", locationRoutes);     (Anant)
- *   router.use("/sync", syncRoutes);             (Anant)
- *   router.use("/confirmations", confirmationRoutes); (Adish)
- *   router.use("/doctors", doctorRoutes);        (Doctor module)
- *   router.use("/appointments", appointmentRoutes); (Doctor module)
- *   router.use("/queue", queueRoutes);           (Doctor module)
+ * Core routes currently implemented:
+ *   /health          → Health check
+ *   /auth            → Firebase authentication
+ *   /users           → User profile and persistent Crisis ID
+ *   /contacts        → Emergency contacts
+ *   /emergencies     → Emergency reporting and management
+ *   /notifications   → Notification and FCM device-token foundation
+ *   /ai              → Archit (Triage, First Aid, Image Analysis)
  *
- * Feature owners should keep their business logic in their own router;
- * the AI router is mounted here because it is the first implemented module.
+ * Future feature routes will be added by their respective owners:
+ *   /hospitals       → Aastha
+ *   /facility        → Aastha
+ *   /referrals       → Aastha
+ *   /ambulances      → Akshita
+ *   /trips           → Akshita
+ *   /location        → Anant
+ *   /confirmations   → Adish
+ *   /doctors         → Doctor module
+ *   /appointments    → Doctor module
+ *   /queue           → Doctor module
+ *
+ * Sync is currently an internal Core integration service and does not
+ * expose a public route. Other backend modules can use the sync service
+ * when integrating shared emergency state.
+ *
+ * Feature business routes should be added only when their respective
+ * modules are implemented and tested.
  */
+
 const router = Router();
 
 router.use("/health", healthRoutes);
+router.use("/auth", authRoutes);
+router.use("/users", userRoutes);
+router.use("/contacts", contactRoutes);
+router.use("/emergencies", emergencyRoutes);
+router.use("/notifications", notificationRoutes);
 router.use("/ai", aiRoutes);
 
 export default router;

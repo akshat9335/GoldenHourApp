@@ -36,7 +36,7 @@ describe("Auth-protected paths (foundation only)", () => {
     // for feature owners without depending on unimplemented routes.
     const res = await request(app).get("/api/users/me");
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
     expect(res.body.error).toHaveProperty("code");
     expect(res.body.error).toHaveProperty("message");
