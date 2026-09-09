@@ -140,6 +140,96 @@ describe("Hospital Profile", () => {
     expect(res.body.data.name).toBe("Test Hospital");
     expect(res.body.data.verificationStatus).toBe("PENDING");
   });
+
+  it("rejects profile update without authentication", async () => {
+    const res = await request(app)
+      .patch("/api/hospitals/me")
+      .send({
+        name: "Updated Hospital",
+      });
+
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toHaveProperty("code");
+    expect(res.body.error).toHaveProperty("message");
+  });
+
+  it("updates the authenticated hospital profile", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+          }),
+        },
+      ],
+    });
+
+    const mockSet = vi.fn().mockResolvedValue(undefined);
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+      doc: vi.fn().mockReturnValue({
+        set: mockSet,
+      }),
+    };
+
+    vi.mocked(firestore!.collection).mockReturnValue(
+      mockHospitalCollection as any,
+    );
+
+    const res = await request(app)
+      .patch("/api/hospitals/me")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        name: "Updated Hospital",
+        phone: "9999999999",
+        email: "updated@hospital.com",
+        address: "Updated Address",
+        emergencyCapability: false,
+        facilities: ["Emergency", "ICU", "MRI"],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    expect(res.body.data.hospitalId).toBe("hospital-001");
+    expect(res.body.data.name).toBe("Updated Hospital");
+    expect(res.body.data.phone).toBe("9999999999");
+    expect(res.body.data.email).toBe("updated@hospital.com");
+    expect(res.body.data.address).toBe("Updated Address");
+    expect(res.body.data.emergencyCapability).toBe(false);
+    expect(res.body.data.facilities).toEqual([
+      "Emergency",
+      "ICU",
+      "MRI",
+    ]);
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Updated Hospital",
+        phone: "9999999999",
+        email: "updated@hospital.com",
+        address: "Updated Address",
+        emergencyCapability: false,
+        facilities: ["Emergency", "ICU", "MRI"],
+      }),
+      { merge: true },
+    );
+  });
 });
 
 describe("Hospital Emergency Requests", () => {
@@ -249,7 +339,9 @@ describe("Hospital Emergency Requests", () => {
 
 describe("Hospital Emergency Request Detail", () => {
   it("rejects request detail without authentication", async () => {
-    const res = await request(app).get("/api/hospitals/requests/request-001");
+    const res = await request(app).get(
+      "/api/hospitals/requests/request-001",
+    );
 
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
@@ -633,6 +725,7 @@ describe("Hospital Capacity", () => {
     expect(res.body.data.emergencyCapacity).toBe(15);
 
     expect(mockSet).toHaveBeenCalled();
+
     expect(mockSet).toHaveBeenCalledWith(
       expect.objectContaining({
         hospitalId: "hospital-001",

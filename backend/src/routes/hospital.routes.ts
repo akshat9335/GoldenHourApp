@@ -1,10 +1,13 @@
 import { Router } from "express";
 
 import {
+  acceptHospitalRequestController,
   addHospitalDiagnosticController,
   addHospitalSpecialistController,
   createHospitalReferralController,
+  createHospitalReferralForRequestController,
   deleteHospitalDiagnosticController,
+  deleteHospitalSpecialistController,
   findMatchingFacilitiesController,
   getHospitalCapacityController,
   getHospitalDiagnosticByIdController,
@@ -15,8 +18,12 @@ import {
   getHospitalRequestsController,
   getHospitalSpecialistsController,
   registerHospitalController,
+  rejectHospitalRequestController,
   updateHospitalCapacityController,
   updateHospitalDiagnosticController,
+  updateHospitalProfileController,
+  updateHospitalRequestStatusController,
+  updateHospitalSpecialistController,
 } from "../controllers/hospital.controller";
 
 import { requireAuth, requireRole } from "../middleware/auth";
@@ -43,6 +50,13 @@ router.get(
   requireAuth,
   requireRole("hospital"),
   getHospitalProfileController,
+);
+
+router.patch(
+  "/me",
+  requireAuth,
+  requireRole("hospital"),
+  updateHospitalProfileController,
 );
 
 // ============================================================
@@ -79,6 +93,20 @@ router.post(
   requireAuth,
   requireRole("hospital"),
   addHospitalSpecialistController,
+);
+
+router.patch(
+  "/me/specialists/:id",
+  requireAuth,
+  requireRole("hospital"),
+  updateHospitalSpecialistController,
+);
+
+router.delete(
+  "/me/specialists/:id",
+  requireAuth,
+  requireRole("hospital"),
+  deleteHospitalSpecialistController,
 );
 
 // ============================================================
@@ -135,6 +163,7 @@ router.post(
 // HOSPITAL REFERRALS
 // ============================================================
 
+// Existing referral route - kept for backward compatibility.
 router.post(
   "/referrals",
   requireAuth,
@@ -147,6 +176,14 @@ router.get(
   requireAuth,
   requireRole("hospital"),
   getHospitalReferralsController,
+);
+
+// Exact A-Z referral endpoint.
+router.post(
+  "/requests/:id/referral",
+  requireAuth,
+  requireRole("hospital"),
+  createHospitalReferralForRequestController,
 );
 
 // ============================================================
@@ -166,5 +203,30 @@ router.get(
   requireRole("hospital"),
   getHospitalRequestByIdController,
 );
+
+router.post(
+  "/requests/:id/accept",
+  requireAuth,
+  requireRole("hospital"),
+  acceptHospitalRequestController,
+);
+
+router.post(
+  "/requests/:id/reject",
+  requireAuth,
+  requireRole("hospital"),
+  rejectHospitalRequestController,
+);
+
+router.patch(
+  "/requests/:id/status",
+  requireAuth,
+  requireRole("hospital"),
+  updateHospitalRequestStatusController,
+);
+
+// ============================================================
+// EXPORT
+// ============================================================
 
 export default router;

@@ -39,6 +39,49 @@ export interface HospitalDiagnosticData {
   available: boolean;
 }
 
+export interface FacilityMatchData {
+  specialization?: string;
+  emergencyRequired?: boolean;
+  icuRequired?: boolean;
+}
+
+export interface HospitalReferralData {
+  emergencyRequestId: string;
+  referredHospitalId: string;
+  reason: string;
+}
+
+export interface HospitalReferralRequestData {
+  referredHospitalId: string;
+  reason: string;
+}
+
+export type HospitalEmergencyRequestStatus =
+  | "NEW"
+  | "ACCEPTED"
+  | "AMBULANCE EN ROUTE"
+  | "PATIENT ARRIVED"
+  | "IN TREATMENT"
+  | "COMPLETED"
+  | "REJECTED";
+
+// ============================================================
+// VALID EMERGENCY REQUEST TRANSITIONS
+// ============================================================
+
+const allowedHospitalRequestTransitions: Record<
+  HospitalEmergencyRequestStatus,
+  HospitalEmergencyRequestStatus[]
+> = {
+  NEW: ["ACCEPTED", "REJECTED"],
+  ACCEPTED: ["AMBULANCE EN ROUTE"],
+  "AMBULANCE EN ROUTE": ["PATIENT ARRIVED"],
+  "PATIENT ARRIVED": ["IN TREATMENT"],
+  "IN TREATMENT": ["COMPLETED"],
+  COMPLETED: [],
+  REJECTED: [],
+};
+
 // ============================================================
 // HOSPITAL REGISTRATION
 // ============================================================
@@ -76,7 +119,7 @@ export async function registerHospital(uid: string, data: HospitalData) {
 }
 
 // ============================================================
-// HOSPITAL PROFILE
+// HOSPITAL PROFILE - GET
 // ============================================================
 
 export async function getHospitalProfile(uid: string) {
@@ -103,6 +146,83 @@ export async function getHospitalProfile(uid: string) {
   }
 
   return snapshot.docs[0].data();
+}
+
+// ============================================================
+// HOSPITAL PROFILE - UPDATE
+// ============================================================
+
+export async function updateHospitalProfile(
+  uid: string,
+  data: Partial<HospitalData>,
+) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const hospitalSnapshot = await firestore
+    .collection("hospitals")
+    .where("ownerUid", "==", uid)
+    .limit(1)
+    .get();
+
+  if (hospitalSnapshot.empty) {
+    throw new AppError(
+      404,
+      "HOSPITAL_NOT_FOUND",
+      "Hospital profile not found.",
+    );
+  }
+
+  const hospitalId = hospitalSnapshot.docs[0].id;
+
+  const allowedUpdates: Partial<HospitalData> = {};
+
+  if (data.name !== undefined) {
+    allowedUpdates.name = data.name;
+  }
+
+  if (data.phone !== undefined) {
+    allowedUpdates.phone = data.phone;
+  }
+
+  if (data.email !== undefined) {
+    allowedUpdates.email = data.email;
+  }
+
+  if (data.address !== undefined) {
+    allowedUpdates.address = data.address;
+  }
+
+  if (data.location !== undefined) {
+    allowedUpdates.location = data.location;
+  }
+
+  if (data.emergencyCapability !== undefined) {
+    allowedUpdates.emergencyCapability = data.emergencyCapability;
+  }
+
+  if (data.facilities !== undefined) {
+    allowedUpdates.facilities = data.facilities;
+  }
+
+  const updateData = {
+    ...allowedUpdates,
+    updatedAt: new Date(),
+  };
+
+  await firestore.collection("hospitals").doc(hospitalId).set(updateData, {
+    merge: true,
+  });
+
+  return {
+    hospitalId,
+    ...updateData,
+  };
 }
 
 // ============================================================
@@ -185,7 +305,6 @@ export async function updateHospitalCapacity(
 
   const hospitalId = hospitalSnapshot.docs[0].id;
 
-  // Validate negative values
   if (
     data.totalBeds < 0 ||
     data.availableBeds < 0 ||
@@ -200,7 +319,6 @@ export async function updateHospitalCapacity(
     );
   }
 
-  // Available beds cannot exceed total beds
   if (data.availableBeds > data.totalBeds) {
     throw new AppError(
       400,
@@ -209,7 +327,6 @@ export async function updateHospitalCapacity(
     );
   }
 
-  // Available ICU beds cannot exceed total ICU beds
   if (data.availableIcuBeds > data.icuBeds) {
     throw new AppError(
       400,
@@ -329,7 +446,6 @@ export async function getHospitalRequestById(uid: string, requestId: string) {
     );
   }
 
-  // Security: hospital can access only its own request
   if (requestData.hospitalId !== hospitalId) {
     throw new AppError(
       403,
@@ -341,6 +457,313 @@ export async function getHospitalRequestById(uid: string, requestId: string) {
   return {
     requestId: requestSnapshot.id,
     ...requestData,
+  };
+}
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST - ACCEPT
+// ============================================================
+
+export async function acceptHospitalRequest(uid: string, requestId: string) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const hospitalSnapshot = await firestore
+    .collection("hospitals")
+    .where("ownerUid", "==", uid)
+    .limit(1)
+    .get();
+
+  if (hospitalSnapshot.empty) {
+    throw new AppError(
+      404,
+      "HOSPITAL_NOT_FOUND",
+      "Hospital profile not found.",
+    );
+  }
+
+  const hospitalId = hospitalSnapshot.docs[0].id;
+
+  const requestRef = firestore
+    .collection("hospitalEmergencyRequests")
+    .doc(requestId);
+
+  const requestSnapshot = await requestRef.get();
+
+  if (!requestSnapshot.exists) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  const requestData = requestSnapshot.data();
+
+  if (!requestData) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  if (requestData.hospitalId !== hospitalId) {
+    throw new AppError(
+      403,
+      "REQUEST_ACCESS_DENIED",
+      "You are not authorized to accept this emergency request.",
+    );
+  }
+
+  const currentStatus = (requestData.status ??
+    "NEW") as HospitalEmergencyRequestStatus;
+
+  if (currentStatus !== "NEW") {
+    throw new AppError(
+      400,
+      "INVALID_REQUEST_STATE",
+      `Emergency request cannot be accepted from ${currentStatus} state.`,
+    );
+  }
+
+  const now = new Date();
+
+  const updatedRequest = {
+    status: "ACCEPTED" as const,
+    acceptedAt: now,
+    updatedAt: now,
+  };
+
+  await requestRef.set(updatedRequest, {
+    merge: true,
+  });
+
+  return {
+    requestId,
+    ...requestData,
+    ...updatedRequest,
+  };
+}
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST - REJECT
+// ============================================================
+
+export async function rejectHospitalRequest(
+  uid: string,
+  requestId: string,
+  reason?: string,
+) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const hospitalSnapshot = await firestore
+    .collection("hospitals")
+    .where("ownerUid", "==", uid)
+    .limit(1)
+    .get();
+
+  if (hospitalSnapshot.empty) {
+    throw new AppError(
+      404,
+      "HOSPITAL_NOT_FOUND",
+      "Hospital profile not found.",
+    );
+  }
+
+  const hospitalId = hospitalSnapshot.docs[0].id;
+
+  const requestRef = firestore
+    .collection("hospitalEmergencyRequests")
+    .doc(requestId);
+
+  const requestSnapshot = await requestRef.get();
+
+  if (!requestSnapshot.exists) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  const requestData = requestSnapshot.data();
+
+  if (!requestData) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  if (requestData.hospitalId !== hospitalId) {
+    throw new AppError(
+      403,
+      "REQUEST_ACCESS_DENIED",
+      "You are not authorized to reject this emergency request.",
+    );
+  }
+
+  const currentStatus = (requestData.status ??
+    "NEW") as HospitalEmergencyRequestStatus;
+
+  if (currentStatus !== "NEW") {
+    throw new AppError(
+      400,
+      "INVALID_REQUEST_STATE",
+      `Emergency request cannot be rejected from ${currentStatus} state.`,
+    );
+  }
+
+  const now = new Date();
+
+  const updatedRequest = {
+    status: "REJECTED" as const,
+    rejectionReason: reason ?? null,
+    rejectedAt: now,
+    updatedAt: now,
+  };
+
+  await requestRef.set(updatedRequest, {
+    merge: true,
+  });
+
+  return {
+    requestId,
+    ...requestData,
+    ...updatedRequest,
+  };
+}
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST - UPDATE STATUS
+// ============================================================
+
+export async function updateHospitalRequestStatus(
+  uid: string,
+  requestId: string,
+  status: HospitalEmergencyRequestStatus,
+) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const allowedStatuses: HospitalEmergencyRequestStatus[] = [
+    "NEW",
+    "ACCEPTED",
+    "AMBULANCE EN ROUTE",
+    "PATIENT ARRIVED",
+    "IN TREATMENT",
+    "COMPLETED",
+    "REJECTED",
+  ];
+
+  if (!allowedStatuses.includes(status)) {
+    throw new AppError(
+      400,
+      "INVALID_REQUEST_STATUS",
+      "Invalid emergency request status.",
+    );
+  }
+
+  const hospitalSnapshot = await firestore
+    .collection("hospitals")
+    .where("ownerUid", "==", uid)
+    .limit(1)
+    .get();
+
+  if (hospitalSnapshot.empty) {
+    throw new AppError(
+      404,
+      "HOSPITAL_NOT_FOUND",
+      "Hospital profile not found.",
+    );
+  }
+
+  const hospitalId = hospitalSnapshot.docs[0].id;
+
+  const requestRef = firestore
+    .collection("hospitalEmergencyRequests")
+    .doc(requestId);
+
+  const requestSnapshot = await requestRef.get();
+
+  if (!requestSnapshot.exists) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  const requestData = requestSnapshot.data();
+
+  if (!requestData) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  if (requestData.hospitalId !== hospitalId) {
+    throw new AppError(
+      403,
+      "REQUEST_ACCESS_DENIED",
+      "You are not authorized to update this emergency request.",
+    );
+  }
+
+  const currentStatus = (requestData.status ??
+    "NEW") as HospitalEmergencyRequestStatus;
+
+  if (currentStatus === status) {
+    throw new AppError(
+      400,
+      "INVALID_REQUEST_STATE",
+      `Emergency request is already in ${status} state.`,
+    );
+  }
+
+  const allowedNextStatuses = allowedHospitalRequestTransitions[currentStatus];
+
+  if (!allowedNextStatuses.includes(status)) {
+    throw new AppError(
+      400,
+      "INVALID_REQUEST_TRANSITION",
+      `Emergency request cannot move from ${currentStatus} to ${status}.`,
+    );
+  }
+
+  const updatedRequest = {
+    status,
+    updatedAt: new Date(),
+  };
+
+  await requestRef.set(updatedRequest, {
+    merge: true,
+  });
+
+  return {
+    requestId,
+    ...requestData,
+    ...updatedRequest,
   };
 }
 
@@ -416,7 +839,6 @@ export async function addHospitalSpecialist(
 
   const hospitalId = hospitalSnapshot.docs[0].id;
 
-  // Basic validation
   if (!data.name || !data.specialization) {
     throw new AppError(
       400,
@@ -441,6 +863,149 @@ export async function addHospitalSpecialist(
   return {
     staffId: staffRef.id,
     ...specialist,
+  };
+}
+
+// ============================================================
+// HOSPITAL SPECIALISTS - UPDATE
+// ============================================================
+
+export async function updateHospitalSpecialist(
+  uid: string,
+  specialistId: string,
+  data: HospitalSpecialistData,
+) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const hospitalSnapshot = await firestore
+    .collection("hospitals")
+    .where("ownerUid", "==", uid)
+    .limit(1)
+    .get();
+
+  if (hospitalSnapshot.empty) {
+    throw new AppError(
+      404,
+      "HOSPITAL_NOT_FOUND",
+      "Hospital profile not found.",
+    );
+  }
+
+  const hospitalId = hospitalSnapshot.docs[0].id;
+
+  if (!data.name || !data.specialization) {
+    throw new AppError(
+      400,
+      "INVALID_SPECIALIST_DATA",
+      "Specialist name and specialization are required.",
+    );
+  }
+
+  const staffRef = firestore.collection("hospitalStaff").doc(specialistId);
+
+  const staffSnapshot = await staffRef.get();
+
+  if (!staffSnapshot.exists) {
+    throw new AppError(404, "SPECIALIST_NOT_FOUND", "Specialist not found.");
+  }
+
+  const existingSpecialist = staffSnapshot.data();
+
+  if (!existingSpecialist) {
+    throw new AppError(404, "SPECIALIST_NOT_FOUND", "Specialist not found.");
+  }
+
+  if (existingSpecialist.hospitalId !== hospitalId) {
+    throw new AppError(
+      403,
+      "SPECIALIST_ACCESS_DENIED",
+      "You are not authorized to update this specialist.",
+    );
+  }
+
+  const updatedSpecialist = {
+    hospitalId,
+    name: data.name,
+    specialization: data.specialization,
+    availability: data.availability,
+    updatedAt: new Date(),
+  };
+
+  await staffRef.set(updatedSpecialist, {
+    merge: true,
+  });
+
+  return {
+    staffId: specialistId,
+    ...updatedSpecialist,
+  };
+}
+
+// ============================================================
+// HOSPITAL SPECIALISTS - DELETE
+// ============================================================
+
+export async function deleteHospitalSpecialist(
+  uid: string,
+  specialistId: string,
+) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const hospitalSnapshot = await firestore
+    .collection("hospitals")
+    .where("ownerUid", "==", uid)
+    .limit(1)
+    .get();
+
+  if (hospitalSnapshot.empty) {
+    throw new AppError(
+      404,
+      "HOSPITAL_NOT_FOUND",
+      "Hospital profile not found.",
+    );
+  }
+
+  const hospitalId = hospitalSnapshot.docs[0].id;
+
+  const staffRef = firestore.collection("hospitalStaff").doc(specialistId);
+
+  const staffSnapshot = await staffRef.get();
+
+  if (!staffSnapshot.exists) {
+    throw new AppError(404, "SPECIALIST_NOT_FOUND", "Specialist not found.");
+  }
+
+  const specialistData = staffSnapshot.data();
+
+  if (!specialistData) {
+    throw new AppError(404, "SPECIALIST_NOT_FOUND", "Specialist not found.");
+  }
+
+  if (specialistData.hospitalId !== hospitalId) {
+    throw new AppError(
+      403,
+      "SPECIALIST_ACCESS_DENIED",
+      "You are not authorized to delete this specialist.",
+    );
+  }
+
+  await staffRef.delete();
+
+  return {
+    staffId: specialistId,
+    deleted: true,
   };
 }
 
@@ -539,7 +1104,6 @@ export async function getHospitalDiagnosticById(
     );
   }
 
-  // Security: hospital can access only its own diagnostic
   if (diagnosticData.hospitalId !== hospitalId) {
     throw new AppError(
       403,
@@ -586,7 +1150,6 @@ export async function addHospitalDiagnostic(
 
   const hospitalId = hospitalSnapshot.docs[0].id;
 
-  // Basic validation
   if (!data.name || !data.type) {
     throw new AppError(
       400,
@@ -647,7 +1210,6 @@ export async function updateHospitalDiagnostic(
 
   const hospitalId = hospitalSnapshot.docs[0].id;
 
-  // Validate input
   if (!data.name || !data.type) {
     throw new AppError(
       400,
@@ -680,7 +1242,6 @@ export async function updateHospitalDiagnostic(
     );
   }
 
-  // Security: hospital can update only its own diagnostic
   if (existingDiagnostic.hospitalId !== hospitalId) {
     throw new AppError(
       403,
@@ -763,7 +1324,6 @@ export async function deleteHospitalDiagnostic(
     );
   }
 
-  // Security: hospital can delete only its own diagnostic
   if (diagnosticData.hospitalId !== hospitalId) {
     throw new AppError(
       403,
@@ -779,15 +1339,10 @@ export async function deleteHospitalDiagnostic(
     deleted: true,
   };
 }
+
 // ============================================================
 // FACILITY MATCHING
 // ============================================================
-
-export interface FacilityMatchData {
-  specialization?: string;
-  emergencyRequired?: boolean;
-  icuRequired?: boolean;
-}
 
 export async function findMatchingFacilities(
   uid: string,
@@ -801,7 +1356,6 @@ export async function findMatchingFacilities(
     );
   }
 
-  // Verify current hospital exists
   const hospitalSnapshot = await firestore
     .collection("hospitals")
     .where("ownerUid", "==", uid)
@@ -824,12 +1378,68 @@ export async function findMatchingFacilities(
       ...doc.data(),
     }))
     .filter((hospital: any) => {
+      // Do not include current hospital
       if (hospital.ownerUid === uid) {
         return false;
       }
 
+      // --------------------------------------------------------
+      // Emergency capability
+      // --------------------------------------------------------
+
       if (criteria.emergencyRequired === true) {
         if (hospital.emergencyCapability !== true) {
+          return false;
+        }
+      }
+
+      // --------------------------------------------------------
+      // Specialization
+      // --------------------------------------------------------
+
+      if (criteria.specialization) {
+        const facilities = Array.isArray(hospital.facilities)
+          ? hospital.facilities
+          : [];
+
+        const requiredSpecialization = criteria.specialization
+          .trim()
+          .toLowerCase();
+
+        const hasSpecialization = facilities.some(
+          (facility: unknown) =>
+            typeof facility === "string" &&
+            facility.trim().toLowerCase().includes(requiredSpecialization),
+        );
+
+        if (!hasSpecialization) {
+          return false;
+        }
+      }
+
+      // --------------------------------------------------------
+      // ICU requirement
+      // --------------------------------------------------------
+
+      if (criteria.icuRequired === true) {
+        const facilities = Array.isArray(hospital.facilities)
+          ? hospital.facilities
+          : [];
+
+        const hasIcu = facilities.some((facility: unknown) => {
+          if (typeof facility !== "string") {
+            return false;
+          }
+
+          const facilityName = facility.trim().toLowerCase();
+
+          return (
+            facilityName.includes("icu") ||
+            facilityName.includes("intensive care")
+          );
+        });
+
+        if (!hasIcu) {
           return false;
         }
       }
@@ -841,14 +1451,8 @@ export async function findMatchingFacilities(
 }
 
 // ============================================================
-// HOSPITAL REFERRAL - CREATE
+// HOSPITAL REFERRAL - EXISTING CREATE
 // ============================================================
-
-export interface HospitalReferralData {
-  emergencyRequestId: string;
-  referredHospitalId: string;
-  reason: string;
-}
 
 export async function createHospitalReferral(
   uid: string,
@@ -913,7 +1517,149 @@ export async function createHospitalReferral(
 }
 
 // ============================================================
-// HOSPITAL REFERRAL - GET
+// HOSPITAL REFERRAL - EXACT REQUEST ENDPOINT SUPPORT
+// ============================================================
+
+export async function createHospitalReferralForRequest(
+  uid: string,
+  requestId: string,
+  data: HospitalReferralRequestData,
+) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Find current hospital
+  // ----------------------------------------------------------
+
+  const hospitalSnapshot = await firestore
+    .collection("hospitals")
+    .where("ownerUid", "==", uid)
+    .limit(1)
+    .get();
+
+  if (hospitalSnapshot.empty) {
+    throw new AppError(
+      404,
+      "HOSPITAL_NOT_FOUND",
+      "Hospital profile not found.",
+    );
+  }
+
+  const currentHospitalId = hospitalSnapshot.docs[0].id;
+
+  // ----------------------------------------------------------
+  // Validate request body
+  // ----------------------------------------------------------
+
+  if (!data.referredHospitalId || !data.reason) {
+    throw new AppError(
+      400,
+      "INVALID_REFERRAL_DATA",
+      "Referred hospital and reason are required.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Check emergency request exists
+  // ----------------------------------------------------------
+
+  const requestRef = firestore
+    .collection("hospitalEmergencyRequests")
+    .doc(requestId);
+
+  const requestSnapshot = await requestRef.get();
+
+  if (!requestSnapshot.exists) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  const requestData = requestSnapshot.data();
+
+  if (!requestData) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Check current hospital owns the request
+  // ----------------------------------------------------------
+
+  if (requestData.hospitalId !== currentHospitalId) {
+    throw new AppError(
+      403,
+      "REQUEST_ACCESS_DENIED",
+      "You are not authorized to refer this emergency request.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Prevent self-referral
+  // ----------------------------------------------------------
+
+  if (data.referredHospitalId === currentHospitalId) {
+    throw new AppError(
+      400,
+      "INVALID_REFERRAL_TARGET",
+      "A hospital cannot refer a case to itself.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Check referred hospital exists
+  // ----------------------------------------------------------
+
+  const targetHospitalSnapshot = await firestore
+    .collection("hospitals")
+    .doc(data.referredHospitalId)
+    .get();
+
+  if (!targetHospitalSnapshot.exists) {
+    throw new AppError(
+      404,
+      "TARGET_HOSPITAL_NOT_FOUND",
+      "Referred hospital not found.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Create referral
+  // ----------------------------------------------------------
+
+  const referralRef = firestore.collection("hospitalReferrals").doc();
+
+  const now = new Date();
+
+  const referral = {
+    referralId: referralRef.id,
+    emergencyRequestId: requestId,
+    fromHospitalId: currentHospitalId,
+    referredHospitalId: data.referredHospitalId,
+    reason: data.reason,
+    status: "PENDING",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await referralRef.set(referral);
+
+  return referral;
+}
+
+// ============================================================
+// HOSPITAL REFERRALS - GET
 // ============================================================
 
 export async function getHospitalReferrals(uid: string) {
