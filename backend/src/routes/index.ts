@@ -6,6 +6,7 @@ import userRoutes from "./users.routes";
 import contactRoutes from "./contacts.route";
 import emergencyRoutes from "./emergencies.routes";
 import notificationRoutes from "./notifications.routes";
+import aiRoutes from "./ai.routes";
 
 /**
  * Centralized API routing.
@@ -17,9 +18,9 @@ import notificationRoutes from "./notifications.routes";
  *   /contacts        → Emergency contacts
  *   /emergencies     → Emergency reporting and management
  *   /notifications   → Notification and FCM device-token foundation
+ *   /ai              → Archit (Triage, First Aid, Image Analysis)
  *
  * Future feature routes will be added by their respective owners:
- *   /ai              → Archit
  *   /hospitals       → Aastha
  *   /facility        → Aastha
  *   /referrals       → Aastha
@@ -47,5 +48,6 @@ router.use("/users", userRoutes);
 router.use("/contacts", contactRoutes);
 router.use("/emergencies", emergencyRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/ai", aiRoutes);
 
 export default router;

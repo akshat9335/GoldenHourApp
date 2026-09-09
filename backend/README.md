@@ -187,7 +187,7 @@ role business logic is out of scope for this foundation.
 | `PORT` | Core | Server |
 | `NODE_ENV` | Core | Server, error handler |
 | `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` | Optional | Auth, Firestore-backed modules |
-| `GEMINI_API_KEY` | Optional | AI module (Archit) |
+| `GEMINI_API_KEY` / `AI_MODE` / `GEMINI_MODEL` / `AI_TIMEOUT_MS` | Optional | AI module (Archit) |
 | `GOOGLE_MAPS_SERVER_API_KEY` | Optional | Location module (Anant) |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` | Optional | Notifications (Akshat) |
 
@@ -244,3 +244,25 @@ Firestore collections this backend is designed to eventually support
 (not created yet): `users`, `emergencies`, `emergencyContacts`,
 `confirmations`, `hospitals`, `ambulances`, `doctors`, `appointments`,
 `queues`, `notifications`, `referrals`.
+
+## 16. AI module
+
+The AI module is available under `/api/ai` and is safe to run without any
+external credentials. It defaults to deterministic mock mode:
+
+```text
+POST /api/ai/triage
+POST /api/ai/image-analysis
+POST /api/ai/first-aid
+```
+
+Set `AI_MODE=live` and provide `GEMINI_API_KEY` only in the backend
+environment to use Gemini. Calls have a bounded timeout (`AI_TIMEOUT_MS`,
+default 8000 ms). Provider errors, timeouts, missing configuration, and
+malformed responses return a conservative fallback rather than crashing the
+request. Deterministic safety rules always override a less severe provider
+response for conditions such as unconsciousness, absent breathing, severe
+bleeding, stroke-like symptoms, anaphylaxis, and critically low oxygen.
+
+AI output is decision support, not a diagnosis. Every result includes the
+standard disclaimer and a `source` (`mock`, `gemini`, or `fallback`).
