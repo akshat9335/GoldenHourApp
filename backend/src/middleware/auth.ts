@@ -54,11 +54,14 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     next(new AppError(401, "INVALID_TOKEN", "Firebase ID token is invalid or expired."));
   }
 }
-
 /**
- * Placeholder for future role-based authorization, e.g.
- * requireRole("doctor"). Not wired into any route yet - this is scaffolding
- * only, per project scope (do not implement role business logic now).
+ * Reusable role-based authorization middleware.
+ *
+ * Feature routes can use requireRole("doctor"),
+ * requireRole("hospital"), requireRole("ambulance"), etc.
+ * after authentication has been established by requireAuth.
+ *
+ * Role assignment/business logic remains outside this middleware.
  */
 export function requireRole(role: string) {
   return (req: Request, _res: Response, next: NextFunction): void => {
