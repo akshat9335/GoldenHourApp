@@ -244,3 +244,39 @@ Firestore collections this backend is designed to eventually support
 (not created yet): `users`, `emergencies`, `emergencyContacts`,
 `confirmations`, `hospitals`, `ambulances`, `doctors`, `appointments`,
 `queues`, `notifications`, `referrals`.
+
+## 16. Ambulance Module API
+
+### Driver APIs
+
+- `POST /api/ambulances/drivers/register` — Register driver
+- `GET /api/ambulances/drivers/me` — Get logged-in driver profile
+- `PATCH /api/ambulances/drivers/me` — Update driver profile
+- `PATCH /api/ambulances/drivers/me/availability` — Update driver availability
+
+### Ambulance APIs
+
+- `POST /api/ambulances` — Register ambulance
+
+### Emergency Request APIs
+
+- `GET /api/ambulances/requests` — Get ambulance requests
+- `GET /api/ambulances/requests/:id` — Get request details
+- `POST /api/ambulances/requests/:id/accept` — Accept and assign ambulance
+
+### Trip APIs
+
+- `POST /api/ambulances/trips/:id/start-to-patient` — Start trip to patient
+- `POST /api/ambulances/trips/:id/arrived-patient` — Mark arrival at patient
+- `POST /api/ambulances/trips/:id/pickup` — Pick up patient
+- `POST /api/ambulances/trips/:id/start-to-hospital` — Start trip to hospital
+- `POST /api/ambulances/trips/:id/arrived-hospital` — Mark arrival at hospital
+- `POST /api/ambulances/trips/:id/complete` — Complete trip
+- `GET /api/ambulances/trips/history` — Get driver's trip history
+
+### Trip Lifecycle
+
+AVAILABLE → ASSIGNED → EN_ROUTE_TO_PATIENT → AT_PATIENT → PATIENT_ONBOARD → EN_ROUTE_TO_HOSPITAL → AT_HOSPITAL → COMPLETED → AVAILABLE
+
+All protected Ambulance APIs require Firebase authentication.
+
