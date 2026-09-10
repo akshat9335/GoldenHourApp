@@ -7,6 +7,7 @@ import contactRoutes from "./contacts.route";
 import emergencyRoutes from "./emergencies.routes";
 import notificationRoutes from "./notifications.routes";
 import aiRoutes from "./ai.routes";
+import hospitalRoutes from "./hospital.routes";
 
 /**
  * Centralized API routing.
@@ -17,13 +18,13 @@ import aiRoutes from "./ai.routes";
  *   /users           → User profile and persistent Crisis ID
  *   /contacts        → Emergency contacts
  *   /emergencies     → Emergency reporting and management
- *   /notifications   → Notification and FCM device-token foundation
- *   /ai              → Archit (Triage, First Aid, Image Analysis)
+ *   /notifications  → Notification and FCM device-token foundation
+ *   /ai              → AI features (Triage, First Aid, Image Analysis)
+ *   /hospitals       → Hospital registration, profile, capacity,
+ *                      specialists, diagnostics, facility matching
+ *                      and referrals
  *
- * Future feature routes will be added by their respective owners:
- *   /hospitals       → Aastha
- *   /facility        → Aastha
- *   /referrals       → Aastha
+ * Other feature routes will be added by their respective owners:
  *   /ambulances      → Akshita
  *   /trips           → Akshita
  *   /location        → Anant
@@ -35,9 +36,6 @@ import aiRoutes from "./ai.routes";
  * Sync is currently an internal Core integration service and does not
  * expose a public route. Other backend modules can use the sync service
  * when integrating shared emergency state.
- *
- * Feature business routes should be added only when their respective
- * modules are implemented and tested.
  */
 
 const router = Router();
@@ -49,5 +47,6 @@ router.use("/contacts", contactRoutes);
 router.use("/emergencies", emergencyRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/ai", aiRoutes);
+router.use("/hospitals", hospitalRoutes);
 
 export default router;
