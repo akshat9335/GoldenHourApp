@@ -744,3 +744,670 @@ describe("Hospital Diagnostics", () => {
     expect(res.body.error.code).toBe("INVALID_DIAGNOSTIC_DATA");
   });
 });
+
+// ============================================================
+// FACILITY MATCHING
+// ============================================================
+
+describe("Facility Matching", () => {
+  it("rejects matching request without authentication", async () => {
+    const res = await request(app).post("/api/hospitals/matching").send({
+      emergencyRequired: true,
+      specialization: "Cardiology",
+      icuRequired: true,
+    });
+
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toHaveProperty("code");
+    expect(res.body.error).toHaveProperty("message");
+  });
+
+  it("returns verified emergency-capable hospitals for emergency matching", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalsGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+        {
+          id: "hospital-002",
+          data: () => ({
+            hospitalId: "hospital-002",
+            ownerUid: "hospital-user-002",
+            name: "City Emergency Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+            facilities: ["Emergency Department"],
+          }),
+        },
+        {
+          id: "hospital-003",
+          data: () => ({
+            hospitalId: "hospital-003",
+            ownerUid: "hospital-user-003",
+            name: "Normal Hospital",
+            emergencyCapability: false,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+        {
+          id: "hospital-004",
+          data: () => ({
+            hospitalId: "hospital-004",
+            ownerUid: "hospital-user-004",
+            name: "Pending Hospital",
+            emergencyCapability: true,
+            verificationStatus: "PENDING",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+      get: mockHospitalsGet,
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/matching")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        emergencyRequired: true,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].hospitalId).toBe("hospital-002");
+    expect(res.body.data[0].name).toBe("City Emergency Hospital");
+    expect(res.body.data[0].emergencyCapability).toBe(true);
+    expect(res.body.data[0].verificationStatus).toBe("VERIFIED");
+  });
+
+  it("excludes the current hospital from matching results", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalsGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+        {
+          id: "hospital-002",
+          data: () => ({
+            hospitalId: "hospital-002",
+            ownerUid: "hospital-user-002",
+            name: "Other Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+      get: mockHospitalsGet,
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/matching")
+      .set("Authorization", "Bearer fake-token")
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].hospitalId).toBe("hospital-002");
+
+    expect(
+      res.body.data.some(
+        (hospital: any) => hospital.hospitalId === "hospital-001",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects facility matching for an unverified current hospital", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            emergencyCapability: true,
+            verificationStatus: "PENDING",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/matching")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        emergencyRequired: true,
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("HOSPITAL_NOT_VERIFIED");
+  });
+
+  it("matches a hospital with the requested available specialization", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalsGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+        {
+          id: "hospital-002",
+          data: () => ({
+            hospitalId: "hospital-002",
+            ownerUid: "hospital-user-002",
+            name: "Cardiac Care Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+        {
+          id: "hospital-003",
+          data: () => ({
+            hospitalId: "hospital-003",
+            ownerUid: "hospital-user-003",
+            name: "Unavailable Specialist Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockSpecialistsGet = vi.fn().mockImplementation(async () => ({
+      empty: false,
+      docs: [
+        {
+          id: "staff-001",
+          data: () => ({
+            hospitalId: "hospital-002",
+            name: "Dr. Rahul Sharma",
+            specialization: "Cardiology",
+            availability: true,
+          }),
+        },
+      ],
+    }));
+
+    const mockUnavailableSpecialistsGet = vi
+      .fn()
+      .mockImplementation(async () => ({
+        empty: false,
+        docs: [
+          {
+            id: "staff-002",
+            data: () => ({
+              hospitalId: "hospital-003",
+              name: "Dr. Amit",
+              specialization: "Neurology",
+              availability: false,
+            }),
+          },
+        ],
+      }));
+
+    let staffCall = 0;
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+      get: mockHospitalsGet,
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      if (collectionName === "hospitalStaff") {
+        staffCall += 1;
+
+        return {
+          where: vi.fn().mockReturnValue({
+            get:
+              staffCall === 1
+                ? mockSpecialistsGet
+                : mockUnavailableSpecialistsGet,
+          }),
+        } as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/matching")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        specialization: "Cardiology",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].hospitalId).toBe("hospital-002");
+    expect(res.body.data[0].name).toBe("Cardiac Care Hospital");
+
+    expect(mockSpecialistsGet).toHaveBeenCalled();
+  });
+
+  it("matches a hospital with ICU capability from facility information", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalsGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+        {
+          id: "hospital-002",
+          data: () => ({
+            hospitalId: "hospital-002",
+            ownerUid: "hospital-user-002",
+            name: "ICU Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+            facilities: ["ICU", "Emergency Department"],
+          }),
+        },
+        {
+          id: "hospital-003",
+          data: () => ({
+            hospitalId: "hospital-003",
+            ownerUid: "hospital-user-003",
+            name: "No ICU Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+            facilities: ["Emergency Department"],
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+      get: mockHospitalsGet,
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/matching")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        icuRequired: true,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].hospitalId).toBe("hospital-002");
+    expect(res.body.data[0].name).toBe("ICU Hospital");
+  });
+
+  it("does not match an unverified target hospital", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalsGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+        {
+          id: "hospital-002",
+          data: () => ({
+            hospitalId: "hospital-002",
+            ownerUid: "hospital-user-002",
+            name: "Pending Emergency Hospital",
+            emergencyCapability: true,
+            verificationStatus: "PENDING",
+            facilities: ["ICU"],
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+      get: mockHospitalsGet,
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/matching")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        emergencyRequired: true,
+        icuRequired: true,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveLength(0);
+  });
+
+  it("can expose diagnostic information for a matching hospital", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalsGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            name: "Current Hospital",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+        {
+          id: "hospital-002",
+          data: () => ({
+            hospitalId: "hospital-002",
+            ownerUid: "hospital-user-002",
+            name: "Diagnostic Hospital",
+            emergencyCapability: true,
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockDiagnosticsGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "diagnostic-001",
+          data: () => ({
+            hospitalId: "hospital-002",
+            name: "CT Scan",
+            type: "Imaging",
+            available: true,
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+      get: mockHospitalsGet,
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      if (collectionName === "hospitalDiagnostics") {
+        return {
+          where: vi.fn().mockReturnValue({
+            get: mockDiagnosticsGet,
+          }),
+        } as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/matching")
+      .set("Authorization", "Bearer fake-token")
+      .send({
+        emergencyRequired: true,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].hospitalId).toBe("hospital-002");
+    expect(mockDiagnosticsGet).toHaveBeenCalled();
+  });
+});

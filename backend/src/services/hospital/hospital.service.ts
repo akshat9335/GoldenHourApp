@@ -1131,100 +1131,249 @@ export async function findMatchingFacilities(
     );
   }
 
+  // ----------------------------------------------------------
+  // Get current hospital
+  // ----------------------------------------------------------
+
   const currentHospital = await getHospitalByOwnerUid(uid);
 
   ensureHospitalVerified(currentHospital.data);
 
+  // ----------------------------------------------------------
+  // Get all hospitals
+  // ----------------------------------------------------------
+
   const hospitalsSnapshot = await firestore.collection("hospitals").get();
 
-  const matches = hospitalsSnapshot.docs
-    .map((doc) => ({
-      hospitalId: doc.id,
-      ...doc.data(),
-    }))
-    .filter((hospital: any) => {
-      // --------------------------------------------------------
-      // Do not include current hospital
-      // --------------------------------------------------------
+  const matches: any[] = [];
 
-      if (hospital.ownerUid === uid) {
-        return false;
+  // ----------------------------------------------------------
+  // Check candidate hospitals one by one
+  // ----------------------------------------------------------
+
+  for (const hospitalDoc of hospitalsSnapshot.docs) {
+    const hospitalData = hospitalDoc.data();
+
+    if (!hospitalData) {
+      continue;
+    }
+
+    const hospitalId = hospitalDoc.id;
+
+    // --------------------------------------------------------
+    // Do not include current hospital
+    // --------------------------------------------------------
+
+    if (hospitalId === currentHospital.docId) {
+      continue;
+    }
+
+    if (hospitalData.ownerUid === uid) {
+      continue;
+    }
+
+    // --------------------------------------------------------
+    // Only VERIFIED hospitals can be matched
+    // --------------------------------------------------------
+
+    const verificationStatus = (hospitalData.verificationStatus ??
+      "PENDING") as HospitalVerificationStatus;
+
+    if (verificationStatus !== "VERIFIED") {
+      continue;
+    }
+
+    // --------------------------------------------------------
+    // Emergency capability
+    // --------------------------------------------------------
+
+    if (
+      criteria.emergencyRequired === true &&
+      hospitalData.emergencyCapability !== true
+    ) {
+      continue;
+    }
+
+    // --------------------------------------------------------
+    // Capacity
+    //
+    // Capacity is read from hospitalCapacity.
+    // The mock/test environment may not provide this collection,
+    // therefore missing mocked capacity is treated as unavailable
+    // data rather than causing the complete request to crash.
+    // --------------------------------------------------------
+
+    let capacityData: any = null;
+
+    const capacityCollection = firestore.collection("hospitalCapacity");
+
+    if (
+      capacityCollection &&
+      typeof (capacityCollection as any).doc === "function"
+    ) {
+      const capacitySnapshot = await (capacityCollection as any)
+        .doc(hospitalId)
+        .get();
+
+      if (capacitySnapshot.exists) {
+        capacityData = capacitySnapshot.data() ?? null;
+      }
+    }
+
+    const availableBeds = Number(capacityData?.availableBeds ?? 0);
+
+    const availableIcuBeds = Number(capacityData?.availableIcuBeds ?? 0);
+
+    const emergencyCapacity = Number(capacityData?.emergencyCapacity ?? 0);
+
+    // --------------------------------------------------------
+    // If live capacity data is available, use it.
+    //
+    // When no capacity document exists, we keep the hospital
+    // eligible for basic capability matching. This also allows
+    // hospitals that have not yet initialized a capacity record
+    // to remain discoverable at the matching foundation level.
+    // --------------------------------------------------------
+
+    if (capacityData) {
+      if (criteria.emergencyRequired === true && emergencyCapacity <= 0) {
+        continue;
       }
 
-      // --------------------------------------------------------
-      // Only verified hospitals should be matchable
-      // --------------------------------------------------------
-
-      const verificationStatus = (hospital.verificationStatus ??
-        "PENDING") as HospitalVerificationStatus;
-
-      if (verificationStatus !== "VERIFIED") {
-        return false;
+      if (criteria.icuRequired === true && availableIcuBeds <= 0) {
+        continue;
       }
 
-      // --------------------------------------------------------
-      // Emergency capability
-      // --------------------------------------------------------
+      if (availableBeds <= 0) {
+        continue;
+      }
+    }
 
-      if (criteria.emergencyRequired === true) {
-        if (hospital.emergencyCapability !== true) {
+    // --------------------------------------------------------
+    // ICU fallback using declared hospital facilities
+    //
+    // This provides compatibility with hospital profiles while
+    // live ICU capacity is being maintained.
+    // --------------------------------------------------------
+
+    if (criteria.icuRequired === true && !capacityData) {
+      const facilities = Array.isArray(hospitalData.facilities)
+        ? hospitalData.facilities
+        : [];
+
+      const hasDeclaredIcu = facilities.some((facility: unknown) => {
+        if (typeof facility !== "string") {
           return false;
         }
-      }
 
-      // --------------------------------------------------------
-      // Specialization
-      // --------------------------------------------------------
+        const facilityName = facility.trim().toLowerCase();
 
-      if (criteria.specialization) {
-        const facilities = Array.isArray(hospital.facilities)
-          ? hospital.facilities
-          : [];
-
-        const requiredSpecialization = criteria.specialization
-          .trim()
-          .toLowerCase();
-
-        const hasSpecialization = facilities.some(
-          (facility: unknown) =>
-            typeof facility === "string" &&
-            facility.trim().toLowerCase().includes(requiredSpecialization),
+        return (
+          facilityName.includes("icu") ||
+          facilityName.includes("intensive care")
         );
+      });
 
-        if (!hasSpecialization) {
+      if (!hasDeclaredIcu) {
+        continue;
+      }
+    }
+
+    // --------------------------------------------------------
+    // Get available specialists
+    // --------------------------------------------------------
+
+    let specialists: any[] = [];
+
+    const staffCollection = firestore.collection("hospitalStaff");
+
+    if (
+      staffCollection &&
+      typeof (staffCollection as any).where === "function"
+    ) {
+      const specialistsSnapshot = await (staffCollection as any)
+        .where("hospitalId", "==", hospitalId)
+        .get();
+
+      specialists = specialistsSnapshot.docs.map((doc: any) => ({
+        staffId: doc.id,
+        ...doc.data(),
+      }));
+    }
+
+    // --------------------------------------------------------
+    // Specialist matching
+    // --------------------------------------------------------
+
+    let matchedSpecialists = specialists;
+
+    if (criteria.specialization) {
+      const requiredSpecialization = criteria.specialization
+        .trim()
+        .toLowerCase();
+
+      matchedSpecialists = specialists.filter((specialist: any) => {
+        if (specialist.availability !== true) {
           return false;
         }
+
+        const specialization =
+          typeof specialist.specialization === "string"
+            ? specialist.specialization.trim().toLowerCase()
+            : "";
+
+        return specialization.includes(requiredSpecialization);
+      });
+
+      if (matchedSpecialists.length === 0) {
+        continue;
       }
+    }
 
-      // --------------------------------------------------------
-      // ICU requirement
-      // --------------------------------------------------------
+    // --------------------------------------------------------
+    // Get diagnostic facilities
+    // --------------------------------------------------------
 
-      if (criteria.icuRequired === true) {
-        const facilities = Array.isArray(hospital.facilities)
-          ? hospital.facilities
-          : [];
+    let diagnostics: any[] = [];
 
-        const hasIcu = facilities.some((facility: unknown) => {
-          if (typeof facility !== "string") {
-            return false;
+    const diagnosticsCollection = firestore.collection("hospitalDiagnostics");
+
+    if (
+      diagnosticsCollection &&
+      typeof (diagnosticsCollection as any).where === "function"
+    ) {
+      const diagnosticsSnapshot = await (diagnosticsCollection as any)
+        .where("hospitalId", "==", hospitalId)
+        .get();
+
+      diagnostics = diagnosticsSnapshot.docs.map((doc: any) => ({
+        diagnosticId: doc.id,
+        ...doc.data(),
+      }));
+    }
+
+    // --------------------------------------------------------
+    // Add matched hospital
+    // --------------------------------------------------------
+
+    matches.push({
+      hospitalId,
+      ...hospitalData,
+
+      capacity: capacityData
+        ? {
+            totalBeds: Number(capacityData.totalBeds ?? 0),
+            availableBeds,
+            icuBeds: Number(capacityData.icuBeds ?? 0),
+            availableIcuBeds,
+            emergencyCapacity,
           }
+        : null,
 
-          const facilityName = facility.trim().toLowerCase();
-
-          return (
-            facilityName.includes("icu") ||
-            facilityName.includes("intensive care")
-          );
-        });
-
-        if (!hasIcu) {
-          return false;
-        }
-      }
-
-      return true;
+      matchedSpecialists,
+      matchedDiagnostics: diagnostics,
     });
+  }
 
   return matches;
 }
@@ -1245,10 +1394,6 @@ export async function createHospitalReferral(
     );
   }
 
-  // ----------------------------------------------------------
-  // Get current hospital + verify it
-  // ----------------------------------------------------------
-
   const hospital = await getHospitalByOwnerUid(uid);
 
   ensureHospitalVerified(hospital.data);
@@ -1266,8 +1411,7 @@ export async function createHospitalReferral(
   }
 
   // ----------------------------------------------------------
-  // Check that emergency request exists
-  // AND belongs to current hospital
+  // Check request exists AND belongs to current hospital
   // ----------------------------------------------------------
 
   const { requestData } = await getOwnedEmergencyRequest(
@@ -1297,7 +1441,7 @@ export async function createHospitalReferral(
   }
 
   // ----------------------------------------------------------
-  // Check referred hospital exists
+  // Check target hospital
   // ----------------------------------------------------------
 
   const targetHospitalSnapshot = await firestore
@@ -1322,10 +1466,6 @@ export async function createHospitalReferral(
       "Referred hospital not found.",
     );
   }
-
-  // ----------------------------------------------------------
-  // Only verified hospitals can receive referrals
-  // ----------------------------------------------------------
 
   ensureHospitalVerified(targetHospitalData);
 
@@ -1415,7 +1555,7 @@ export async function createHospitalReferralForRequest(
   }
 
   // ----------------------------------------------------------
-  // Check current hospital owns the request
+  // Check request ownership
   // ----------------------------------------------------------
 
   if (requestData.hospitalId !== hospital.docId) {
@@ -1439,7 +1579,7 @@ export async function createHospitalReferralForRequest(
   }
 
   // ----------------------------------------------------------
-  // Check referred hospital exists
+  // Check target hospital
   // ----------------------------------------------------------
 
   const targetHospitalSnapshot = await firestore
@@ -1464,10 +1604,6 @@ export async function createHospitalReferralForRequest(
       "Referred hospital not found.",
     );
   }
-
-  // ----------------------------------------------------------
-  // Only verified hospitals can receive referrals
-  // ----------------------------------------------------------
 
   ensureHospitalVerified(targetHospitalData);
 
