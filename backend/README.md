@@ -187,7 +187,7 @@ role business logic is out of scope for this foundation.
 | `PORT` | Core | Server |
 | `NODE_ENV` | Core | Server, error handler |
 | `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` | Optional | Auth, Firestore-backed modules |
-| `GEMINI_API_KEY` / `AI_MODE` / `GEMINI_MODEL` / `AI_TIMEOUT_MS` | Optional | AI module (Archit) |
+| `GEMINI_API_KEY` | Optional | AI module (Archit) |
 | `GOOGLE_MAPS_SERVER_API_KEY` | Optional | Location module (Anant) |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` | Optional | Notifications (Akshat) |
 
@@ -245,24 +245,38 @@ Firestore collections this backend is designed to eventually support
 `confirmations`, `hospitals`, `ambulances`, `doctors`, `appointments`,
 `queues`, `notifications`, `referrals`.
 
-## 16. AI module
+## 16. Ambulance Module API
 
-The AI module is available under `/api/ai` and is safe to run without any
-external credentials. It defaults to deterministic mock mode:
+### Driver APIs
 
-```text
-POST /api/ai/triage
-POST /api/ai/image-analysis
-POST /api/ai/first-aid
-```
+- `POST /api/ambulances/drivers/register` — Register driver
+- `GET /api/ambulances/drivers/me` — Get logged-in driver profile
+- `PATCH /api/ambulances/drivers/me` — Update driver profile
+- `PATCH /api/ambulances/drivers/me/availability` — Update driver availability
 
-Set `AI_MODE=live` and provide `GEMINI_API_KEY` only in the backend
-environment to use Gemini. Calls have a bounded timeout (`AI_TIMEOUT_MS`,
-default 8000 ms). Provider errors, timeouts, missing configuration, and
-malformed responses return a conservative fallback rather than crashing the
-request. Deterministic safety rules always override a less severe provider
-response for conditions such as unconsciousness, absent breathing, severe
-bleeding, stroke-like symptoms, anaphylaxis, and critically low oxygen.
+### Ambulance APIs
 
-AI output is decision support, not a diagnosis. Every result includes the
-standard disclaimer and a `source` (`mock`, `gemini`, or `fallback`).
+- `POST /api/ambulances` — Register ambulance
+
+### Emergency Request APIs
+
+- `GET /api/ambulances/requests` — Get ambulance requests
+- `GET /api/ambulances/requests/:id` — Get request details
+- `POST /api/ambulances/requests/:id/accept` — Accept and assign ambulance
+
+### Trip APIs
+
+- `POST /api/ambulances/trips/:id/start-to-patient` — Start trip to patient
+- `POST /api/ambulances/trips/:id/arrived-patient` — Mark arrival at patient
+- `POST /api/ambulances/trips/:id/pickup` — Pick up patient
+- `POST /api/ambulances/trips/:id/start-to-hospital` — Start trip to hospital
+- `POST /api/ambulances/trips/:id/arrived-hospital` — Mark arrival at hospital
+- `POST /api/ambulances/trips/:id/complete` — Complete trip
+- `GET /api/ambulances/trips/history` — Get driver's trip history
+
+### Trip Lifecycle
+
+AVAILABLE → ASSIGNED → EN_ROUTE_TO_PATIENT → AT_PATIENT → PATIENT_ONBOARD → EN_ROUTE_TO_HOSPITAL → AT_HOSPITAL → COMPLETED → AVAILABLE
+
+All protected Ambulance APIs require Firebase authentication.
+

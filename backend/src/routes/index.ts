@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import healthRoutes from "./health.routes";
+import ambulanceRoutes from "./ambulance.routes";
 import authRoutes from "./auth.routes";
 import userRoutes from "./users.routes";
 import contactRoutes from "./contacts.route";
@@ -17,25 +18,13 @@ import hospitalRoutes from "./hospital.routes";
  *   /auth            → Firebase authentication
  *   /users           → User profile and persistent Crisis ID
  *   /contacts        → Emergency contacts
- *   /emergencies     → Emergency reporting and management
- *   /notifications  → Notification and FCM device-token foundation
+ *   /emergencies    → Emergency reporting and management
+ *   /notifications → Notification and FCM device-token foundation
  *   /ai              → AI features (Triage, First Aid, Image Analysis)
  *   /hospitals       → Hospital registration, profile, capacity,
  *                      specialists, diagnostics, facility matching
  *                      and referrals
- *
- * Other feature routes will be added by their respective owners:
  *   /ambulances      → Akshita
- *   /trips           → Akshita
- *   /location        → Anant
- *   /confirmations   → Adish
- *   /doctors         → Doctor module
- *   /appointments    → Doctor module
- *   /queue           → Doctor module
- *
- * Sync is currently an internal Core integration service and does not
- * expose a public route. Other backend modules can use the sync service
- * when integrating shared emergency state.
  */
 
 const router = Router();
@@ -48,5 +37,6 @@ router.use("/emergencies", emergencyRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/ai", aiRoutes);
 router.use("/hospitals", hospitalRoutes);
+router.use("/ambulances", ambulanceRoutes);
 
 export default router;
