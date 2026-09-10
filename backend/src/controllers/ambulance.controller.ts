@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { registerDriver, getDriver, updateDriver, updateDriverAvailability } from "../services/ambulance/driver.service";
 import { registerAmbulance } from "../services/ambulance/ambulance.service";
+import { assignAmbulance } from "../services/ambulance/assignment.service";
 import { createTripFromAssignment } from "../services/ambulance/trip.service";
 import { AppError } from "../utils/AppError";
 import {
@@ -147,10 +148,6 @@ export async function assignAmbulanceController(
     if (!req.user) {
       throw new AppError(401, "UNAUTHORIZED", "Authentication is required.");
     }
-
-    const { assignAmbulance } = await import(
-      "../services/ambulance/assignment.service"
-    );
 
     const assignmentId = await assignAmbulance(
       req.body.ambulanceId,
