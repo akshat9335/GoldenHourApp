@@ -4,6 +4,7 @@ import {
   acceptHospitalRequest,
   addHospitalDiagnostic,
   addHospitalSpecialist,
+  completeHospitalRequest,
   createHospitalReferral,
   createHospitalReferralForRequest,
   deleteHospitalDiagnostic,
@@ -24,8 +25,10 @@ import {
   HospitalReferralData,
   HospitalReferralRequestData,
   HospitalSpecialistData,
+  markHospitalPatientArrived,
   registerHospital,
   rejectHospitalRequest,
+  startHospitalTreatment,
   updateHospitalCapacity,
   updateHospitalDiagnostic,
   updateHospitalProfile,
@@ -647,6 +650,93 @@ export async function rejectHospitalRequestController(
       success: true,
       data: emergencyRequest,
       message: "Emergency request rejected successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST - PATIENT ARRIVED
+// ============================================================
+
+export async function markHospitalPatientArrivedController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const emergencyRequest = await markHospitalPatientArrived(
+      req.user.uid,
+      req.params.id,
+    );
+
+    res.status(200).json({
+      success: true,
+      data: emergencyRequest,
+      message: "Patient marked as arrived successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST - IN TREATMENT
+// ============================================================
+
+export async function startHospitalTreatmentController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const emergencyRequest = await startHospitalTreatment(
+      req.user.uid,
+      req.params.id,
+    );
+
+    res.status(200).json({
+      success: true,
+      data: emergencyRequest,
+      message: "Emergency case moved to in treatment successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST - CASE COMPLETED
+// ============================================================
+
+export async function completeHospitalRequestController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const emergencyRequest = await completeHospitalRequest(
+      req.user.uid,
+      req.params.id,
+    );
+
+    res.status(200).json({
+      success: true,
+      data: emergencyRequest,
+      message: "Emergency case completed successfully",
     });
   } catch (error) {
     next(error);

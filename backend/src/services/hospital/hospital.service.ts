@@ -5,6 +5,8 @@ import { AppError } from "../../utils/AppError";
 // TYPES
 // ============================================================
 
+export type HospitalVerificationStatus = "PENDING" | "VERIFIED" | "REJECTED";
+
 export interface HospitalData {
   name: string;
   registrationNumber: string;
@@ -83,79 +85,10 @@ const allowedHospitalRequestTransitions: Record<
 };
 
 // ============================================================
-// HOSPITAL REGISTRATION
+// INTERNAL HELPERS
 // ============================================================
 
-export async function registerHospital(uid: string, data: HospitalData) {
-  if (!firestore) {
-    throw new AppError(
-      500,
-      "FIREBASE_NOT_CONFIGURED",
-      "Firebase is not configured.",
-    );
-  }
-
-  const hospitalRef = firestore.collection("hospitals").doc();
-
-  const hospital = {
-    hospitalId: hospitalRef.id,
-    ownerUid: uid,
-    name: data.name,
-    registrationNumber: data.registrationNumber,
-    phone: data.phone,
-    email: data.email,
-    address: data.address,
-    location: data.location ?? null,
-    emergencyCapability: data.emergencyCapability,
-    facilities: data.facilities,
-    verificationStatus: "PENDING",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  await hospitalRef.set(hospital);
-
-  return hospital;
-}
-
-// ============================================================
-// HOSPITAL PROFILE - GET
-// ============================================================
-
-export async function getHospitalProfile(uid: string) {
-  if (!firestore) {
-    throw new AppError(
-      500,
-      "FIREBASE_NOT_CONFIGURED",
-      "Firebase is not configured.",
-    );
-  }
-
-  const snapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (snapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  return snapshot.docs[0].data();
-}
-
-// ============================================================
-// HOSPITAL PROFILE - UPDATE
-// ============================================================
-
-export async function updateHospitalProfile(
-  uid: string,
-  data: Partial<HospitalData>,
-) {
+async function getHospitalByOwnerUid(uid: string) {
   if (!firestore) {
     throw new AppError(
       500,
@@ -178,7 +111,225 @@ export async function updateHospitalProfile(
     );
   }
 
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospitalDoc = hospitalSnapshot.docs[0];
+  const hospitalData = hospitalDoc.data();
+
+  if (!hospitalData) {
+    throw new AppError(
+      404,
+      "HOSPITAL_NOT_FOUND",
+      "Hospital profile not found.",
+    );
+  }
+
+  return {
+    docId: hospitalDoc.id,
+    data: hospitalData,
+  };
+}
+
+function ensureHospitalVerified(hospitalData: any) {
+  const verificationStatus = (hospitalData.verificationStatus ??
+    "PENDING") as HospitalVerificationStatus;
+
+  if (verificationStatus !== "VERIFIED") {
+    if (verificationStatus === "REJECTED") {
+      throw new AppError(
+        403,
+        "HOSPITAL_NOT_VERIFIED",
+        "Hospital verification has been rejected. Operational actions are not allowed.",
+      );
+    }
+
+    throw new AppError(
+      403,
+      "HOSPITAL_NOT_VERIFIED",
+      "Hospital is not verified yet. Operational actions are not allowed.",
+    );
+  }
+}
+
+// ============================================================
+// INTERNAL EMERGENCY REQUEST ACCESS HELPER
+// ============================================================
+
+async function getOwnedEmergencyRequest(
+  uid: string,
+  requestId: string,
+  requireVerified = true,
+) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const hospital = await getHospitalByOwnerUid(uid);
+
+  if (requireVerified) {
+    ensureHospitalVerified(hospital.data);
+  }
+
+  const requestRef = firestore
+    .collection("hospitalEmergencyRequests")
+    .doc(requestId);
+
+  const requestSnapshot = await requestRef.get();
+
+  if (!requestSnapshot.exists) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  const requestData = requestSnapshot.data();
+
+  if (!requestData) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  if (requestData.hospitalId !== hospital.docId) {
+    throw new AppError(
+      403,
+      "REQUEST_ACCESS_DENIED",
+      "You are not authorized to access this emergency request.",
+    );
+  }
+
+  return {
+    hospital,
+    requestRef,
+    requestSnapshot,
+    requestData,
+  };
+}
+
+// ============================================================
+// INTERNAL EMERGENCY REQUEST TRANSITION HELPER
+// ============================================================
+
+async function transitionHospitalRequest(
+  uid: string,
+  requestId: string,
+  targetStatus: HospitalEmergencyRequestStatus,
+) {
+  const { requestRef, requestData } = await getOwnedEmergencyRequest(
+    uid,
+    requestId,
+    true,
+  );
+
+  const currentStatus = (requestData.status ??
+    "NEW") as HospitalEmergencyRequestStatus;
+
+  if (currentStatus === targetStatus) {
+    throw new AppError(
+      400,
+      "INVALID_REQUEST_STATE",
+      `Emergency request is already in ${targetStatus} state.`,
+    );
+  }
+
+  const allowedNextStatuses = allowedHospitalRequestTransitions[currentStatus];
+
+  if (!allowedNextStatuses.includes(targetStatus)) {
+    throw new AppError(
+      400,
+      "INVALID_REQUEST_TRANSITION",
+      `Emergency request cannot move from ${currentStatus} to ${targetStatus}.`,
+    );
+  }
+
+  const now = new Date();
+
+  const updatedRequest = {
+    status: targetStatus,
+    updatedAt: now,
+  };
+
+  await requestRef.set(updatedRequest, {
+    merge: true,
+  });
+
+  return {
+    requestId,
+    ...requestData,
+    ...updatedRequest,
+  };
+}
+
+// ============================================================
+// HOSPITAL REGISTRATION
+// ============================================================
+
+export async function registerHospital(uid: string, data: HospitalData) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const hospitalRef = firestore.collection("hospitals").doc();
+  const now = new Date();
+
+  const hospital = {
+    hospitalId: hospitalRef.id,
+    ownerUid: uid,
+    name: data.name,
+    registrationNumber: data.registrationNumber,
+    phone: data.phone,
+    email: data.email,
+    address: data.address,
+    location: data.location ?? null,
+    emergencyCapability: data.emergencyCapability,
+    facilities: data.facilities,
+    verificationStatus: "PENDING" as const,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await hospitalRef.set(hospital);
+
+  return hospital;
+}
+
+// ============================================================
+// HOSPITAL PROFILE - GET
+// ============================================================
+
+export async function getHospitalProfile(uid: string) {
+  const hospital = await getHospitalByOwnerUid(uid);
+
+  return hospital.data;
+}
+
+// ============================================================
+// HOSPITAL PROFILE - UPDATE
+// ============================================================
+
+export async function updateHospitalProfile(
+  uid: string,
+  data: Partial<HospitalData>,
+) {
+  if (!firestore) {
+    throw new AppError(
+      500,
+      "FIREBASE_NOT_CONFIGURED",
+      "Firebase is not configured.",
+    );
+  }
+
+  const hospital = await getHospitalByOwnerUid(uid);
 
   const allowedUpdates: Partial<HospitalData> = {};
 
@@ -215,12 +366,12 @@ export async function updateHospitalProfile(
     updatedAt: new Date(),
   };
 
-  await firestore.collection("hospitals").doc(hospitalId).set(updateData, {
+  await firestore.collection("hospitals").doc(hospital.docId).set(updateData, {
     merge: true,
   });
 
   return {
-    hospitalId,
+    hospitalId: hospital.docId,
     ...updateData,
   };
 }
@@ -238,25 +389,11 @@ export async function getHospitalCapacity(uid: string) {
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   const capacitySnapshot = await firestore
     .collection("hospitalCapacity")
-    .doc(hospitalId)
+    .doc(hospital.docId)
     .get();
 
   if (!capacitySnapshot.exists) {
@@ -268,7 +405,7 @@ export async function getHospitalCapacity(uid: string) {
   }
 
   return {
-    hospitalId,
+    hospitalId: hospital.docId,
     ...capacitySnapshot.data(),
   };
 }
@@ -289,21 +426,7 @@ export async function updateHospitalCapacity(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   if (
     data.totalBeds < 0 ||
@@ -335,10 +458,12 @@ export async function updateHospitalCapacity(
     );
   }
 
-  const capacityRef = firestore.collection("hospitalCapacity").doc(hospitalId);
+  const capacityRef = firestore
+    .collection("hospitalCapacity")
+    .doc(hospital.docId);
 
   const capacity = {
-    hospitalId,
+    hospitalId: hospital.docId,
     totalBeds: data.totalBeds,
     availableBeds: data.availableBeds,
     icuBeds: data.icuBeds,
@@ -367,25 +492,13 @@ export async function getHospitalRequests(uid: string) {
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
+  const hospital = await getHospitalByOwnerUid(uid);
 
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  ensureHospitalVerified(hospital.data);
 
   const requestsSnapshot = await firestore
     .collection("hospitalEmergencyRequests")
-    .where("hospitalId", "==", hospitalId)
+    .where("hospitalId", "==", hospital.docId)
     .get();
 
   return requestsSnapshot.docs.map((doc) => ({
@@ -399,60 +512,11 @@ export async function getHospitalRequests(uid: string) {
 // ============================================================
 
 export async function getHospitalRequestById(uid: string, requestId: string) {
-  if (!firestore) {
-    throw new AppError(
-      500,
-      "FIREBASE_NOT_CONFIGURED",
-      "Firebase is not configured.",
-    );
-  }
-
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
-
-  const requestSnapshot = await firestore
-    .collection("hospitalEmergencyRequests")
-    .doc(requestId)
-    .get();
-
-  if (!requestSnapshot.exists) {
-    throw new AppError(
-      404,
-      "REQUEST_NOT_FOUND",
-      "Emergency request not found.",
-    );
-  }
-
-  const requestData = requestSnapshot.data();
-
-  if (!requestData) {
-    throw new AppError(
-      404,
-      "REQUEST_NOT_FOUND",
-      "Emergency request not found.",
-    );
-  }
-
-  if (requestData.hospitalId !== hospitalId) {
-    throw new AppError(
-      403,
-      "REQUEST_ACCESS_DENIED",
-      "You are not authorized to access this emergency request.",
-    );
-  }
+  const { requestSnapshot, requestData } = await getOwnedEmergencyRequest(
+    uid,
+    requestId,
+    true,
+  );
 
   return {
     requestId: requestSnapshot.id,
@@ -465,61 +529,11 @@ export async function getHospitalRequestById(uid: string, requestId: string) {
 // ============================================================
 
 export async function acceptHospitalRequest(uid: string, requestId: string) {
-  if (!firestore) {
-    throw new AppError(
-      500,
-      "FIREBASE_NOT_CONFIGURED",
-      "Firebase is not configured.",
-    );
-  }
-
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
-
-  const requestRef = firestore
-    .collection("hospitalEmergencyRequests")
-    .doc(requestId);
-
-  const requestSnapshot = await requestRef.get();
-
-  if (!requestSnapshot.exists) {
-    throw new AppError(
-      404,
-      "REQUEST_NOT_FOUND",
-      "Emergency request not found.",
-    );
-  }
-
-  const requestData = requestSnapshot.data();
-
-  if (!requestData) {
-    throw new AppError(
-      404,
-      "REQUEST_NOT_FOUND",
-      "Emergency request not found.",
-    );
-  }
-
-  if (requestData.hospitalId !== hospitalId) {
-    throw new AppError(
-      403,
-      "REQUEST_ACCESS_DENIED",
-      "You are not authorized to accept this emergency request.",
-    );
-  }
+  const { requestRef, requestData } = await getOwnedEmergencyRequest(
+    uid,
+    requestId,
+    true,
+  );
 
   const currentStatus = (requestData.status ??
     "NEW") as HospitalEmergencyRequestStatus;
@@ -560,61 +574,11 @@ export async function rejectHospitalRequest(
   requestId: string,
   reason?: string,
 ) {
-  if (!firestore) {
-    throw new AppError(
-      500,
-      "FIREBASE_NOT_CONFIGURED",
-      "Firebase is not configured.",
-    );
-  }
-
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
-
-  const requestRef = firestore
-    .collection("hospitalEmergencyRequests")
-    .doc(requestId);
-
-  const requestSnapshot = await requestRef.get();
-
-  if (!requestSnapshot.exists) {
-    throw new AppError(
-      404,
-      "REQUEST_NOT_FOUND",
-      "Emergency request not found.",
-    );
-  }
-
-  const requestData = requestSnapshot.data();
-
-  if (!requestData) {
-    throw new AppError(
-      404,
-      "REQUEST_NOT_FOUND",
-      "Emergency request not found.",
-    );
-  }
-
-  if (requestData.hospitalId !== hospitalId) {
-    throw new AppError(
-      403,
-      "REQUEST_ACCESS_DENIED",
-      "You are not authorized to reject this emergency request.",
-    );
-  }
+  const { requestRef, requestData } = await getOwnedEmergencyRequest(
+    uid,
+    requestId,
+    true,
+  );
 
   const currentStatus = (requestData.status ??
     "NEW") as HospitalEmergencyRequestStatus;
@@ -648,6 +612,33 @@ export async function rejectHospitalRequest(
 }
 
 // ============================================================
+// HOSPITAL EMERGENCY REQUEST - PATIENT ARRIVED
+// ============================================================
+
+export async function markHospitalPatientArrived(
+  uid: string,
+  requestId: string,
+) {
+  return transitionHospitalRequest(uid, requestId, "PATIENT ARRIVED");
+}
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST - IN TREATMENT
+// ============================================================
+
+export async function startHospitalTreatment(uid: string, requestId: string) {
+  return transitionHospitalRequest(uid, requestId, "IN TREATMENT");
+}
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST - CASE COMPLETED
+// ============================================================
+
+export async function completeHospitalRequest(uid: string, requestId: string) {
+  return transitionHospitalRequest(uid, requestId, "COMPLETED");
+}
+
+// ============================================================
 // HOSPITAL EMERGENCY REQUEST - UPDATE STATUS
 // ============================================================
 
@@ -656,14 +647,6 @@ export async function updateHospitalRequestStatus(
   requestId: string,
   status: HospitalEmergencyRequestStatus,
 ) {
-  if (!firestore) {
-    throw new AppError(
-      500,
-      "FIREBASE_NOT_CONFIGURED",
-      "Firebase is not configured.",
-    );
-  }
-
   const allowedStatuses: HospitalEmergencyRequestStatus[] = [
     "NEW",
     "ACCEPTED",
@@ -682,89 +665,7 @@ export async function updateHospitalRequestStatus(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
-
-  const requestRef = firestore
-    .collection("hospitalEmergencyRequests")
-    .doc(requestId);
-
-  const requestSnapshot = await requestRef.get();
-
-  if (!requestSnapshot.exists) {
-    throw new AppError(
-      404,
-      "REQUEST_NOT_FOUND",
-      "Emergency request not found.",
-    );
-  }
-
-  const requestData = requestSnapshot.data();
-
-  if (!requestData) {
-    throw new AppError(
-      404,
-      "REQUEST_NOT_FOUND",
-      "Emergency request not found.",
-    );
-  }
-
-  if (requestData.hospitalId !== hospitalId) {
-    throw new AppError(
-      403,
-      "REQUEST_ACCESS_DENIED",
-      "You are not authorized to update this emergency request.",
-    );
-  }
-
-  const currentStatus = (requestData.status ??
-    "NEW") as HospitalEmergencyRequestStatus;
-
-  if (currentStatus === status) {
-    throw new AppError(
-      400,
-      "INVALID_REQUEST_STATE",
-      `Emergency request is already in ${status} state.`,
-    );
-  }
-
-  const allowedNextStatuses = allowedHospitalRequestTransitions[currentStatus];
-
-  if (!allowedNextStatuses.includes(status)) {
-    throw new AppError(
-      400,
-      "INVALID_REQUEST_TRANSITION",
-      `Emergency request cannot move from ${currentStatus} to ${status}.`,
-    );
-  }
-
-  const updatedRequest = {
-    status,
-    updatedAt: new Date(),
-  };
-
-  await requestRef.set(updatedRequest, {
-    merge: true,
-  });
-
-  return {
-    requestId,
-    ...requestData,
-    ...updatedRequest,
-  };
+  return transitionHospitalRequest(uid, requestId, status);
 }
 
 // ============================================================
@@ -780,25 +681,11 @@ export async function getHospitalSpecialists(uid: string) {
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   const specialistsSnapshot = await firestore
     .collection("hospitalStaff")
-    .where("hospitalId", "==", hospitalId)
+    .where("hospitalId", "==", hospital.docId)
     .get();
 
   return specialistsSnapshot.docs.map((doc) => ({
@@ -823,21 +710,7 @@ export async function addHospitalSpecialist(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   if (!data.name || !data.specialization) {
     throw new AppError(
@@ -850,7 +723,7 @@ export async function addHospitalSpecialist(
   const staffRef = firestore.collection("hospitalStaff").doc();
 
   const specialist = {
-    hospitalId,
+    hospitalId: hospital.docId,
     name: data.name,
     specialization: data.specialization,
     availability: data.availability,
@@ -883,21 +756,7 @@ export async function updateHospitalSpecialist(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   if (!data.name || !data.specialization) {
     throw new AppError(
@@ -921,7 +780,7 @@ export async function updateHospitalSpecialist(
     throw new AppError(404, "SPECIALIST_NOT_FOUND", "Specialist not found.");
   }
 
-  if (existingSpecialist.hospitalId !== hospitalId) {
+  if (existingSpecialist.hospitalId !== hospital.docId) {
     throw new AppError(
       403,
       "SPECIALIST_ACCESS_DENIED",
@@ -930,7 +789,7 @@ export async function updateHospitalSpecialist(
   }
 
   const updatedSpecialist = {
-    hospitalId,
+    hospitalId: hospital.docId,
     name: data.name,
     specialization: data.specialization,
     availability: data.availability,
@@ -963,21 +822,7 @@ export async function deleteHospitalSpecialist(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   const staffRef = firestore.collection("hospitalStaff").doc(specialistId);
 
@@ -993,7 +838,7 @@ export async function deleteHospitalSpecialist(
     throw new AppError(404, "SPECIALIST_NOT_FOUND", "Specialist not found.");
   }
 
-  if (specialistData.hospitalId !== hospitalId) {
+  if (specialistData.hospitalId !== hospital.docId) {
     throw new AppError(
       403,
       "SPECIALIST_ACCESS_DENIED",
@@ -1022,25 +867,11 @@ export async function getHospitalDiagnostics(uid: string) {
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   const diagnosticsSnapshot = await firestore
     .collection("hospitalDiagnostics")
-    .where("hospitalId", "==", hospitalId)
+    .where("hospitalId", "==", hospital.docId)
     .get();
 
   return diagnosticsSnapshot.docs.map((doc) => ({
@@ -1065,21 +896,7 @@ export async function getHospitalDiagnosticById(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   const diagnosticSnapshot = await firestore
     .collection("hospitalDiagnostics")
@@ -1104,7 +921,7 @@ export async function getHospitalDiagnosticById(
     );
   }
 
-  if (diagnosticData.hospitalId !== hospitalId) {
+  if (diagnosticData.hospitalId !== hospital.docId) {
     throw new AppError(
       403,
       "DIAGNOSTIC_ACCESS_DENIED",
@@ -1134,21 +951,7 @@ export async function addHospitalDiagnostic(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   if (!data.name || !data.type) {
     throw new AppError(
@@ -1161,7 +964,7 @@ export async function addHospitalDiagnostic(
   const diagnosticRef = firestore.collection("hospitalDiagnostics").doc();
 
   const diagnostic = {
-    hospitalId,
+    hospitalId: hospital.docId,
     name: data.name,
     type: data.type,
     available: data.available,
@@ -1194,21 +997,7 @@ export async function updateHospitalDiagnostic(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   if (!data.name || !data.type) {
     throw new AppError(
@@ -1242,7 +1031,7 @@ export async function updateHospitalDiagnostic(
     );
   }
 
-  if (existingDiagnostic.hospitalId !== hospitalId) {
+  if (existingDiagnostic.hospitalId !== hospital.docId) {
     throw new AppError(
       403,
       "DIAGNOSTIC_ACCESS_DENIED",
@@ -1251,7 +1040,7 @@ export async function updateHospitalDiagnostic(
   }
 
   const updatedDiagnostic = {
-    hospitalId,
+    hospitalId: hospital.docId,
     name: data.name,
     type: data.type,
     available: data.available,
@@ -1284,21 +1073,7 @@ export async function deleteHospitalDiagnostic(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  const hospital = await getHospitalByOwnerUid(uid);
 
   const diagnosticRef = firestore
     .collection("hospitalDiagnostics")
@@ -1324,7 +1099,7 @@ export async function deleteHospitalDiagnostic(
     );
   }
 
-  if (diagnosticData.hospitalId !== hospitalId) {
+  if (diagnosticData.hospitalId !== hospital.docId) {
     throw new AppError(
       403,
       "DIAGNOSTIC_ACCESS_DENIED",
@@ -1356,19 +1131,9 @@ export async function findMatchingFacilities(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
+  const currentHospital = await getHospitalByOwnerUid(uid);
 
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
+  ensureHospitalVerified(currentHospital.data);
 
   const hospitalsSnapshot = await firestore.collection("hospitals").get();
 
@@ -1378,8 +1143,22 @@ export async function findMatchingFacilities(
       ...doc.data(),
     }))
     .filter((hospital: any) => {
+      // --------------------------------------------------------
       // Do not include current hospital
+      // --------------------------------------------------------
+
       if (hospital.ownerUid === uid) {
+        return false;
+      }
+
+      // --------------------------------------------------------
+      // Only verified hospitals should be matchable
+      // --------------------------------------------------------
+
+      const verificationStatus = (hospital.verificationStatus ??
+        "PENDING") as HospitalVerificationStatus;
+
+      if (verificationStatus !== "VERIFIED") {
         return false;
       }
 
@@ -1466,21 +1245,17 @@ export async function createHospitalReferral(
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
+  // ----------------------------------------------------------
+  // Get current hospital + verify it
+  // ----------------------------------------------------------
 
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
+  const hospital = await getHospitalByOwnerUid(uid);
 
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  ensureHospitalVerified(hospital.data);
+
+  // ----------------------------------------------------------
+  // Validate referral data
+  // ----------------------------------------------------------
 
   if (!data.emergencyRequestId || !data.referredHospitalId || !data.reason) {
     throw new AppError(
@@ -1490,7 +1265,30 @@ export async function createHospitalReferral(
     );
   }
 
-  if (data.referredHospitalId === hospitalId) {
+  // ----------------------------------------------------------
+  // Check that emergency request exists
+  // AND belongs to current hospital
+  // ----------------------------------------------------------
+
+  const { requestData } = await getOwnedEmergencyRequest(
+    uid,
+    data.emergencyRequestId,
+    true,
+  );
+
+  if (!requestData) {
+    throw new AppError(
+      404,
+      "REQUEST_NOT_FOUND",
+      "Emergency request not found.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Prevent self-referral
+  // ----------------------------------------------------------
+
+  if (data.referredHospitalId === hospital.docId) {
     throw new AppError(
       400,
       "INVALID_REFERRAL_TARGET",
@@ -1498,17 +1296,56 @@ export async function createHospitalReferral(
     );
   }
 
+  // ----------------------------------------------------------
+  // Check referred hospital exists
+  // ----------------------------------------------------------
+
+  const targetHospitalSnapshot = await firestore
+    .collection("hospitals")
+    .doc(data.referredHospitalId)
+    .get();
+
+  if (!targetHospitalSnapshot.exists) {
+    throw new AppError(
+      404,
+      "TARGET_HOSPITAL_NOT_FOUND",
+      "Referred hospital not found.",
+    );
+  }
+
+  const targetHospitalData = targetHospitalSnapshot.data();
+
+  if (!targetHospitalData) {
+    throw new AppError(
+      404,
+      "TARGET_HOSPITAL_NOT_FOUND",
+      "Referred hospital not found.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Only verified hospitals can receive referrals
+  // ----------------------------------------------------------
+
+  ensureHospitalVerified(targetHospitalData);
+
+  // ----------------------------------------------------------
+  // Create referral
+  // ----------------------------------------------------------
+
   const referralRef = firestore.collection("hospitalReferrals").doc();
+
+  const now = new Date();
 
   const referral = {
     referralId: referralRef.id,
     emergencyRequestId: data.emergencyRequestId,
-    fromHospitalId: hospitalId,
+    fromHospitalId: hospital.docId,
     referredHospitalId: data.referredHospitalId,
     reason: data.reason,
     status: "PENDING",
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: now,
+    updatedAt: now,
   };
 
   await referralRef.set(referral);
@@ -1533,25 +1370,9 @@ export async function createHospitalReferralForRequest(
     );
   }
 
-  // ----------------------------------------------------------
-  // Find current hospital
-  // ----------------------------------------------------------
+  const hospital = await getHospitalByOwnerUid(uid);
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
-
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const currentHospitalId = hospitalSnapshot.docs[0].id;
+  ensureHospitalVerified(hospital.data);
 
   // ----------------------------------------------------------
   // Validate request body
@@ -1597,7 +1418,7 @@ export async function createHospitalReferralForRequest(
   // Check current hospital owns the request
   // ----------------------------------------------------------
 
-  if (requestData.hospitalId !== currentHospitalId) {
+  if (requestData.hospitalId !== hospital.docId) {
     throw new AppError(
       403,
       "REQUEST_ACCESS_DENIED",
@@ -1609,7 +1430,7 @@ export async function createHospitalReferralForRequest(
   // Prevent self-referral
   // ----------------------------------------------------------
 
-  if (data.referredHospitalId === currentHospitalId) {
+  if (data.referredHospitalId === hospital.docId) {
     throw new AppError(
       400,
       "INVALID_REFERRAL_TARGET",
@@ -1634,6 +1455,22 @@ export async function createHospitalReferralForRequest(
     );
   }
 
+  const targetHospitalData = targetHospitalSnapshot.data();
+
+  if (!targetHospitalData) {
+    throw new AppError(
+      404,
+      "TARGET_HOSPITAL_NOT_FOUND",
+      "Referred hospital not found.",
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Only verified hospitals can receive referrals
+  // ----------------------------------------------------------
+
+  ensureHospitalVerified(targetHospitalData);
+
   // ----------------------------------------------------------
   // Create referral
   // ----------------------------------------------------------
@@ -1645,7 +1482,7 @@ export async function createHospitalReferralForRequest(
   const referral = {
     referralId: referralRef.id,
     emergencyRequestId: requestId,
-    fromHospitalId: currentHospitalId,
+    fromHospitalId: hospital.docId,
     referredHospitalId: data.referredHospitalId,
     reason: data.reason,
     status: "PENDING",
@@ -1671,25 +1508,13 @@ export async function getHospitalReferrals(uid: string) {
     );
   }
 
-  const hospitalSnapshot = await firestore
-    .collection("hospitals")
-    .where("ownerUid", "==", uid)
-    .limit(1)
-    .get();
+  const hospital = await getHospitalByOwnerUid(uid);
 
-  if (hospitalSnapshot.empty) {
-    throw new AppError(
-      404,
-      "HOSPITAL_NOT_FOUND",
-      "Hospital profile not found.",
-    );
-  }
-
-  const hospitalId = hospitalSnapshot.docs[0].id;
+  ensureHospitalVerified(hospital.data);
 
   const referralsSnapshot = await firestore
     .collection("hospitalReferrals")
-    .where("fromHospitalId", "==", hospitalId)
+    .where("fromHospitalId", "==", hospital.docId)
     .get();
 
   return referralsSnapshot.docs.map((doc) => ({

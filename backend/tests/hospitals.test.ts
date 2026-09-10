@@ -17,6 +17,10 @@ const app = createApp();
 
 const mockVerifyIdToken = vi.mocked(auth!.verifyIdToken);
 
+// ============================================================
+// HOSPITAL REGISTRATION
+// ============================================================
+
 describe("Hospital Registration", () => {
   it("rejects registration without authentication", async () => {
     const res = await request(app)
@@ -37,7 +41,7 @@ describe("Hospital Registration", () => {
     expect(res.body.error).toHaveProperty("message");
   });
 
-  it("allows an authenticated hospital to register", async () => {
+  it("allows an authenticated hospital to register with pending verification", async () => {
     mockVerifyIdToken.mockResolvedValue({
       uid: "hospital-user-001",
       email: "hospital@test.com",
@@ -77,6 +81,10 @@ describe("Hospital Registration", () => {
     expect(mockSet).toHaveBeenCalled();
   });
 });
+
+// ============================================================
+// HOSPITAL PROFILE
+// ============================================================
 
 describe("Hospital Profile", () => {
   it("rejects profile request without authentication", async () => {
@@ -142,11 +150,9 @@ describe("Hospital Profile", () => {
   });
 
   it("rejects profile update without authentication", async () => {
-    const res = await request(app)
-      .patch("/api/hospitals/me")
-      .send({
-        name: "Updated Hospital",
-      });
+    const res = await request(app).patch("/api/hospitals/me").send({
+      name: "Updated Hospital",
+    });
 
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
@@ -169,6 +175,7 @@ describe("Hospital Profile", () => {
           data: () => ({
             hospitalId: "hospital-001",
             ownerUid: "hospital-user-001",
+            verificationStatus: "PENDING",
           }),
         },
       ],
@@ -212,11 +219,7 @@ describe("Hospital Profile", () => {
     expect(res.body.data.email).toBe("updated@hospital.com");
     expect(res.body.data.address).toBe("Updated Address");
     expect(res.body.data.emergencyCapability).toBe(false);
-    expect(res.body.data.facilities).toEqual([
-      "Emergency",
-      "ICU",
-      "MRI",
-    ]);
+    expect(res.body.data.facilities).toEqual(["Emergency", "ICU", "MRI"]);
 
     expect(mockSet).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -232,6 +235,10 @@ describe("Hospital Profile", () => {
   });
 });
 
+// ============================================================
+// HOSPITAL EMERGENCY REQUESTS
+// ============================================================
+
 describe("Hospital Emergency Requests", () => {
   it("rejects emergency requests without authentication", async () => {
     const res = await request(app).get("/api/hospitals/requests");
@@ -242,7 +249,7 @@ describe("Hospital Emergency Requests", () => {
     expect(res.body.error).toHaveProperty("message");
   });
 
-  it("returns emergency requests for the authenticated hospital", async () => {
+  it("returns emergency requests for the authenticated verified hospital", async () => {
     mockVerifyIdToken.mockResolvedValue({
       uid: "hospital-user-001",
       email: "hospital@test.com",
@@ -287,6 +294,7 @@ describe("Hospital Emergency Requests", () => {
           data: () => ({
             hospitalId: "hospital-001",
             ownerUid: "hospital-user-001",
+            verificationStatus: "VERIFIED",
           }),
         },
       ],
@@ -335,13 +343,61 @@ describe("Hospital Emergency Requests", () => {
 
     expect(mockRequestsGet).toHaveBeenCalled();
   });
+
+  it("rejects emergency request access for an unverified hospital", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            verificationStatus: "PENDING",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .get("/api/hospitals/requests")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("HOSPITAL_NOT_VERIFIED");
+  });
 });
+
+// ============================================================
+// HOSPITAL EMERGENCY REQUEST DETAIL
+// ============================================================
 
 describe("Hospital Emergency Request Detail", () => {
   it("rejects request detail without authentication", async () => {
-    const res = await request(app).get(
-      "/api/hospitals/requests/request-001",
-    );
+    const res = await request(app).get("/api/hospitals/requests/request-001");
 
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
@@ -349,7 +405,7 @@ describe("Hospital Emergency Request Detail", () => {
     expect(res.body.error).toHaveProperty("message");
   });
 
-  it("returns a specific emergency request for the authenticated hospital", async () => {
+  it("returns a specific emergency request for the authenticated verified hospital", async () => {
     mockVerifyIdToken.mockResolvedValue({
       uid: "hospital-user-001",
       email: "hospital@test.com",
@@ -359,6 +415,7 @@ describe("Hospital Emergency Request Detail", () => {
     const hospitalData = {
       hospitalId: "hospital-001",
       ownerUid: "hospital-user-001",
+      verificationStatus: "VERIFIED",
     };
 
     const emergencyRequest = {
@@ -447,6 +504,7 @@ describe("Hospital Emergency Request Detail", () => {
           data: () => ({
             hospitalId: "hospital-001",
             ownerUid: "hospital-user-001",
+            verificationStatus: "VERIFIED",
           }),
         },
       ],
@@ -513,6 +571,7 @@ describe("Hospital Emergency Request Detail", () => {
           data: () => ({
             hospitalId: "hospital-001",
             ownerUid: "hospital-user-001",
+            verificationStatus: "VERIFIED",
           }),
         },
       ],
@@ -560,6 +619,351 @@ describe("Hospital Emergency Request Detail", () => {
   });
 });
 
+// ============================================================
+// HOSPITAL EMERGENCY LIFECYCLE
+// ============================================================
+
+describe("Hospital Emergency Lifecycle", () => {
+  it("marks patient as arrived using the exact arrived endpoint", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockRequestGet = vi.fn().mockResolvedValue({
+      exists: true,
+      id: "request-001",
+      data: () => ({
+        hospitalId: "hospital-001",
+        status: "AMBULANCE EN ROUTE",
+      }),
+    });
+
+    const mockSet = vi.fn().mockResolvedValue(undefined);
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+    };
+
+    const mockRequestCollection = {
+      doc: vi.fn().mockReturnValue({
+        get: mockRequestGet,
+        set: mockSet,
+      }),
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      if (collectionName === "hospitalEmergencyRequests") {
+        return mockRequestCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/requests/request-001/arrived")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.requestId).toBe("request-001");
+    expect(res.body.data.status).toBe("PATIENT ARRIVED");
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "PATIENT ARRIVED",
+      }),
+      { merge: true },
+    );
+  });
+
+  it("moves patient from arrived to in treatment", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockRequestGet = vi.fn().mockResolvedValue({
+      exists: true,
+      id: "request-001",
+      data: () => ({
+        hospitalId: "hospital-001",
+        status: "PATIENT ARRIVED",
+      }),
+    });
+
+    const mockSet = vi.fn().mockResolvedValue(undefined);
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+    };
+
+    const mockRequestCollection = {
+      doc: vi.fn().mockReturnValue({
+        get: mockRequestGet,
+        set: mockSet,
+      }),
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      if (collectionName === "hospitalEmergencyRequests") {
+        return mockRequestCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/requests/request-001/treatment")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.requestId).toBe("request-001");
+    expect(res.body.data.status).toBe("IN TREATMENT");
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "IN TREATMENT",
+      }),
+      { merge: true },
+    );
+  });
+
+  it("completes an emergency case from in treatment", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockRequestGet = vi.fn().mockResolvedValue({
+      exists: true,
+      id: "request-001",
+      data: () => ({
+        hospitalId: "hospital-001",
+        status: "IN TREATMENT",
+      }),
+    });
+
+    const mockSet = vi.fn().mockResolvedValue(undefined);
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+    };
+
+    const mockRequestCollection = {
+      doc: vi.fn().mockReturnValue({
+        get: mockRequestGet,
+        set: mockSet,
+      }),
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      if (collectionName === "hospitalEmergencyRequests") {
+        return mockRequestCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/requests/request-001/complete")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.requestId).toBe("request-001");
+    expect(res.body.data.status).toBe("COMPLETED");
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "COMPLETED",
+      }),
+      { merge: true },
+    );
+  });
+
+  it("rejects an invalid direct transition from accepted to completed", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            verificationStatus: "VERIFIED",
+          }),
+        },
+      ],
+    });
+
+    const mockRequestGet = vi.fn().mockResolvedValue({
+      exists: true,
+      id: "request-001",
+      data: () => ({
+        hospitalId: "hospital-001",
+        status: "ACCEPTED",
+      }),
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+    };
+
+    const mockRequestCollection = {
+      doc: vi.fn().mockReturnValue({
+        get: mockRequestGet,
+      }),
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      if (collectionName === "hospitalEmergencyRequests") {
+        return mockRequestCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/requests/request-001/complete")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("INVALID_REQUEST_TRANSITION");
+  });
+
+  it("rejects lifecycle actions for an unverified hospital", async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: "hospital-user-001",
+      email: "hospital@test.com",
+      role: "hospital",
+    } as any);
+
+    const mockHospitalGet = vi.fn().mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          id: "hospital-001",
+          data: () => ({
+            hospitalId: "hospital-001",
+            ownerUid: "hospital-user-001",
+            verificationStatus: "PENDING",
+          }),
+        },
+      ],
+    });
+
+    const mockHospitalCollection = {
+      where: vi.fn().mockReturnValue({
+        limit: vi.fn().mockReturnValue({
+          get: mockHospitalGet,
+        }),
+      }),
+    };
+
+    vi.mocked(firestore!.collection).mockImplementation((collectionName) => {
+      if (collectionName === "hospitals") {
+        return mockHospitalCollection as any;
+      }
+
+      return {} as any;
+    });
+
+    const res = await request(app)
+      .post("/api/hospitals/requests/request-001/arrived")
+      .set("Authorization", "Bearer fake-token");
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("HOSPITAL_NOT_VERIFIED");
+  });
+});
+
 /* =========================================================
    HOSPITAL CAPACITY
    ========================================================= */
@@ -584,6 +988,7 @@ describe("Hospital Capacity", () => {
     const hospitalData = {
       hospitalId: "hospital-001",
       ownerUid: "hospital-user-001",
+      verificationStatus: "PENDING",
     };
 
     const capacityData = {
@@ -667,6 +1072,7 @@ describe("Hospital Capacity", () => {
           data: () => ({
             hospitalId: "hospital-001",
             ownerUid: "hospital-user-001",
+            verificationStatus: "PENDING",
           }),
         },
       ],
@@ -754,6 +1160,7 @@ describe("Hospital Capacity", () => {
           data: () => ({
             hospitalId: "hospital-001",
             ownerUid: "hospital-user-001",
+            verificationStatus: "PENDING",
           }),
         },
       ],
@@ -806,6 +1213,7 @@ describe("Hospital Capacity", () => {
           data: () => ({
             hospitalId: "hospital-001",
             ownerUid: "hospital-user-001",
+            verificationStatus: "PENDING",
           }),
         },
       ],
@@ -858,6 +1266,7 @@ describe("Hospital Capacity", () => {
           data: () => ({
             hospitalId: "hospital-001",
             ownerUid: "hospital-user-001",
+            verificationStatus: "PENDING",
           }),
         },
       ],

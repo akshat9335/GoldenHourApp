@@ -4,6 +4,7 @@ import {
   acceptHospitalRequestController,
   addHospitalDiagnosticController,
   addHospitalSpecialistController,
+  completeHospitalRequestController,
   createHospitalReferralController,
   createHospitalReferralForRequestController,
   deleteHospitalDiagnosticController,
@@ -17,8 +18,10 @@ import {
   getHospitalRequestByIdController,
   getHospitalRequestsController,
   getHospitalSpecialistsController,
+  markHospitalPatientArrivedController,
   registerHospitalController,
   rejectHospitalRequestController,
+  startHospitalTreatmentController,
   updateHospitalCapacityController,
   updateHospitalDiagnosticController,
   updateHospitalProfileController,
@@ -204,6 +207,10 @@ router.get(
   getHospitalRequestByIdController,
 );
 
+// ------------------------------------------------------------
+// ACCEPT / REJECT
+// ------------------------------------------------------------
+
 router.post(
   "/requests/:id/accept",
   requireAuth,
@@ -217,6 +224,45 @@ router.post(
   requireRole("hospital"),
   rejectHospitalRequestController,
 );
+
+// ------------------------------------------------------------
+// EXACT A-Z EMERGENCY LIFECYCLE
+// ------------------------------------------------------------
+
+// ACCEPTED → AMBULANCE EN ROUTE is handled through the
+// existing generic status endpoint.
+//
+// PATCH /api/hospitals/requests/:id/status
+//
+// Body:
+// {
+//   "status": "AMBULANCE EN ROUTE"
+// }
+
+router.post(
+  "/requests/:id/arrived",
+  requireAuth,
+  requireRole("hospital"),
+  markHospitalPatientArrivedController,
+);
+
+router.post(
+  "/requests/:id/treatment",
+  requireAuth,
+  requireRole("hospital"),
+  startHospitalTreatmentController,
+);
+
+router.post(
+  "/requests/:id/complete",
+  requireAuth,
+  requireRole("hospital"),
+  completeHospitalRequestController,
+);
+
+// ------------------------------------------------------------
+// GENERIC STATUS UPDATE
+// ------------------------------------------------------------
 
 router.patch(
   "/requests/:id/status",
