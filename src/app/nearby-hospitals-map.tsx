@@ -2,18 +2,18 @@ import React from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
-import { Card, HTitle, Icon, MapBg } from '@/components/ui';
-
-const PINS = [
-  { top: '42%', left: '38%' },
-  { top: '30%', left: '58%' },
-  { top: '60%', left: '70%' },
-];
+import { Card, HTitle, Icon, InteractiveMap } from '@/components/ui';
 
 export default function NearbyHospitalsMap() {
   return (
     <View style={{ flex: 1 }}>
-      <MapBg />
+      <InteractiveMap
+        destLat={12.9352}
+        destLng={77.6146}
+        destTitle="Nearest Emergency Hospital"
+        userLat={12.9279}
+        userLng={77.6271}
+      />
       <View style={styles.topBar}>
         <Card style={styles.topCard}>
           <Pressable style={styles.backbtn} onPress={() => router.back()}>
@@ -21,14 +21,6 @@ export default function NearbyHospitalsMap() {
           </Pressable>
           <HTitle size={14}>Nearby Hospitals</HTitle>
         </Card>
-      </View>
-      {PINS.map((p, i) => (
-        <View key={i} style={[styles.pin, { top: p.top, left: p.left }]}>
-          <Icon name="hospital" color={colors.blue} />
-        </View>
-      ))}
-      <View style={[styles.pin, { top: '50%', left: '50%', marginLeft: -9, marginTop: -9 }]}>
-        <Icon name="pin" color={colors.red} />
       </View>
     </View>
   );

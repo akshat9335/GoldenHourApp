@@ -2,18 +2,35 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
-import { Card, HTitle, Icon, MapBg, Button, Pill } from '@/components/ui';
+import { Card, HTitle, Icon, MapBg, Button, Pill, InteractiveMap } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById } from '@/constants/doctorData';
+
+import * as Linking from 'expo-linking';
 
 export default function ClinicLocation() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
   const doctor = getDoctorById(selectedDoctorId);
   const [navigating, setNavigating] = useState(false);
 
+  const openGoogleMaps = () => {
+    setNavigating(true);
+    const dest = `${doctor.latitude},${doctor.longitude}`;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+    Linking.openURL(url).catch((err) => {
+      console.warn('Could not open Google Maps', err);
+    });
+  };
+
   return (
     <View style={{ flex: 1 }}>
-      <MapBg />
+      <InteractiveMap
+        destLat={doctor.latitude}
+        destLng={doctor.longitude}
+        destTitle={doctor.clinic}
+        userLat={doctor.latitude - 0.012}
+        userLng={doctor.longitude + 0.012}
+      />
 
       <View style={styles.topBar}>
         <Card style={styles.topCard}>
@@ -22,16 +39,6 @@ export default function ClinicLocation() {
           </Pressable>
           <HTitle size={14}>Clinic Location</HTitle>
         </Card>
-      </View>
-
-      {/* Mock route line from current location to clinic */}
-      <View style={styles.routeLine} pointerEvents="none" />
-
-      <View style={[styles.marker, { top: '68%', left: '30%' }]}>
-        <Icon name="gps" color={colors.blue} />
-      </View>
-      <View style={[styles.marker, { top: '32%', left: '62%' }]}>
-        <Icon name="pin" color={colors.red} size={22} />
       </View>
 
       <View style={styles.bottomSheet}>
@@ -45,13 +52,13 @@ export default function ClinicLocation() {
           </View>
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>📍 {doctor.distanceKm} km</Text>
-            <Text style={styles.metaText}>🚗 ~{doctor.etaMin} min</Text>
+            <Text style={styles.metaText}>🚗 ~{doctor.etaMin} min (Google Maps)</Text>
           </View>
           <Button
-            title={navigating ? 'Navigation Started (Mock)' : 'Start Navigation'}
-            variant={navigating ? 'secondary' : 'primary'}
+            title="Open in Google Maps"
+            variant="primary"
             style={{ marginTop: 12 }}
-            onPress={() => setNavigating(true)}
+            onPress={openGoogleMaps}
           />
         </Card>
       </View>
@@ -63,11 +70,6 @@ const styles = StyleSheet.create({
   topBar: { position: 'absolute', top: 50, left: 16, right: 16, zIndex: 5 },
   topCard: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, paddingHorizontal: 12 },
   backbtn: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
-  routeLine: {
-    position: 'absolute', top: '38%', left: '34%', width: '30%', height: 2,
-    backgroundColor: colors.blue, opacity: 0.5, transform: [{ rotate: '-28deg' }],
-  },
-  marker: { position: 'absolute' },
   bottomSheet: { position: 'absolute', bottom: 20, left: 16, right: 16 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   clinicName: { fontWeight: '700', fontSize: 14.5, color: colors.ink },

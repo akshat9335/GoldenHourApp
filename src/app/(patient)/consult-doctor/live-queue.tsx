@@ -58,7 +58,7 @@ export default function LiveQueue() {
         </Card>
 
         {isMyTurn ? (
-          <Button title="Consultation Completed" style={{ marginTop: 16 }} onPress={() => router.replace('/(patient)/consult-doctor')} />
+          <Button title="Consultation Completed" style={{ marginTop: 16 }} onPress={() => router.replace('/(patient)/consult-doctor' as any)} />
         ) : (
           <Button
             title="Simulate Queue Moving (Demo)"

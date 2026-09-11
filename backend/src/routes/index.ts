@@ -9,6 +9,10 @@ import emergencyRoutes from "./emergencies.routes";
 import notificationRoutes from "./notifications.routes";
 import aiRoutes from "./ai.routes";
 import hospitalRoutes from "./hospital.routes";
+import locationRoutes from "./location.routes";
+import doctorRoutes from "./doctor.routes";
+import appointmentRoutes from "./appointment.routes";
+import queueRoutes from "./queue.routes";
 
 /**
  * Centralized API routing.
@@ -25,6 +29,10 @@ import hospitalRoutes from "./hospital.routes";
  *                      specialists, diagnostics, facility matching
  *                      and referrals
  *   /ambulances      → Akshita
+ *   /location        → Anant (GPS tracking, Nearby Hospitals & Incidents, Maps routing)
+ *   /doctors         → Anant (Doctor registration, Clinic profiles, Search)
+ *   /appointments    → Anant (Slot booking, Lifecycle state machine, Departure sync)
+ *   /queues          → Anant (Live queue management, Token issuance, Next caller)
  */
 
 const router = Router();
@@ -38,5 +46,10 @@ router.use("/notifications", notificationRoutes);
 router.use("/ai", aiRoutes);
 router.use("/hospitals", hospitalRoutes);
 router.use("/ambulances", ambulanceRoutes);
+router.use("/location", locationRoutes);
+router.use("/doctors", doctorRoutes);
+router.use("/appointments", appointmentRoutes);
+router.use("/queues", queueRoutes);
 
 export default router;
+
