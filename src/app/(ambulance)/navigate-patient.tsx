@@ -1,22 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/constants/theme';
-import { Card, Button, InteractiveMap, Icon, Pill } from '@/components/ui';
+import { Card, Button, Icon, Pill, TopBar, Banner } from '@/components/ui';
 import { openExternalMapPreview, openExternalVoiceNavigation } from '@/components/ui';
-
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import { initDeviceLocation } from '@/services/deviceLocation';
 
 export default function NavigatePatient() {
   const insets = useSafeAreaInsets();
   const activeTripId = useAppStore((s) => s.activeTripId);
   const emergencyId = useAppStore((s) => s.emergencyId);
+  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+
   const [emergency, setEmergency] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    initDeviceLocation();
+
     if (emergencyId) {
       api.emergencies
         .getById(emergencyId)
@@ -68,11 +72,11 @@ export default function NavigatePatient() {
     router.push('/(ambulance)/arrived-patient');
   };
 
-  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
-  const pLat = emergency?.location?.latitude ?? (lastKnownLocation?.latitude ? Number((lastKnownLocation.latitude - 0.004).toFixed(4)) : 12.9352);
-  const pLng = emergency?.location?.longitude ?? (lastKnownLocation?.longitude ? Number((lastKnownLocation.longitude + 0.003).toFixed(4)) : 77.6146);
-  const ambLat = lastKnownLocation?.latitude ?? Number((pLat - 0.006).toFixed(4));
-  const ambLng = lastKnownLocation?.longitude ?? Number((pLng + 0.005).toFixed(4));
+  const pLat = emergency?.location?.latitude ?? (lastKnownLocation?.latitude ?? 28.6139);
+  const pLng = emergency?.location?.longitude ?? (lastKnownLocation?.longitude ?? 77.2090);
+  const ambLat = lastKnownLocation?.latitude ?? pLat;
+  const ambLng = lastKnownLocation?.longitude ?? pLng;
+
   const patientName = emergency?.patientName || 'Emergency Patient';
   const patientPhone = emergency?.patientPhone;
   const hospitalName = emergency?.assignedHospitalName || 'Assigned Hospital ER';
@@ -89,46 +93,61 @@ export default function NavigatePatient() {
   const distanceKm = Math.max(0.2, Number((6371 * c).toFixed(1)));
   const etaMin = Math.max(1, Math.round(distanceKm * 2.5));
 
-  return (
-    <View style={{ flex: 1 }}>
-      <InteractiveMap
-        userLat={pLat}
-        userLng={pLng}
-        userTitle="Patient Pickup Location"
-        ambulanceLat={ambLat}
-        ambulanceLng={ambLng}
-        ambulanceTitle="Responding Unit"
-        distanceKm={distanceKm}
-        etaMin={etaMin}
-        showRoute={true}
-        showNavButton={false}
-      />
+  const handleStartVoiceNav = () => {
+    openExternalVoiceNavigation({
+      destLat: pLat,
+      destLng: pLng,
+      destTitle: `Patient Pickup - ${patientName}`,
+    });
+  };
 
-      {/* Top Status Bar */}
-      <View style={[styles.topBar, { top: Math.max(insets.top, 24) + 8 }]}>
-        <Card style={{ flex: 1, padding: 12, paddingHorizontal: 14 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View>
-              <Text style={styles.statusText}>En Route to Patient</Text>
-              <Text style={styles.statusSub}>Pickup GPS: {pLat.toFixed(4)}, {pLng.toFixed(4)}</Text>
-            </View>
-            <Pill color="red">TRAUMA DISPATCH</Pill>
-          </View>
-        </Card>
+  const handleViewMapsPreview = () => {
+    openExternalMapPreview({
+      lat: pLat,
+      lng: pLng,
+      title: `Patient Pickup - ${patientName}`,
+      originLat: ambLat,
+      originLng: ambLng,
+    });
+  };
+
+  return (
+    <View style={[styles.screen, { paddingTop: Math.max(insets.top, 16) }]}>
+      <View style={styles.header}>
+        <TopBar title="En Route to Patient" back={true} onPressBack={() => router.replace('/(ambulance)/dashboard')} />
       </View>
 
-      {/* Bottom Emergency Action Sheet */}
-      <View style={styles.bottomBar}>
-        <Card style={styles.patientSheet}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={styles.patientTitle}>{patientName}</Text>
-              <Text style={styles.patientIncident}>{emergency?.incidentType || 'Trauma Emergency'}</Text>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 40 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <Banner color="red" icon={<Icon name="ambulance" size={16} color={colors.red} />}>
+          Priority 1 Trauma Dispatch — Emergency lights & siren authorized.
+        </Banner>
+
+        <View style={{ height: 12 }} />
+
+        {/* Dispatch Target Card */}
+        <Card style={styles.targetCard}>
+          <View style={styles.rowTop}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.patientName}>{patientName}</Text>
+              <Text style={styles.incidentType}>{emergency?.incidentType || 'Severe Trauma Alert'}</Text>
             </View>
-            <Pill color="amber">ETA ~{etaMin} min ({distanceKm} km)</Pill>
+            <Pill color="red">TRAUMA CODE 1</Pill>
           </View>
 
-          {/* Direct Calling Actions */}
+          <View style={styles.kpiRow}>
+            <View style={styles.kpiCol}>
+              <Text style={styles.kpiLabel}>ESTIMATED ETA</Text>
+              <Text style={styles.kpiValue}>~{etaMin} min</Text>
+            </View>
+            <View style={styles.kpiCol}>
+              <Text style={styles.kpiLabel}>DISTANCE</Text>
+              <Text style={styles.kpiValue}>{distanceKm} km</Text>
+            </View>
+          </View>
+
           <View style={styles.contactRow}>
             {patientPhone ? (
               <TouchableOpacity
@@ -136,7 +155,7 @@ export default function NavigatePatient() {
                 onPress={() => Linking.openURL(`tel:${patientPhone}`)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.callPatientText}>📞 Call Patient</Text>
+                <Text style={styles.callPatientText}>📞 Call Patient ({patientPhone})</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -146,102 +165,107 @@ export default function NavigatePatient() {
                 onPress={() => Linking.openURL(`tel:${hospitalPhone}`)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.callHospText}>🏥 Call Hospital</Text>
+                <Text style={styles.callHospText}>🏥 {hospitalName}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
+        </Card>
 
-          {/* Dual Navigation Buttons: Map Preview vs Optional Voice Guidance */}
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-            <TouchableOpacity
-              style={[styles.gMapsDriveBtn, { flex: 1, backgroundColor: '#1E293B', marginTop: 0 }]}
-              onPress={() =>
-                openExternalMapPreview({
-                  lat: pLat,
-                  lng: pLng,
-                  title: `Patient Pickup - ${patientName}`,
-                  originLat: ambLat,
-                  originLng: ambLng,
-                })
-              }
-              activeOpacity={0.85}
-            >
-              <Text style={styles.gMapsDriveText}>🗺️ View in Maps</Text>
-            </TouchableOpacity>
+        {/* Route Telemetry */}
+        <Card style={styles.telemetryCard}>
+          <Text style={styles.telemetryTitle}>DISPATCH GPS TELEMETRY</Text>
 
-            <TouchableOpacity
-              style={[styles.gMapsDriveBtn, { flex: 1, backgroundColor: colors.red, marginTop: 0 }]}
-              onPress={() =>
-                openExternalVoiceNavigation({
-                  destLat: pLat,
-                  destLng: pLng,
-                  destTitle: `Patient Pickup - ${patientName}`,
-                })
-              }
-              activeOpacity={0.85}
-            >
-              <Text style={styles.gMapsDriveText}>🎙️ Voice GPS</Text>
-            </TouchableOpacity>
+          <View style={styles.telemetryRow}>
+            <View style={styles.dotOrigin} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.teleLabel}>Your Ambulance Position</Text>
+              <Text style={styles.teleVal}>{ambLat.toFixed(4)}° N, {ambLng.toFixed(4)}° E (Live Streaming)</Text>
+            </View>
           </View>
 
-          <View style={{ marginTop: 10 }}>
+          <View style={styles.routeLine} />
+
+          <View style={styles.telemetryRow}>
+            <View style={styles.dotDest} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.teleLabel}>Patient Pickup Destination</Text>
+              <Text style={styles.teleVal}>{pLat.toFixed(4)}° N, {pLng.toFixed(4)}° E</Text>
+            </View>
+          </View>
+        </Card>
+
+        {/* Native Navigation Launchers */}
+        <View style={{ gap: 10 }}>
+          <TouchableOpacity
+            style={styles.voiceNavBtn}
+            onPress={handleStartVoiceNav}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.voiceNavText}>🧭 Start Voice Turn-by-Turn Navigation (Google Maps)</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.previewBtn}
+            onPress={handleViewMapsPreview}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.previewBtnText}>🗺️ View Route Overview in Google Maps</Text>
+          </TouchableOpacity>
+
+          <View style={{ marginTop: 8 }}>
             <Button
-              title={submitting ? 'Updating Status...' : 'Mark Arrived at Patient →'}
+              title={submitting ? 'Updating Status...' : 'Mark Arrived at Patient Scene →'}
               disabled={submitting}
               loading={submitting}
               onPress={handleMarkArrived}
             />
           </View>
-        </Card>
-      </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  topBar: { position: 'absolute', top: 50, left: 16, right: 16, zIndex: 5, flexDirection: 'row' },
-  statusText: { fontSize: 13, fontWeight: '700', color: colors.ink },
-  statusSub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
-  bottomBar: { position: 'absolute', bottom: 24, left: 16, right: 16, zIndex: 5 },
-  patientSheet: { padding: 14, borderWidth: 1.5, borderColor: colors.line },
-  patientTitle: { fontSize: 15, fontWeight: '800', color: colors.ink },
-  patientIncident: { fontSize: 12, color: colors.inkSoft, marginTop: 2 },
-  contactRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  callPatientBtn: {
-    flex: 1,
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  callPatientText: { fontSize: 12, fontWeight: '700', color: colors.success },
-  callHospBtn: {
-    flex: 1,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  callHospText: { fontSize: 12, fontWeight: '700', color: colors.blue },
-  gMapsDriveBtn: {
+  screen: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingHorizontal: 16, marginBottom: 8 },
+  content: { paddingHorizontal: 16 },
+  targetCard: { padding: 16, marginBottom: 14 },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  patientName: { fontSize: 18, fontWeight: '800', color: colors.ink },
+  incidentType: { fontSize: 12.5, color: colors.red, fontWeight: '700', marginTop: 2 },
+  kpiRow: { flexDirection: 'row', gap: 24, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line },
+  kpiCol: {},
+  kpiLabel: { fontSize: 10, fontWeight: '800', color: colors.inkFaint, letterSpacing: 0.5 },
+  kpiValue: { fontSize: 20, fontWeight: '900', color: colors.ink, marginTop: 2 },
+  contactRow: { marginTop: 14, gap: 8 },
+  callPatientBtn: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', borderRadius: 10, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  callPatientText: { fontSize: 12.5, fontWeight: '700', color: colors.success },
+  callHospBtn: { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 10, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  callHospText: { fontSize: 12.5, fontWeight: '700', color: colors.blue },
+  telemetryCard: { padding: 16, marginBottom: 14 },
+  telemetryTitle: { fontSize: 10.5, fontWeight: '800', color: colors.inkFaint, letterSpacing: 0.5, marginBottom: 14 },
+  telemetryRow: { flexDirection: 'row', alignItems: 'center' },
+  dotOrigin: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.blue },
+  dotDest: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.red },
+  routeLine: { width: 2, height: 20, backgroundColor: colors.line, marginLeft: 5, marginVertical: 2 },
+  teleLabel: { fontSize: 11, color: colors.inkFaint, fontWeight: '600' },
+  teleVal: { fontSize: 12.5, color: colors.ink, fontWeight: '700', marginTop: 1 },
+  voiceNavBtn: {
     backgroundColor: '#15803D',
-    borderRadius: 8,
-    paddingVertical: 10,
-    marginTop: 10,
+    borderRadius: 12,
+    paddingVertical: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#22C55E',
+    elevation: 4,
   },
-  gMapsDriveText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 12.5,
+  voiceNavText: { color: '#fff', fontSize: 13.5, fontWeight: '800' },
+  previewBtn: {
+    backgroundColor: '#0284C7',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  previewBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

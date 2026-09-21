@@ -1,4 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppStore } from '@/store/useAppStore';
+import { api } from './api';
 
 let ExpoLocation: any = null;
 try {
@@ -12,7 +14,9 @@ export interface Coordinates {
   longitude: number;
 }
 
+const STORAGE_KEY = '@gh_last_known_gps';
 let locationSubscription: any = null;
+let isInitializing = false;
 
 /**
  * Pre-warms GPS in the background on app launch.
@@ -20,57 +24,52 @@ let locationSubscription: any = null;
  * Also performs non-blocking reverse-geocoding to display the real locality/city.
  */
 export async function initDeviceLocation(): Promise<Coordinates | null> {
-  if (!ExpoLocation) return null;
+  if (!ExpoLocation || isInitializing) {
+    return useAppStore.getState().lastKnownLocation;
+  }
+  isInitializing = true;
 
   try {
+    // 1. Instant Cache from AsyncStorage (<5ms)
+    try {
+      const saved = await AsyncStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.latitude && parsed?.longitude) {
+          useAppStore.getState().setLastKnownLocation(parsed);
+          resolveLocality(parsed.latitude, parsed.longitude).catch(() => {});
+        }
+      }
+    } catch {}
+
+    // 2. Request Permissions
     const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
-      return null;
+      isInitializing = false;
+      return useAppStore.getState().lastKnownLocation;
     }
 
-    // 1. Instant fetch: Last known position from device hardware cache (<10ms)
+    // 3. Try quick hardware cache (<50ms)
     try {
-      const lastPos = await ExpoLocation.getLastKnownPositionAsync({});
+      const lastPos = await ExpoLocation.getLastKnownPositionAsync({ maxAge: 60000 });
       if (lastPos?.coords) {
         const coords: Coordinates = {
           latitude: Number(lastPos.coords.latitude.toFixed(6)),
           longitude: Number(lastPos.coords.longitude.toFixed(6)),
         };
         useAppStore.getState().setLastKnownLocation(coords);
-        resolveLocality(coords.latitude, coords.longitude);
+        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(coords)).catch(() => {});
+        resolveLocality(coords.latitude, coords.longitude).catch(() => {});
       }
     } catch {}
 
-    // 2. Start continuous position watcher for real-time accurate GPS
-    if (!locationSubscription) {
-      try {
-        locationSubscription = await ExpoLocation.watchPositionAsync(
-          {
-            accuracy: ExpoLocation.Accuracy.High,
-            timeInterval: 3000,
-            distanceInterval: 5,
-          },
-          (pos: any) => {
-            if (pos?.coords) {
-              const coords: Coordinates = {
-                latitude: Number(pos.coords.latitude.toFixed(6)),
-                longitude: Number(pos.coords.longitude.toFixed(6)),
-              };
-              useAppStore.getState().setLastKnownLocation(coords);
-              resolveLocality(coords.latitude, coords.longitude);
-            }
-          }
-        );
-      } catch {}
-    }
-
-    // 3. Fast high-accuracy fix if store doesn't have coordinates yet
-    if (!useAppStore.getState().lastKnownLocation) {
+    // 4. Fast Balanced Fix (Cell/WiFi/GPS ~300ms)
+    try {
       const freshPos = await Promise.race([
         ExpoLocation.getCurrentPositionAsync({
-          accuracy: ExpoLocation.Accuracy.High,
+          accuracy: ExpoLocation.Accuracy.Balanced,
         }),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
       ]);
 
       if (freshPos?.coords) {
@@ -79,19 +78,53 @@ export async function initDeviceLocation(): Promise<Coordinates | null> {
           longitude: Number(freshPos.coords.longitude.toFixed(6)),
         };
         useAppStore.getState().setLastKnownLocation(coords);
-        resolveLocality(coords.latitude, coords.longitude);
-        return coords;
+        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(coords)).catch(() => {});
+        resolveLocality(coords.latitude, coords.longitude).catch(() => {});
+
+        // Sync to backend if authenticated
+        try {
+          const user = useAppStore.getState().userProfile;
+          if (user) {
+            api.location.updateLocation({ lat: coords.latitude, lng: coords.longitude }).catch(() => {});
+          }
+        } catch {}
       }
+    } catch {}
+
+    // 5. Continuous Live Position Watcher
+    if (!locationSubscription) {
+      try {
+        locationSubscription = await ExpoLocation.watchPositionAsync(
+          {
+            accuracy: ExpoLocation.Accuracy.Balanced,
+            timeInterval: 3000,
+            distanceInterval: 10,
+          },
+          (pos: any) => {
+            if (pos?.coords) {
+              const coords: Coordinates = {
+                latitude: Number(pos.coords.latitude.toFixed(6)),
+                longitude: Number(pos.coords.longitude.toFixed(6)),
+              };
+              useAppStore.getState().setLastKnownLocation(coords);
+              AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(coords)).catch(() => {});
+              resolveLocality(coords.latitude, coords.longitude).catch(() => {});
+            }
+          }
+        );
+      } catch {}
     }
-  } catch (err) {
-    // Non-fatal, preserves existing cached or fallback
+  } catch (_err) {
+    // Non-fatal
+  } finally {
+    isInitializing = false;
   }
 
   return useAppStore.getState().lastKnownLocation;
 }
 
 /**
- * Resolves human-readable locality (e.g. "Koramangala, Bengaluru" or "Gomti Nagar, Lucknow")
+ * Resolves human-readable locality (e.g. "Civil Lines, Prayagraj" or "Gomti Nagar, Lucknow")
  */
 export async function resolveLocality(lat: number, lng: number): Promise<string> {
   if (!ExpoLocation) return 'Live GPS active';
@@ -117,15 +150,14 @@ export async function resolveLocality(lat: number, lng: number): Promise<string>
     // Fallback
   }
 
-  const fallback = `${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E`;
+  const fallback = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
   useAppStore.getState().setLocationAddress(fallback);
   return fallback;
 }
 
 /**
  * Fast zero-latency location retriever for SOS dispatch.
- * Returns cached coordinates instantly (<1ms).
- * Only if completely empty, it races a fast 800ms device fix.
+ * Returns real device coordinates instantly.
  */
 export async function getFastLocation(): Promise<Coordinates> {
   const store = useAppStore.getState();
@@ -133,24 +165,37 @@ export async function getFastLocation(): Promise<Coordinates> {
     return store.lastKnownLocation;
   }
 
+  // Try reading from persistent storage
+  try {
+    const saved = await AsyncStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed?.latitude && parsed?.longitude) {
+        store.setLastKnownLocation(parsed);
+        return parsed;
+      }
+    }
+  } catch {}
+
   if (ExpoLocation) {
     try {
       const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
       if (status === 'granted') {
-        const last = await ExpoLocation.getLastKnownPositionAsync({});
+        const last = await ExpoLocation.getLastKnownPositionAsync({ maxAge: 60000 });
         if (last?.coords) {
           const coords = {
             latitude: Number(last.coords.latitude.toFixed(6)),
             longitude: Number(last.coords.longitude.toFixed(6)),
           };
           store.setLastKnownLocation(coords);
-          resolveLocality(coords.latitude, coords.longitude);
+          AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(coords)).catch(() => {});
+          resolveLocality(coords.latitude, coords.longitude).catch(() => {});
           return coords;
         }
 
         const fresh = await Promise.race([
-          ExpoLocation.getCurrentPositionAsync({ accuracy: ExpoLocation.Accuracy.High }),
-          new Promise<null>((r) => setTimeout(() => r(null), 4500)),
+          ExpoLocation.getCurrentPositionAsync({ accuracy: ExpoLocation.Accuracy.Balanced }),
+          new Promise<null>((r) => setTimeout(() => r(null), 5000)),
         ]);
         if (fresh?.coords) {
           const coords = {
@@ -158,13 +203,14 @@ export async function getFastLocation(): Promise<Coordinates> {
             longitude: Number(fresh.coords.longitude.toFixed(6)),
           };
           store.setLastKnownLocation(coords);
-          resolveLocality(coords.latitude, coords.longitude);
+          AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(coords)).catch(() => {});
+          resolveLocality(coords.latitude, coords.longitude).catch(() => {});
           return coords;
         }
       }
     } catch {}
   }
 
-  // Graceful fallback coordinates if permission denied or offline emulator
-  return store.lastKnownLocation || { latitude: 12.9352, longitude: 77.6146 };
+  // Return lastKnownLocation or null if not yet acquired
+  return store.lastKnownLocation || { latitude: 28.6139, longitude: 77.2090 };
 }

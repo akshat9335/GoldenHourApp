@@ -219,10 +219,10 @@ export default function Active() {
         onPress={() => {
           const ambLat = emergency?.ambulanceLocation?.latitude ?? (emergency as any)?.assignedHospitalLocation?.latitude;
           const ambLng = emergency?.ambulanceLocation?.longitude ?? (emergency as any)?.assignedHospitalLocation?.longitude;
-          const pLat = emergency?.location?.latitude ?? lastKnownLocation?.latitude ?? 12.9716;
-          const pLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude ?? 77.5946;
+          const pLat = emergency?.location?.latitude ?? lastKnownLocation?.latitude;
+          const pLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude;
 
-          if (ambLat && ambLng) {
+          if (ambLat && ambLng && pLat && pLng) {
             openExternalMapPreview({
               lat: ambLat,
               lng: ambLng,

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Linking, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/constants/theme';
-import { Card, Icon, PatientNav, Pill, InteractiveMap } from '@/components/ui';
+import { Card, Icon, PatientNav, Pill, TopBar, Banner } from '@/components/ui';
 import { openExternalMapPreview } from '@/components/ui';
 import { AMB_STEPS } from '@/constants/data';
 import { useAppStore } from '@/store/useAppStore';
@@ -22,6 +22,10 @@ interface LiveEmergencyData {
   assignedHospitalId?: string;
   assignedHospitalName?: string;
   assignedHospitalPhone?: string;
+  assignedHospitalLocation?: {
+    latitude: number;
+    longitude: number;
+  };
   assignedAmbulanceId?: string;
   assignedDriverName?: string;
   assignedDriverPhone?: string;
@@ -39,6 +43,8 @@ export default function LiveMap() {
   const { emergencyId: paramEmergencyId } = useLocalSearchParams<{ emergencyId?: string }>();
   const storeEmergencyId = useAppStore((s) => s.emergencyId);
   const ambStatus = useAppStore((s) => s.ambStatus);
+  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+  const locationAddress = useAppStore((s) => s.locationAddress);
 
   const activeId = paramEmergencyId || storeEmergencyId;
 
@@ -94,31 +100,27 @@ export default function LiveMap() {
     };
   }, [activeId]);
 
-  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
-  const pLat = emergency?.location?.latitude ?? lastKnownLocation?.latitude ?? 12.9352;
-  const pLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude ?? 77.6146;
+  const pLat = emergency?.location?.latitude ?? lastKnownLocation?.latitude ?? 28.6139;
+  const pLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude ?? 77.2090;
 
-  // Real hospital location if assigned
-  const hospCoord = (emergency as any)?.assignedHospitalLocation;
-  const hLat = hospCoord?.latitude;
-  const hLng = hospCoord?.longitude;
-
-  // Real ambulance location: from driver's telemetry, or hospital base
+  const hospCoord = emergency?.assignedHospitalLocation;
   const ambCoord = emergency?.ambulanceLocation || hospCoord;
   const ambLat = ambCoord?.latitude;
   const ambLng = ambCoord?.longitude;
 
-  const lat = pLat.toFixed(4);
-  const lng = pLng.toFixed(4);
-  const statusDisplay = emergency?.status ? emergency.status.replace(/_/g, ' ') : AMB_STEPS[ambStatus] || 'DISPATCHED';
+  const distanceKm = emergency?.distanceKm ?? (ambLat ? 1.8 : 2.4);
+  const etaMinutes = emergency?.etaMinutes ?? (ambLat ? 4 : 7);
 
-  const handleOpenMaps = () => {
-    // Show ambulance location if available, otherwise patient's location
+  const statusDisplay = emergency?.status
+    ? emergency.status.replace(/_/g, ' ')
+    : AMB_STEPS[ambStatus] || 'ALERT ACTIVE';
+
+  const handleOpenGoogleMaps = () => {
     if (ambLat && ambLng) {
       openExternalMapPreview({
         lat: ambLat,
         lng: ambLng,
-        title: emergency?.assignedAmbulanceId ? `Ambulance ${emergency.assignedAmbulanceId}` : 'Rescue Ambulance',
+        title: emergency?.assignedAmbulanceId ? `Ambulance Unit ${emergency.assignedAmbulanceId}` : 'Rescue Ambulance',
         originLat: pLat,
         originLng: pLng,
       });
@@ -126,125 +128,165 @@ export default function LiveMap() {
       openExternalMapPreview({
         lat: pLat,
         lng: pLng,
-        title: 'Emergency Pickup Location',
+        title: 'Emergency Pickup Point',
       });
     }
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <InteractiveMap
-        userLat={pLat}
-        userLng={pLng}
-        userTitle="Patient (Live GPS)"
-        destLat={hLat}
-        destLng={hLng}
-        destTitle={emergency?.assignedHospitalName || "Designated Trauma ER"}
-        ambulanceLat={ambLat}
-        ambulanceLng={ambLng}
-        ambulanceTitle={
-          emergency?.assignedAmbulanceId
-            ? `Unit ${emergency.assignedAmbulanceId}`
-            : 'Rescue Ambulance'
-        }
-        distanceKm={emergency?.distanceKm ?? 1.8}
-        etaMin={emergency?.etaMinutes ?? 5}
-        showRoute={isLiveActive && !!ambLat}
-        showNavButton={false}
-      />
+    <View style={[styles.screen, { paddingTop: Math.max(insets.top, 16) }]}>
+      <View style={styles.header}>
+        <TopBar
+          title="Live Emergency GPS"
+          back={true}
+          onPressBack={() => {
+            if (activeId) {
+              router.push('/(patient)/emergency/active');
+            } else {
+              router.back();
+            }
+          }}
+        />
+      </View>
 
-      {/* Top Status Bar */}
-      <View style={[styles.topBar, { top: Math.max(insets.top, 24) + 8 }]}>
-        <Card style={{ flex: 1, padding: 12, paddingHorizontal: 14 }}>
-          {loading ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <ActivityIndicator size="small" color={colors.red} />
-              <Text style={styles.statusText}>Connecting to live satellite stream...</Text>
-            </View>
-          ) : authError ? (
-            <View>
-              <Text style={[styles.statusText, { color: colors.red }]}>🔒 Authorization Required</Text>
-              <Text style={{ fontSize: 11, color: colors.inkSoft, marginTop: 2 }}>{authError}</Text>
-            </View>
-          ) : (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  {isLiveActive && <View style={styles.liveDot} />}
-                  <Text style={styles.statusText}>
-                    {isLiveActive ? 'LIVE TRACKING' : 'RESOLVED'} · {statusDisplay}
-                  </Text>
-                </View>
-                <Text style={styles.coordSub}>
-                  GPS: {lat}° N, {lng}° E
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 100 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="small" color={colors.red} />
+            <Text style={styles.loadingText}>Connecting to satellite live GPS telemetry...</Text>
+          </View>
+        ) : authError ? (
+          <Card style={styles.errorCard}>
+            <Text style={styles.errorTitle}>🔒 Authorization Notice</Text>
+            <Text style={styles.errorSub}>{authError}</Text>
+          </Card>
+        ) : (
+          <>
+            {/* Live GPS Active Banner */}
+            <View style={styles.statusRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={[styles.pulseDot, { backgroundColor: isLiveActive ? '#10B981' : colors.inkFaint }]} />
+                <Text style={styles.statusHeadline}>
+                  {isLiveActive ? 'LIVE GPS STREAMING' : 'MISSION RESOLVED'}
                 </Text>
               </View>
-              <Pill color={isLiveActive ? 'success' : 'grey'}>{isLiveActive ? 'ETA ~5 min' : 'Ended'}</Pill>
+              <Pill color={isLiveActive ? 'red' : 'grey'}>{statusDisplay}</Pill>
             </View>
-          )}
-        </Card>
-      </View>
 
-      {/* Bottom Emergency Action Card */}
-      <View style={styles.bottomCard}>
-        <Card style={styles.bottomCardInner}>
-          <Pressable
-            style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flex: 1 }}
-            onPress={() => {
-              if (activeId) {
-                router.push('/(patient)/emergency/active');
-              }
-            }}
-          >
-            <Icon name="ambulance" color={colors.blue} size={24} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.unitText}>
-                {emergency?.assignedAmbulanceId ? `Unit ${emergency.assignedAmbulanceId}` : 'Rescue Unit'}
-                {emergency?.assignedDriverName ? ` · Pilot ${emergency.assignedDriverName}` : ''}
-              </Text>
-              <Text style={styles.unitSub}>
-                {emergency?.assignedHospitalName
-                  ? `ER: ${emergency.assignedHospitalName}`
-                  : ambLat
-                  ? 'Ambulance en route · Live telemetry streaming'
-                  : 'Dispatch in progress · Stand by'}
-              </Text>
-            </View>
-            <Icon name="chevR" color={colors.blue} />
-          </Pressable>
+            {/* Live Telemetry KPI Card */}
+            <Card style={styles.telemetryCard}>
+              <View style={styles.telemetryHeader}>
+                <View>
+                  <Text style={styles.telemetryLabel}>ESTIMATED ARRIVAL</Text>
+                  <Text style={styles.etaText}>~{etaMinutes} min</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.telemetryLabel}>DISTANCE</Text>
+                  <Text style={styles.distText}>{distanceKm} km</Text>
+                </View>
+              </View>
 
-          {/* Action Buttons Row */}
-          <View style={{ flexDirection: 'row', gap: 6, marginTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 8 }}>
+              <View style={styles.divider} />
+
+              <View style={styles.coordRow}>
+                <Text style={styles.coordLabel}>📍 Pickup GPS Coordinates:</Text>
+                <Text style={styles.coordValue}>{pLat.toFixed(4)}° N, {pLng.toFixed(4)}° E</Text>
+              </View>
+
+              {locationAddress ? (
+                <Text style={styles.locAddress}>Area: {locationAddress}</Text>
+              ) : null}
+
+              {ambLat && ambLng ? (
+                <View style={[styles.coordRow, { marginTop: 6 }]}>
+                  <Text style={styles.coordLabel}>🚑 Ambulance GPS:</Text>
+                  <Text style={styles.coordValue}>{ambLat.toFixed(4)}° N, {ambLng.toFixed(4)}° E</Text>
+                </View>
+              ) : null}
+            </Card>
+
+            {/* High-Impact Native Google Maps Action Button */}
             <TouchableOpacity
-              style={styles.gMapsBtn}
-              onPress={handleOpenMaps}
-              activeOpacity={0.8}
+              style={styles.gMapsActionBtn}
+              onPress={handleOpenGoogleMaps}
+              activeOpacity={0.85}
             >
-              <Text style={styles.gMapsBtnText}>🗺️ View in Google Maps</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ fontSize: 20 }}>🗺️</Text>
+                <View>
+                  <Text style={styles.gMapsActionTitle}>Track Live Route in Google Maps</Text>
+                  <Text style={styles.gMapsActionSub}>Opens native map with live satellite & real-time traffic</Text>
+                </View>
+              </View>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>➔</Text>
             </TouchableOpacity>
 
-            {emergency?.assignedDriverPhone ? (
-              <TouchableOpacity
-                style={styles.callDriverBtn}
-                onPress={() => Linking.openURL(`tel:${emergency.assignedDriverPhone}`)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.callDriverText}>📞 Pilot</Text>
-              </TouchableOpacity>
-            ) : null}
+            {/* Assigned Ambulance Unit Card */}
+            <Card style={styles.entityCard}>
+              <View style={styles.entityRow}>
+                <View style={styles.iconCircleBlue}>
+                  <Icon name="ambulance" size={22} color={colors.blue} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.entityTitle}>
+                    {emergency?.assignedAmbulanceId ? `Unit ${emergency.assignedAmbulanceId}` : 'Rescue Ambulance Dispatched'}
+                  </Text>
+                  <Text style={styles.entitySub}>
+                    {emergency?.assignedDriverName
+                      ? `Pilot: ${emergency.assignedDriverName}`
+                      : 'Hospital assigning nearest responding unit'}
+                  </Text>
+                </View>
+                {emergency?.assignedDriverPhone ? (
+                  <TouchableOpacity
+                    style={styles.callBtn}
+                    onPress={() => Linking.openURL(`tel:${emergency.assignedDriverPhone}`)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.callBtnText}>📞 Call</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </Card>
 
-            {emergency?.assignedHospitalPhone ? (
-              <TouchableOpacity
-                style={styles.callHospBtn}
-                onPress={() => Linking.openURL(`tel:${emergency.assignedHospitalPhone}`)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.callHospText}>🏥 ER Desk</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </Card>
-      </View>
+            {/* Assigned Hospital Card */}
+            <Card style={styles.entityCard}>
+              <View style={styles.entityRow}>
+                <View style={styles.iconCircleGreen}>
+                  <Icon name="hospital" size={22} color={colors.success} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.entityTitle}>
+                    {emergency?.assignedHospitalName || 'Emergency ER Trauma Center'}
+                  </Text>
+                  <Text style={styles.entitySub}>Trauma Desk standing by with critical care team</Text>
+                </View>
+                {emergency?.assignedHospitalPhone ? (
+                  <TouchableOpacity
+                    style={styles.callBtn}
+                    onPress={() => Linking.openURL(`tel:${emergency.assignedHospitalPhone}`)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.callBtnText}>📞 Call</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </Card>
+
+            {/* Return to Emergency Status */}
+            <TouchableOpacity
+              style={styles.returnBtn}
+              onPress={() => router.push('/(patient)/emergency/active')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.returnBtnText}>View Emergency Checklist & AI Actions ➔</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
 
       <PatientNav active="/(patient)/live-map" />
     </View>
@@ -252,76 +294,48 @@ export default function LiveMap() {
 }
 
 const styles = StyleSheet.create({
-  topBar: { position: 'absolute', top: 50, left: 16, right: 16, zIndex: 5, flexDirection: 'row' },
-  statusText: { fontSize: 12, fontWeight: '700', color: colors.ink },
-  coordSub: { fontSize: 10, color: colors.inkFaint, marginTop: 2 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
-  bottomCard: { position: 'absolute', bottom: 96, left: 16, right: 16, zIndex: 5, gap: 8 },
-  firstAidBox: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  firstAidTag: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    color: '#92400E',
-    letterSpacing: 0.5,
-  },
-  firstAidText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#78350F',
-    marginTop: 2,
-    lineHeight: 15,
-  },
-  bottomCardInner: { padding: 12 },
-  unitText: { fontSize: 13, fontWeight: '800', color: colors.ink },
-  unitSub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
-  gMapsBtn: {
-    flex: 1,
-    backgroundColor: '#15803D',
-    borderRadius: 8,
-    paddingVertical: 7,
+  screen: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingHorizontal: 16, marginBottom: 8 },
+  content: { paddingHorizontal: 16 },
+  loadingBox: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 24, justifyContent: 'center' },
+  loadingText: { fontSize: 13, color: colors.inkSoft, fontWeight: '600' },
+  errorCard: { padding: 18, marginTop: 12 },
+  errorTitle: { fontSize: 15, fontWeight: '800', color: colors.red, marginBottom: 6 },
+  errorSub: { fontSize: 12, color: colors.inkSoft, lineHeight: 18 },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  pulseDot: { width: 10, height: 10, borderRadius: 5 },
+  statusHeadline: { fontSize: 12, fontWeight: '800', color: colors.ink, letterSpacing: 0.5 },
+  telemetryCard: { padding: 16, marginBottom: 14 },
+  telemetryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  telemetryLabel: { fontSize: 10, fontWeight: '800', color: colors.inkFaint, letterSpacing: 0.5 },
+  etaText: { fontSize: 24, fontWeight: '900', color: colors.red, marginTop: 2 },
+  distText: { fontSize: 22, fontWeight: '800', color: colors.ink, marginTop: 2 },
+  divider: { height: 1, backgroundColor: colors.line, marginVertical: 12 },
+  coordRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  coordLabel: { fontSize: 11.5, color: colors.inkSoft, fontWeight: '600' },
+  coordValue: { fontSize: 12, color: colors.ink, fontWeight: '700' },
+  locAddress: { fontSize: 11, color: colors.inkFaint, marginTop: 4, fontStyle: 'italic' },
+  gMapsActionBtn: {
+    backgroundColor: '#0284C7',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    elevation: 4,
   },
-  gMapsBtnText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#fff',
-  },
-  callDriverBtn: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  callDriverText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: colors.blue,
-  },
-  callHospBtn: {
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#99F6E4',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  callHospText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#0D9488',
-  },
+  gMapsActionTitle: { color: '#fff', fontSize: 13.5, fontWeight: '800' },
+  gMapsActionSub: { color: '#BAE6FD', fontSize: 10.5, marginTop: 2 },
+  entityCard: { padding: 14, marginBottom: 12 },
+  entityRow: { flexDirection: 'row', alignItems: 'center' },
+  iconCircleBlue: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.blueBg, alignItems: 'center', justifyContent: 'center' },
+  iconCircleGreen: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.successBg, alignItems: 'center', justifyContent: 'center' },
+  entityTitle: { fontSize: 14, fontWeight: '800', color: colors.ink },
+  entitySub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
+  callBtn: { backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  callBtnText: { color: colors.blue, fontSize: 11.5, fontWeight: '700' },
+  returnBtn: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+  returnBtnText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
 });

@@ -29,78 +29,25 @@ interface HospitalItem {
   longitude?: number;
 }
 
-const DEFAULT_HOSPITALS: HospitalItem[] = [
-  {
-    id: 'demo-1',
-    name: "St. Martha's Hospital",
-    address: 'Corporation Circle, Bengaluru',
-    phone: '080-22273311',
-    dist: '3.4 km',
-    eta: '11 min',
-    tag: 'OPEN',
-    tagColor: 'success',
-    rawBeds: 4,
-    totalBeds: 25,
-    bedsDisplay: '4 beds free / 25',
-    rawIcu: 4,
-    icuDisplay: 'ICU: 4 free',
-    trauma: 'Trauma L1',
-    hasTrauma: true,
-    latitude: 12.9667,
-    longitude: 77.5872,
-  },
-  {
-    id: 'demo-2',
-    name: 'Fortis Emergency Care',
-    address: 'Bannerghatta Road, Bengaluru',
-    phone: '080-66214444',
-    dist: '2.1 km',
-    eta: '7 min',
-    tag: 'BUSY',
-    tagColor: 'amber',
-    rawBeds: 1,
-    totalBeds: 30,
-    bedsDisplay: '1 bed free / 30',
-    rawIcu: 0,
-    icuDisplay: 'ICU: 0 free',
-    trauma: null,
-    hasTrauma: false,
-    latitude: 12.8988,
-    longitude: 77.5996,
-  },
-  {
-    id: 'demo-3',
-    name: 'Apollo Speciality',
-    address: 'Jayanagar, Bengaluru',
-    phone: '080-26304050',
-    dist: '5.8 km',
-    eta: '16 min',
-    tag: 'OPEN',
-    tagColor: 'success',
-    rawBeds: 9,
-    totalBeds: 45,
-    bedsDisplay: '9 beds free / 45',
-    rawIcu: 6,
-    icuDisplay: 'ICU: 6 free',
-    trauma: 'Trauma L2',
-    hasTrauma: true,
-    latitude: 12.9298,
-    longitude: 77.5933,
-  },
-];
-
 export default function NearbyHospitals() {
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
-  const [hospitals, setHospitals] = useState<HospitalItem[]>(DEFAULT_HOSPITALS);
+  const [hospitals, setHospitals] = useState<HospitalItem[]>([]);
   const [selectedFilter, setSelectedFilter] = useState('All');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchHospitals = useCallback(async () => {
     try {
-      const lat = lastKnownLocation?.latitude ?? 12.9716;
-      const lng = lastKnownLocation?.longitude ?? 77.5946;
-      const res: any = await api.location.getNearbyHospitals(lat, lng, 30);
+      setLoading(true);
+      const lat = lastKnownLocation?.latitude;
+      const lng = lastKnownLocation?.longitude;
+
+      if (!lat || !lng) {
+        setLoading(false);
+        return;
+      }
+
+      const res: any = await api.location.getNearbyHospitals(lat, lng, 35);
       const data = res?.data || res;
 
       if (Array.isArray(data) && data.length > 0) {
@@ -120,8 +67,8 @@ export default function NearbyHospitals() {
             name: h.name || 'Hospital Center',
             address: h.address || '',
             phone: h.phone || '108',
-            dist: h.distanceKm ? `${h.distanceKm.toFixed(1)} km` : '2.8 km',
-            eta: h.etaMinutes ? `${h.etaMinutes} min` : '9 min',
+            dist: h.distanceKm ? `${h.distanceKm.toFixed(1)} km` : '2.1 km',
+            eta: h.etaMinutes ? `${h.etaMinutes} min` : '8 min',
             tag: availBeds > 0 ? 'OPEN' : 'BUSY',
             tagColor: availBeds > 0 ? 'success' : 'amber',
             rawBeds: availBeds,
@@ -131,8 +78,8 @@ export default function NearbyHospitals() {
             icuDisplay: `ICU: ${availIcu} free`,
             trauma: h.traumaLevel ? `Trauma L${h.traumaLevel}` : (isTrauma ? 'Trauma Care' : null),
             hasTrauma: isTrauma,
-            latitude: h.latitude ?? h.lat ?? (h.location?.latitude ?? 12.9716),
-            longitude: h.longitude ?? h.lng ?? (h.location?.longitude ?? 77.5946),
+            latitude: h.latitude ?? h.lat ?? (h.location?.latitude ?? lat + 0.015),
+            longitude: h.longitude ?? h.lng ?? (h.location?.longitude ?? lng + 0.015),
           };
         });
         setHospitals(mapped);
@@ -143,7 +90,7 @@ export default function NearbyHospitals() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [lastKnownLocation]);
 
   useEffect(() => {
     fetchHospitals();

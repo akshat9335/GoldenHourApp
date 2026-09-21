@@ -338,9 +338,22 @@ async function transitionHospitalRequest(
   else if (targetStatus === "COMPLETED") canonicalStatus = "COMPLETED";
 
   if (canonicalStatus) {
+    const hospData = hospital.data || {};
+    const hospLoc = hospData.location && typeof hospData.location.latitude === 'number'
+      ? hospData.location
+      : (requestData.location && typeof requestData.location.latitude === 'number'
+          ? {
+              latitude: Number((requestData.location.latitude + 0.012).toFixed(6)),
+              longitude: Number((requestData.location.longitude + 0.012).toFixed(6)),
+            }
+          : null);
+
     await syncEmergencyStatus(emergencyId, {
       status: canonicalStatus,
       assignedHospitalId: hospital.docId,
+      assignedHospitalName: hospData.name || "Emergency Trauma ER",
+      assignedHospitalPhone: hospData.phone || null,
+      assignedHospitalLocation: hospLoc,
     });
   }
 
@@ -806,16 +819,20 @@ export async function acceptHospitalRequest(
     requestData.emergencyId || requestData.accidentId || requestId;
   const hospData = (hospital as any).data || (hospital as any);
   const patientLoc = requestData.location || null;
-  let fallbackHospLat = hospData.latitude;
-  let fallbackHospLng = hospData.longitude;
-  if (!fallbackHospLat && patientLoc?.latitude) {
-    fallbackHospLat = Number((patientLoc.latitude + 0.012).toFixed(6));
-    fallbackHospLng = Number((patientLoc.longitude + 0.009).toFixed(6));
+  const rawLoc = hospData.location;
+  let hospLat = (rawLoc && typeof rawLoc.latitude === 'number') ? rawLoc.latitude : hospData.latitude;
+  let hospLng = (rawLoc && typeof rawLoc.longitude === 'number') ? rawLoc.longitude : hospData.longitude;
+
+  if ((!hospLat || !hospLng) && patientLoc?.latitude && patientLoc?.longitude) {
+    hospLat = Number((patientLoc.latitude + 0.012).toFixed(6));
+    hospLng = Number((patientLoc.longitude + 0.009).toFixed(6));
   }
-  const resolvedHospLoc = hospData.location || {
-    latitude: fallbackHospLat || 12.9352,
-    longitude: fallbackHospLng || 77.6146,
-  };
+
+  const resolvedHospLoc = (hospLat && hospLng)
+    ? { latitude: hospLat, longitude: hospLng }
+    : (patientLoc?.latitude && patientLoc?.longitude
+        ? { latitude: Number((patientLoc.latitude + 0.012).toFixed(6)), longitude: Number((patientLoc.longitude + 0.009).toFixed(6)) }
+        : null);
 
   await syncEmergencyStatus(emergencyId, {
     status: "HOSPITAL_ACCEPTED",
