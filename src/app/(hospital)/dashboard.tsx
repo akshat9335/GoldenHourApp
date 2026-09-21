@@ -210,6 +210,19 @@ export default function HospitalDashboard() {
           </Pressable>
         </View>
 
+        <Pressable onPress={() => router.push('/(hospital)/referrals')} style={{ marginBottom: 16 }}>
+          <Card style={{ padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Icon name="hospital" color={colors.blue} size={22} />
+              <View>
+                <Text style={{ fontWeight: '800', fontSize: 13.5, color: colors.ink }}>Inbound Doctor Referrals</Text>
+                <Text style={{ fontSize: 11, color: colors.inkSoft }}>Review incoming transfers & reserve beds</Text>
+              </View>
+            </View>
+            <Pill color="blue">Queue →</Pill>
+          </Card>
+        </Pressable>
+
         {activeInbound.length > 0 && (
           <View style={{ marginBottom: 16 }}>
             <LabelEyebrow>INBOUND PATIENTS & DISPATCHED AMBULANCES ({activeInbound.length})</LabelEyebrow>

@@ -16,6 +16,8 @@ import queueRoutes from "./queue.routes";
 import confirmationRoutes from "./confirmation.routes";
 import mediaRoutes from "./media.routes";
 import adminRoutes from "./admin.routes";
+import healthRecordRoutes from "./healthRecord.routes";
+import referralRoutes from "./referral.routes";
 
 /**
  * Centralized API routing.
@@ -57,6 +59,8 @@ router.use("/queues", queueRoutes);
 router.use("/confirmations", confirmationRoutes);
 router.use("/media", mediaRoutes);
 router.use("/admin", adminRoutes);
+router.use("/records", healthRecordRoutes);
+router.use("/referrals", referralRoutes);
 
 export default router;
 

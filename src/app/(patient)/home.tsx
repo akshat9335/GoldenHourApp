@@ -111,6 +111,18 @@ export default function PatientHome() {
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
           <Divider />
+          <Pressable style={styles.row} onPress={() => router.push('/(patient)/health-records')}>
+            <Icon name="idCard" color={colors.blue} />
+            <Text style={styles.rowLabel}>Health Records (EHR & FHIR)</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
+          <Pressable style={styles.row} onPress={() => router.push('/(patient)/my-referrals')}>
+            <Icon name="hospital" color={colors.red} />
+            <Text style={styles.rowLabel}>My Referrals Tracker</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
           <Pressable style={styles.row} onPress={() => router.push('/contacts-setup')}>
             <Icon name="phone" color={colors.ink} />
             <Text style={styles.rowLabel}>Emergency Contacts</Text>

@@ -108,6 +108,13 @@ export default function DoctorDashboard() {
             <Button title="Start Consultation" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(doctor)/queue')} />
             <Button title="Pause Queue" variant="ghost" style={{ flex: 1 }} onPress={() => router.push('/(doctor)/queue')} />
           </View>
+          <View style={{ marginTop: 10 }}>
+            <Button
+              title="🚑 Dispatch Hospital Referral"
+              variant="blue"
+              onPress={() => router.push('/(doctor)/referral/create')}
+            />
+          </View>
         </Card>
 
         <LabelEyebrow>TODAY'S APPOINTMENTS</LabelEyebrow>

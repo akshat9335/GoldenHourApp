@@ -1,6 +1,8 @@
 import { DoctorProfile, ClinicDetails } from "../types/doctor";
 import { Appointment, LiveQueueState } from "../types/appointment";
 import { StoredLocation, HospitalFacility, NearbyIncidentSummary } from "../types/location";
+import { HealthRecord } from "./healthRecord.model";
+import { Referral } from "./referral.model";
 
 /**
  * In-Memory persistent datastore for Anant's location, doctor, clinic, appointment, and queue services.
@@ -15,6 +17,8 @@ class InMemoryDataStore {
   public hospitals: Map<string, HospitalFacility> = new Map();
   public incidents: Map<string, NearbyIncidentSummary> = new Map();
   public users: Map<string, any> = new Map();
+  public healthRecords: Map<string, HealthRecord> = new Map();
+  public referrals: Map<string, Referral> = new Map();
 
   constructor() {
     this.seedInitialData();
@@ -361,6 +365,8 @@ class InMemoryDataStore {
     this.queues.clear();
     this.hospitals.clear();
     this.incidents.clear();
+    this.healthRecords.clear();
+    this.referrals.clear();
     this.seedInitialData();
   }
 }

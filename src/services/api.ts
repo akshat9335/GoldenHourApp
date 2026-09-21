@@ -78,6 +78,15 @@ async function request<T = any>(
   return (body.data !== undefined ? body.data : body) as T;
 }
 
+export const client = {
+  get: <T = any>(endpoint: string) => request<T>(endpoint),
+  post: <T = any>(endpoint: string, data?: any) =>
+    request<T>(endpoint, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+  patch: <T = any>(endpoint: string, data?: any) =>
+    request<T>(endpoint, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined }),
+  delete: <T = any>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
+};
+
 export const api = {
   // Authentication & Session
   auth: {
@@ -297,6 +306,24 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ status, notes }),
       }),
+  },
+
+  // Longitudinal Health Records & FHIR/ABDM Interoperability
+  healthRecords: {
+    getByPatient: (patientUid: string) => client.get(`/records/patient/${patientUid}`),
+    getEmergencySummary: (patientUid: string) => client.get(`/records/summary/${patientUid}`),
+    create: (data: any) => client.post('/records', data),
+    getFhirBundle: (recordId: string) => client.get(`/records/${recordId}/fhir`),
+  },
+
+  // Referral Tracking
+  referrals: {
+    create: (data: any) => client.post('/referrals', data),
+    getOutgoing: () => client.get('/referrals/doctor/outgoing'),
+    getIncoming: () => client.get('/referrals/hospital/incoming'),
+    updateStatus: (id: string, status: string, notes?: string) =>
+      client.patch(`/referrals/${id}/status`, { status, notes }),
+    getMyReferrals: () => client.get('/referrals/patient/me'),
   },
 };
 
