@@ -16,6 +16,7 @@ import {
   getHospitalDiagnosticByIdController,
   getHospitalDiagnosticsController,
   getHospitalDriversController,
+  getHospitalMetricsController,
   searchHospitalDriverController,
   addHospitalDriverController,
   unlinkHospitalDriverController,
@@ -65,6 +66,13 @@ router.patch(
   requireAuth,
   requireRole("hospital"),
   updateHospitalProfileController,
+);
+
+router.get(
+  "/me/metrics",
+  requireAuth,
+  requireRole("hospital"),
+  getHospitalMetricsController,
 );
 
 // ============================================================

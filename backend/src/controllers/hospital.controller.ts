@@ -17,6 +17,7 @@ import {
   getHospitalDiagnosticById,
   getHospitalDiagnostics,
   getHospitalDrivers,
+  getHospitalMetrics,
   searchDriverForHospital,
   addHospitalDriver,
   unlinkHospitalDriver,
@@ -922,3 +923,30 @@ export async function unlinkHospitalDriverController(
     next(error);
   }
 }
+
+// ============================================================
+// FACILITY DASHBOARD METRICS - GET
+// ============================================================
+
+export async function getHospitalMetricsController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const metrics = await getHospitalMetrics(req.user.uid);
+
+    res.status(200).json({
+      success: true,
+      data: metrics,
+      message: "Hospital metrics retrieved successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

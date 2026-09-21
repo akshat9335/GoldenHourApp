@@ -153,6 +153,7 @@ export const api = {
       request(`/hospitals/me/drivers/search?query=${encodeURIComponent(query)}`),
     addDriver: (data: any) => request('/hospitals/me/drivers', { method: 'POST', body: JSON.stringify(data) }),
     unlinkDriver: (driverId: string) => request(`/hospitals/me/drivers/${driverId}`, { method: 'DELETE' }),
+    getMetrics: () => request('/hospitals/me/metrics'),
   },
 
   // Ambulances & Trips
@@ -297,6 +298,31 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ status, notes }),
       }),
+  },
+
+  // Medicine & Real-Time Facility Inventory
+  inventory: {
+    search: (query: string, lat?: number, lng?: number, radius?: number) =>
+      request(`/inventory/search?query=${encodeURIComponent(query)}&lat=${lat !== undefined ? lat : ''}&lng=${lng !== undefined ? lng : ''}&radius=${radius || ''}`),
+    getByFacility: (facilityId: string) => request(`/inventory/facility/${facilityId}`),
+    updateStock: (itemId: string, quantity: number, lowStockThreshold?: number, price?: number, facilityId?: string) =>
+      request(`/inventory/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ quantity, lowStockThreshold, price, facilityId }),
+      }),
+    addItem: (data: any) => request('/inventory/items', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // Diagnostic Coordination
+  diagnostics: {
+    getCatalog: () => request('/diagnostics/catalog'),
+    bookTest: (data: any) => request('/diagnostics/book', { method: 'POST', body: JSON.stringify(data) }),
+    getFacilityBookings: (facilityId: string) =>
+      request(`/diagnostics/facility/${facilityId}/requests`),
+    uploadReport: (bookingId: string, data: { reportUrl?: string; reportSummary: string; status?: string }) =>
+      request(`/diagnostics/bookings/${bookingId}/report`, { method: 'PATCH', body: JSON.stringify(data) }),
+    getMyBookings: (patientUid?: string) =>
+      request(`/diagnostics/patient/my-bookings${patientUid ? `?patientUid=${patientUid}` : ''}`),
   },
 };
 

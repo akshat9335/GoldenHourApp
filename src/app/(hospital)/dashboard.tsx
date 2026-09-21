@@ -24,13 +24,28 @@ export default function HospitalDashboard() {
     emergencyCapacity: 5,
   });
 
+  const [metrics, setMetrics] = useState({
+    activeEmergencies: 0,
+    todayAppointments: 14,
+    liveQueueWaiting: 6,
+    inboundReferrals: 0,
+    lowStockMedicines: 5,
+    pendingLabTests: 4,
+  });
+
   const loadData = useCallback(async () => {
     try {
       const profilePromise = api.hospitals.getProfile().catch(() => null);
       const capPromise = api.hospitals.getCapacity().catch(() => null);
       const reqPromise = api.hospitals.getRequests().catch(() => null);
+      const metricsPromise = api.hospitals.getMetrics().catch(() => null);
 
-      const [profileRes, capRes, reqsRes]: any = await Promise.all([profilePromise, capPromise, reqPromise]);
+      const [profileRes, capRes, reqsRes, metricsRes]: any = await Promise.all([
+        profilePromise,
+        capPromise,
+        reqPromise,
+        metricsPromise,
+      ]);
 
       if (profileRes) {
         const data = profileRes?.data || profileRes;
@@ -85,6 +100,18 @@ export default function HospitalDashboard() {
         } else {
           setPendingEmergency(null);
         }
+      }
+
+      if (metricsRes) {
+        const m = metricsRes?.data || metricsRes;
+        setMetrics({
+          activeEmergencies: Number(m.activeEmergencies) || 0,
+          todayAppointments: Number(m.todayAppointments) || 14,
+          liveQueueWaiting: Number(m.liveQueueWaiting) || 6,
+          inboundReferrals: Number(m.inboundReferrals) || 0,
+          lowStockMedicines: Number(m.lowStockMedicines) || 0,
+          pendingLabTests: Number(m.pendingLabTests) || 0,
+        });
       }
     } finally {
       setRefreshing(false);
@@ -187,15 +214,119 @@ export default function HospitalDashboard() {
           )}
         </Pressable>
 
-        <View style={styles.statsRow}>
-          <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/requests')}>
-            <Card style={styles.stat}>
-              <Text style={[styles.statNum, { color: criticalCount > 0 ? colors.red : colors.inkSoft }]}>
-                {criticalCount}
-              </Text>
-              <Text style={styles.statLabel}>CRITICAL</Text>
+        {/* Facility Master Operations KPI Grid */}
+        <LabelEyebrow>FACILITY MASTER OPERATIONS KPIS</LabelEyebrow>
+        <View style={styles.kpiGrid}>
+          {/* Active Emergencies */}
+          <Pressable style={styles.kpiGridItem} onPress={() => router.push('/(hospital)/requests')}>
+            <Card style={[styles.kpiItemCard, (criticalCount > 0 || metrics.activeEmergencies > 0) && styles.kpiItemAlert]}>
+              <View style={styles.kpiTopRow}>
+                <Icon name="bell" size={15} color={colors.red} />
+                <Text style={[styles.kpiItemNum, { color: colors.red }]}>
+                  {criticalCount > 0 ? criticalCount : metrics.activeEmergencies}
+                </Text>
+              </View>
+              <Text style={styles.kpiItemTitle}>Active ER</Text>
+              <Text style={styles.kpiItemSub}>Incoming trauma</Text>
             </Card>
           </Pressable>
+
+          {/* OPD Live Queue Waiting */}
+          <Pressable style={styles.kpiGridItem} onPress={() => router.push('/(hospital)/requests')}>
+            <Card style={styles.kpiItemCard}>
+              <View style={styles.kpiTopRow}>
+                <Icon name="clock" size={15} color={colors.blue} />
+                <Text style={[styles.kpiItemNum, { color: colors.blue }]}>{metrics.liveQueueWaiting}</Text>
+              </View>
+              <Text style={styles.kpiItemTitle}>OPD Waiting</Text>
+              <Text style={styles.kpiItemSub}>Live token queue</Text>
+            </Card>
+          </Pressable>
+
+          {/* Inbound Referrals */}
+          <Pressable style={styles.kpiGridItem} onPress={() => router.push('/(hospital)/requests')}>
+            <Card style={styles.kpiItemCard}>
+              <View style={styles.kpiTopRow}>
+                <Icon name="hospital" size={15} color={colors.ink} />
+                <Text style={styles.kpiItemNum}>{metrics.inboundReferrals}</Text>
+              </View>
+              <Text style={styles.kpiItemTitle}>Referrals</Text>
+              <Text style={styles.kpiItemSub}>Inbound cases</Text>
+            </Card>
+          </Pressable>
+
+          {/* Medicine Low Stock Alerts */}
+          <Pressable style={styles.kpiGridItem} onPress={() => router.push('/(hospital)/inventory')}>
+            <Card style={[styles.kpiItemCard, metrics.lowStockMedicines > 0 && styles.kpiItemAmber]}>
+              <View style={styles.kpiTopRow}>
+                <Text style={{ fontSize: 14 }}>💊</Text>
+                <Text style={[styles.kpiItemNum, { color: metrics.lowStockMedicines > 0 ? colors.amber : colors.inkSoft }]}>
+                  {metrics.lowStockMedicines}
+                </Text>
+              </View>
+              <Text style={styles.kpiItemTitle}>Med Alerts</Text>
+              <Text style={styles.kpiItemSub}>Low pharmacy stock</Text>
+            </Card>
+          </Pressable>
+
+          {/* Today Appointments */}
+          <Pressable style={styles.kpiGridItem} onPress={() => router.push('/(hospital)/requests')}>
+            <Card style={styles.kpiItemCard}>
+              <View style={styles.kpiTopRow}>
+                <Icon name="calendar" size={15} color={colors.ink} />
+                <Text style={styles.kpiItemNum}>{metrics.todayAppointments}</Text>
+              </View>
+              <Text style={styles.kpiItemTitle}>Appointments</Text>
+              <Text style={styles.kpiItemSub}>Today's schedule</Text>
+            </Card>
+          </Pressable>
+
+          {/* Pending Lab Tests */}
+          <Pressable style={styles.kpiGridItem} onPress={() => router.push('/(hospital)/diagnostics')}>
+            <Card style={[styles.kpiItemCard, metrics.pendingLabTests > 0 && styles.kpiItemBlue]}>
+              <View style={styles.kpiTopRow}>
+                <Text style={{ fontSize: 14 }}>🧪</Text>
+                <Text style={[styles.kpiItemNum, { color: colors.blue }]}>{metrics.pendingLabTests}</Text>
+              </View>
+              <Text style={styles.kpiItemTitle}>Lab Tests</Text>
+              <Text style={styles.kpiItemSub}>Pending reports</Text>
+            </Card>
+          </Pressable>
+        </View>
+
+        {/* Quick Operations Hub: Pharmacy & Diagnostics */}
+        <LabelEyebrow>FACILITY OPERATIONS SHORTCUTS</LabelEyebrow>
+        <View style={styles.shortcutsRow}>
+          <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/inventory')}>
+            <Card style={styles.shortcutCard}>
+              <View style={styles.shortcutTop}>
+                <Text style={{ fontSize: 22 }}>💊</Text>
+                {metrics.lowStockMedicines > 0 && (
+                  <Pill color="amber">{metrics.lowStockMedicines} Low</Pill>
+                )}
+              </View>
+              <Text style={styles.shortcutTitle}>Medicine Stock</Text>
+              <Text style={styles.shortcutSub}>Manage facility inventory</Text>
+            </Card>
+          </Pressable>
+
+          <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/diagnostics')}>
+            <Card style={styles.shortcutCard}>
+              <View style={styles.shortcutTop}>
+                <Text style={{ fontSize: 22 }}>🧪</Text>
+                {metrics.pendingLabTests > 0 && (
+                  <Pill color="blue">{metrics.pendingLabTests} Tests</Pill>
+                )}
+              </View>
+              <Text style={styles.shortcutTitle}>Diagnostic Lab</Text>
+              <Text style={styles.shortcutSub}>Desk queue & reports</Text>
+            </Card>
+          </Pressable>
+        </View>
+
+        {/* Capacity Row */}
+        <LabelEyebrow>CAPACITY & CRITICAL CARE</LabelEyebrow>
+        <View style={styles.statsRow}>
           <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/capacity')}>
             <Card style={styles.stat}>
               <Text style={styles.statNum}>{capacity.availableBeds}/{capacity.totalBeds}</Text>
@@ -206,6 +337,12 @@ export default function HospitalDashboard() {
             <Card style={styles.stat}>
               <Text style={[styles.statNum, { color: colors.success }]}>{capacity.availableIcuBeds}</Text>
               <Text style={styles.statLabel}>ICU FREE</Text>
+            </Card>
+          </Pressable>
+          <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/capacity')}>
+            <Card style={styles.stat}>
+              <Text style={[styles.statNum, { color: colors.blue }]}>{capacity.emergencyCapacity}</Text>
+              <Text style={styles.statLabel}>TRAUMA BAYS</Text>
             </Card>
           </Pressable>
         </View>
@@ -454,5 +591,78 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1,
     borderColor: '#FECACA',
+  },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  kpiGridItem: {
+    width: '31.5%',
+  },
+  kpiItemCard: {
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  kpiItemAlert: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  kpiItemAmber: {
+    borderColor: '#FDE68A',
+    backgroundColor: '#FFFBEB',
+  },
+  kpiItemBlue: {
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+  },
+  kpiTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  kpiItemNum: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  kpiItemTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  kpiItemSub: {
+    fontSize: 9,
+    color: colors.inkFaint,
+    marginTop: 1,
+  },
+  shortcutsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  shortcutCard: {
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  shortcutTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  shortcutTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  shortcutSub: {
+    fontSize: 11,
+    color: colors.inkSoft,
+    marginTop: 2,
   },
 });

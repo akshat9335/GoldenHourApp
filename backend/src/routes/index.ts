@@ -16,6 +16,8 @@ import queueRoutes from "./queue.routes";
 import confirmationRoutes from "./confirmation.routes";
 import mediaRoutes from "./media.routes";
 import adminRoutes from "./admin.routes";
+import inventoryRoutes from "./inventory.routes";
+import diagnosticRoutes from "./diagnostic.routes";
 
 /**
  * Centralized API routing.
@@ -57,6 +59,8 @@ router.use("/queues", queueRoutes);
 router.use("/confirmations", confirmationRoutes);
 router.use("/media", mediaRoutes);
 router.use("/admin", adminRoutes);
+router.use("/inventory", inventoryRoutes);
+router.use("/diagnostics", diagnosticRoutes);
 
 export default router;
 
