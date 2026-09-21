@@ -105,6 +105,18 @@ export default function PatientHome() {
 
         <Text style={styles.eyebrow}>QUICK ACCESS</Text>
         <Card style={{ padding: 4 }}>
+          <Pressable style={styles.row} onPress={() => router.push('/(patient)/medicines')}>
+            <Text style={{ fontSize: 18 }}>💊</Text>
+            <Text style={styles.rowLabel}>Find Medicines Nearby (24/7 ER Stock)</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
+          <Pressable style={styles.row} onPress={() => router.push('/(patient)/diagnostics/book')}>
+            <Text style={{ fontSize: 18 }}>🧪</Text>
+            <Text style={styles.rowLabel}>Book Diagnostic Lab Tests (ECG, CT, Blood)</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
           <Pressable style={styles.row} onPress={() => router.push('/(patient)/consult-doctor')}>
             <Icon name="doctor" color={colors.ink} />
             <Text style={styles.rowLabel}>Consult Doctor</Text>
