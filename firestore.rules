@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isPrivilegedRole() {
+      return isAuthenticated() && 
+        request.auth.token.role in ['admin', 'hospital', 'ambulance', 'doctor'];
+    }
+
+    // --- Users Collection ---
+    // Persistent identity & trust scores can NEVER be modified by clients.
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) 
+        && !('trustScore' in request.resource.data)
+        && !('crisisId' in request.resource.data);
+      allow update: if isOwner(userId)
+        // Ensure crisisId and trustScore are immutable from client SDK
+        && (!('crisisId' in request.resource.data) || request.resource.data.crisisId == resource.data.crisisId)
+        && (!('trustScore' in request.resource.data) || request.resource.data.trustScore == resource.data.trustScore);
+      allow delete: if false; // Deletion handled via Admin SDK / GDPR workflow
+    }
+
+    // --- Emergencies Collection (Single Canonical Emergency Record) ---
+    match /emergencies/{emergencyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() 
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.status == 'REPORTED';
+      allow update: if isAuthenticated() && (
+        // Reporter can update descriptive fields before hospital acceptance
+        (resource.data.reporterId == request.auth.uid 
+          && request.resource.data.reporterId == resource.data.reporterId
+          && request.resource.data.crisisId == resource.data.crisisId
+          && (resource.data.status == 'REPORTED' || resource.data.status == 'CONFIRMING'))
+        // Or authorized medical/dispatch personnel
+        || isPrivilegedRole()
+      );
+      allow delete: if false;
+    }
+
+    // --- Incident Confirmations ---
+    // Multi-user community confirmations
+    match /confirmations/{confirmationId} {
+      allow read: if isAuthenticated();
+      // Users can only confirm incidents once and cannot confirm their own incident
+      allow create: if isAuthenticated() 
+        && request.resource.data.confirmerId == request.auth.uid
+        && request.resource.data.confirmerId != request.resource.data.reporterId;
+      allow update, delete: if false;
+    }
+
+    // --- In-App Notifications ---
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Mark read only
+      allow update: if isAuthenticated() 
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false; // Server-sent notifications only
+    }
+
+    // --- Hospitals, Ambulances, Clinics & Doctors ---
+    // Read-only for authenticated clients; managed authoritative via backend Admin SDK
+    match /hospitals/{hospitalId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /ambulances/{ambulanceId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /clinics/{clinicId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /doctors/{doctorId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.patientId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid || isPrivilegedRole()
+      );
+      allow delete: if false;
+    }
+
+    match /queues/{queueId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+  }
+}

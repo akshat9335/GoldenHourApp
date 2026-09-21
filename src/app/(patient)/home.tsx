@@ -1,25 +1,70 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, SosHold, PatientNav, Divider } from '@/components/ui';
+import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/services/api';
+import { initDeviceLocation } from '@/services/deviceLocation';
 
 export default function PatientHome() {
+  const voiceSosEnabled = useAppStore((s) => s.voiceSosEnabled);
+  const voiceSosPhrase = useAppStore((s) => s.voiceSosPhrase);
+  const userProfile = useAppStore((s) => s.userProfile);
+  const setUserProfile = useAppStore((s) => s.setUserProfile);
+  const locationAddress = useAppStore((s) => s.locationAddress);
+  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+
+  useEffect(() => {
+    // Pre-warm device GPS instantly on home mount
+    initDeviceLocation();
+
+    api.users.getProfile().then((profile) => {
+      if (profile) {
+        setUserProfile(profile);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const displayName = userProfile?.name || 'Golden Hour User';
+  const firstName = displayName.split(' ')[0] || 'User';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .map((n: string) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'GH';
+
+  const resetEmergencySession = useAppStore((s) => s.resetEmergencySession);
+
+  const startEmergency = () => {
+    resetEmergencySession();
+    router.push('/(patient)/emergency/select-type');
+  };
+
   return (
-    <View style={{ flex: 1 }}>
-      <Screen>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <Screen padBottom={95}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good evening,</Text>
-            <Text style={styles.name}>Akshat</Text>
+            <Text style={styles.greeting}>EMERGENCY DASHBOARD</Text>
+            <Text style={styles.name}>{displayName}</Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Pressable style={styles.avatarBtn} onPress={() => router.push('/(patient)/profile')}>
-              <Text style={styles.avatarText}>AS</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Pressable
+              style={styles.switchRoleBtn}
+              onPress={() => router.push('/role-selection')}
+            >
+              <Text style={styles.switchRoleText}>Role</Text>
             </Pressable>
-            <Pressable style={styles.bellBtn} onPress={() => router.push('/notifications')}>
-              <Icon name="bell" />
-              <View style={styles.dot} />
+            <Pressable
+              style={styles.avatarBtn}
+              onPress={() => router.push('/(patient)/profile')}
+            >
+              <Text style={styles.avatarText}>
+                {firstName.charAt(0).toUpperCase()}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -28,19 +73,33 @@ export default function PatientHome() {
           <Icon name="gps" />
           <View style={{ flex: 1 }}>
             <Text style={styles.locTitle}>Live location active</Text>
-            <Text style={styles.locSub}>Koramangala, Bengaluru · GPS strong</Text>
+            <Text style={styles.locSub}>
+              {locationAddress ||
+                (lastKnownLocation
+                  ? `${lastKnownLocation.latitude.toFixed(3)}°N, ${lastKnownLocation.longitude.toFixed(3)}°E`
+                  : 'Acquiring device GPS...')} · GPS active
+            </Text>
           </View>
           <Pill color="success">READY</Pill>
         </Card>
 
         <View style={styles.sosZone}>
-          <SosHold onConfirm={() => router.push('/(patient)/emergency/select-type')} />
-          <Text style={styles.sosHint}>Press and hold to alert help immediately</Text>
+          <SosHold
+            label="SOS"
+            sublabel="EMERGENCY"
+            onPress={startEmergency}
+            onConfirm={startEmergency}
+          />
+          <Text style={styles.sosHint}>
+            {voiceSosEnabled
+              ? `Say "${voiceSosPhrase}" or press SOS to report emergency`
+              : 'Press SOS to report emergency with photo, voice & AI assistance'}
+          </Text>
         </View>
 
         <View style={styles.quickRow}>
           <QuickAction icon="ai" color={colors.blue} label="AI First Aid" onPress={() => router.push('/(patient)/ai-home')} />
-          <QuickAction icon="ambulance" color={colors.red} label="Report Accident" onPress={() => router.push('/(patient)/emergency/select-type')} />
+          <QuickAction icon="ambulance" color={colors.red} label="Report Accident" onPress={startEmergency} />
           <QuickAction icon="hospital" color={colors.ink} label="Hospitals" onPress={() => router.push('/nearby-hospitals')} />
         </View>
 
@@ -83,6 +142,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   greeting: { fontSize: 11.5, color: colors.inkFaint },
   name: { fontWeight: '700', fontSize: 18, color: colors.ink },
+  switchRoleBtn: { paddingHorizontal: 9, paddingVertical: 7, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
+  switchRoleText: { fontSize: 11, fontWeight: '700', color: colors.inkSoft },
   bellBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   avatarBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.redGlow, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: colors.red, fontWeight: '800', fontSize: 12.5 },

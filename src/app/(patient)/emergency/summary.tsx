@@ -8,16 +8,25 @@ import { useAppStore } from '@/store/useAppStore';
 export default function Summary() {
   const selectedType = useAppStore((s) => s.selectedType);
   const description = useAppStore((s) => s.description);
+  const locationAddress = useAppStore((s) => s.locationAddress);
+  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+
+  const displayLoc =
+    locationAddress ||
+    (lastKnownLocation
+      ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E`
+      : 'Live GPS Active · Current Device Location');
+
   return (
     <Screen>
       <TopBar title="Emergency Summary" />
       <Card style={styles.card}>
         <LabelEyebrow>EMERGENCY TYPE</LabelEyebrow>
-        <Text style={styles.value}>{selectedType}</Text>
+        <Text style={styles.value}>{selectedType || 'General Emergency'}</Text>
         <LabelEyebrow>DESCRIPTION</LabelEyebrow>
-        <Text style={styles.desc}>{description}</Text>
+        <Text style={styles.desc}>{description || 'No description provided (Location only dispatch)'}</Text>
         <LabelEyebrow>LOCATION</LabelEyebrow>
-        <Text style={styles.desc}>5th Block, Koramangala, Bengaluru</Text>
+        <Text style={styles.desc}>{displayLoc}</Text>
       </Card>
       <Button title="Run AI Assessment" onPress={() => router.push('/(patient)/emergency/ai-analyzing')} />
       <Button title="Skip — Confirm Directly" variant="secondary" style={{ marginTop: 10 }} onPress={() => router.push('/(patient)/emergency/review')} />

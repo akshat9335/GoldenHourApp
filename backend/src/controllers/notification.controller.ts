@@ -5,6 +5,7 @@ import {
   getNotifications,
   markNotificationAsRead,
   saveDeviceToken,
+  clearAllNotifications,
 } from "../services/notifications/notification.service";
 
 function getUserUid(req: Request): string {
@@ -84,4 +85,13 @@ export async function markNotificationAsReadController(
     null,
     "Notification marked as read.",
   );
+}
+
+export async function clearAllNotificationsController(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const uid = getUserUid(req);
+  await clearAllNotifications(uid);
+  sendSuccess(res, null, "All notifications cleared successfully.");
 }

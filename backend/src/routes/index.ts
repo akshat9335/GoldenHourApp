@@ -13,6 +13,9 @@ import locationRoutes from "./location.routes";
 import doctorRoutes from "./doctor.routes";
 import appointmentRoutes from "./appointment.routes";
 import queueRoutes from "./queue.routes";
+import confirmationRoutes from "./confirmation.routes";
+import mediaRoutes from "./media.routes";
+import adminRoutes from "./admin.routes";
 
 /**
  * Centralized API routing.
@@ -33,6 +36,7 @@ import queueRoutes from "./queue.routes";
  *   /doctors         → Anant (Doctor registration, Clinic profiles, Search)
  *   /appointments    → Anant (Slot booking, Lifecycle state machine, Departure sync)
  *   /queues          → Anant (Live queue management, Token issuance, Next caller)
+ *   /confirmations   → Adish (Incident confirmations, Multi-user verification, Concurrency lock)
  */
 
 const router = Router();
@@ -50,6 +54,9 @@ router.use("/location", locationRoutes);
 router.use("/doctors", doctorRoutes);
 router.use("/appointments", appointmentRoutes);
 router.use("/queues", queueRoutes);
+router.use("/confirmations", confirmationRoutes);
+router.use("/media", mediaRoutes);
+router.use("/admin", adminRoutes);
 
 export default router;
 

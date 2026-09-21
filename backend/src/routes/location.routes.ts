@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { locationController } from "../controllers/location.controller";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
 // POST /api/location/update
-router.post("/update", (req, res, next) => locationController.updateLocation(req, res, next));
+router.post("/update", requireAuth, (req, res, next) => locationController.updateLocation(req, res, next));
 
 // GET /api/location/nearby-hospitals?lat=...&lng=...&radius=...
 router.get("/nearby-hospitals", (req, res, next) => locationController.getNearbyHospitals(req, res, next));

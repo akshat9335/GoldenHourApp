@@ -4,43 +4,58 @@ import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Divider, Icon, LabelEyebrow } from '@/components/ui';
 
-const DO_NOW = [
-  'Keep the person still and seated upright',
-  'Loosen tight clothing around chest and neck',
-  'Give aspirin only if not allergic and advised',
-  'Stay on the line until help arrives',
-];
-const AVOID = [
-  'Do not let the person walk or exert themselves',
-  'Do not give food or water',
-  'Do not leave the person alone',
-];
+import { useAppStore } from '@/store/useAppStore';
 
 export default function AiActions() {
+  const aiTriageResult = useAppStore((s) => s.aiTriageResult);
+  const aiImageResult = useAppStore((s) => s.aiImageResult);
+
+  const immediateActions: string[] =
+    Array.isArray(aiTriageResult?.immediateActions) && aiTriageResult.immediateActions.length > 0
+      ? aiTriageResult.immediateActions
+      : Array.isArray(aiImageResult?.immediateActions) && aiImageResult.immediateActions.length > 0
+      ? aiImageResult.immediateActions
+      : [
+          'Keep the patient safe, calm and immobilized',
+          'Apply direct firm pressure with clean cloth if external bleeding',
+          'Do not move neck or spine if impact trauma or fall occurred',
+          'Ensure clear airway and stay on the line until rescue crew arrives',
+        ];
+
+  const avoidActions: string[] =
+    Array.isArray(aiTriageResult?.avoidActions) && aiTriageResult.avoidActions.length > 0
+      ? aiTriageResult.avoidActions
+      : [
+          'Do not move or twist injured limbs or spine unnecessarily',
+          'Do not administer oral fluids, painkillers, or food',
+          'Do not leave the patient unattended',
+          'Do not remove deeply embedded objects from wounds',
+        ];
+
   return (
     <Screen>
       <TopBar title="Recommended Actions" />
       <LabelEyebrow>DO THIS NOW</LabelEyebrow>
       <Card style={{ padding: 4, marginBottom: 16 }}>
-        {DO_NOW.map((t, i) => (
-          <View key={t}>
+        {immediateActions.map((t, i) => (
+          <View key={t + i}>
             <View style={styles.row}>
-              <Icon name="check" size={14} />
+              <Icon name="check" size={14} color={colors.success} />
               <Text style={styles.rowText}>{t}</Text>
             </View>
-            {i < DO_NOW.length - 1 && <Divider />}
+            {i < immediateActions.length - 1 && <Divider />}
           </View>
         ))}
       </Card>
       <LabelEyebrow>THINGS TO AVOID</LabelEyebrow>
       <Card style={{ padding: 4, marginBottom: 16 }}>
-        {AVOID.map((t, i) => (
-          <View key={t}>
+        {avoidActions.map((t, i) => (
+          <View key={t + i}>
             <View style={styles.row}>
               <Icon name="close" size={14} color={colors.redDark} />
               <Text style={styles.rowText}>{t}</Text>
             </View>
-            {i < AVOID.length - 1 && <Divider />}
+            {i < avoidActions.length - 1 && <Divider />}
           </View>
         ))}
       </Card>

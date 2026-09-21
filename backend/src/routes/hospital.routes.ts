@@ -4,6 +4,8 @@ import {
   acceptHospitalRequestController,
   addHospitalDiagnosticController,
   addHospitalSpecialistController,
+  clearHospitalRequestsController,
+  dismissHospitalRequestController,
   completeHospitalRequestController,
   createHospitalReferralController,
   createHospitalReferralForRequestController,
@@ -13,6 +15,10 @@ import {
   getHospitalCapacityController,
   getHospitalDiagnosticByIdController,
   getHospitalDiagnosticsController,
+  getHospitalDriversController,
+  searchHospitalDriverController,
+  addHospitalDriverController,
+  unlinkHospitalDriverController,
   getHospitalProfileController,
   getHospitalReferralsController,
   getHospitalRequestByIdController,
@@ -29,7 +35,7 @@ import {
   updateHospitalSpecialistController,
 } from "../controllers/hospital.controller";
 
-import { requireAuth, requireRole } from "../middleware/auth";
+import { requireApproved, requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
 
@@ -40,7 +46,6 @@ const router = Router();
 router.post(
   "/register",
   requireAuth,
-  requireRole("hospital"),
   registerHospitalController,
 );
 
@@ -110,6 +115,38 @@ router.delete(
   requireAuth,
   requireRole("hospital"),
   deleteHospitalSpecialistController,
+);
+
+// ============================================================
+// HOSPITAL FLEET & DRIVERS
+// ============================================================
+
+router.get(
+  "/me/drivers/search",
+  requireAuth,
+  requireRole("hospital"),
+  searchHospitalDriverController,
+);
+
+router.get(
+  "/me/drivers",
+  requireAuth,
+  requireRole("hospital"),
+  getHospitalDriversController,
+);
+
+router.post(
+  "/me/drivers",
+  requireAuth,
+  requireRole("hospital"),
+  addHospitalDriverController,
+);
+
+router.delete(
+  "/me/drivers/:driverId",
+  requireAuth,
+  requireRole("hospital"),
+  unlinkHospitalDriverController,
 );
 
 // ============================================================
@@ -200,6 +237,20 @@ router.get(
   getHospitalRequestsController,
 );
 
+router.post(
+  "/requests/clear-all",
+  requireAuth,
+  requireRole("hospital"),
+  clearHospitalRequestsController,
+);
+
+router.post(
+  "/requests/:id/dismiss",
+  requireAuth,
+  requireRole("hospital"),
+  dismissHospitalRequestController,
+);
+
 router.get(
   "/requests/:id",
   requireAuth,
@@ -215,6 +266,7 @@ router.post(
   "/requests/:id/accept",
   requireAuth,
   requireRole("hospital"),
+  requireApproved,
   acceptHospitalRequestController,
 );
 

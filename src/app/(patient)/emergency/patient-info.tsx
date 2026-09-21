@@ -11,10 +11,19 @@ export default function PatientInfo() {
   const setDescription = useAppStore((s) => s.setDescription);
   const accidentPhotoUri = useAppStore((s) => s.accidentPhotoUri);
   const setAccidentPhotoUri = useAppStore((s) => s.setAccidentPhotoUri);
+  const setAccidentPhotoBase64 = useAppStore((s) => s.setAccidentPhotoBase64);
   const voiceTranscript = useAppStore((s) => s.voiceTranscript);
   const setVoiceTranscript = useAppStore((s) => s.setVoiceTranscript);
+  const locationAddress = useAppStore((s) => s.locationAddress);
+  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
   const [who, setWho] = useState('Myself');
   const [severity, setSeverity] = useState('Moderate');
+
+  const displayLoc =
+    locationAddress ||
+    (lastKnownLocation
+      ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E`
+      : 'Live GPS Active · Current Device Location');
 
   return (
     <Screen>
@@ -26,7 +35,13 @@ export default function PatientInfo() {
         </View>
       </InputGroup>
       <InputGroup label="Add Accident Photo (Optional)">
-        <PhotoInput uri={accidentPhotoUri} onChange={setAccidentPhotoUri} />
+        <PhotoInput
+          uri={accidentPhotoUri}
+          onChange={(uri, b64) => {
+            setAccidentPhotoUri(uri);
+            setAccidentPhotoBase64(b64 || null);
+          }}
+        />
       </InputGroup>
       <InputGroup label="Describe what happened (Optional)">
         <Input multiline numberOfLines={3} value={description} onChangeText={setDescription} placeholder="Tell us briefly what happened..." />
@@ -46,7 +61,7 @@ export default function PatientInfo() {
         <Icon name="pin" />
         <View style={{ flex: 1 }}>
           <Text style={styles.locTitle}>Current Location</Text>
-          <Text style={styles.locSub}>5th Block, Koramangala, Bengaluru</Text>
+          <Text style={styles.locSub}>{displayLoc}</Text>
         </View>
         <Pill color="success">GPS LOCKED</Pill>
       </Card>

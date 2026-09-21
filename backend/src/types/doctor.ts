@@ -1,4 +1,4 @@
-export type DoctorVerificationStatus = "PENDING" | "VERIFIED" | "REJECTED";
+export type DoctorVerificationStatus = "PENDING" | "VERIFIED" | "APPROVED" | "REJECTED";
 export type DoctorAvailability = "AVAILABLE" | "BUSY" | "OFFLINE";
 
 export interface ClinicDetails {

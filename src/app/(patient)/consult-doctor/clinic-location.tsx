@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { Card, HTitle, Icon, Button, Pill, InteractiveMap, openExternalNavigation } from '@/components/ui';
 import { colors } from '@/constants/theme';
-import { Card, HTitle, Icon, MapBg, Button, Pill, InteractiveMap } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById } from '@/constants/doctorData';
-
-import * as Linking from 'expo-linking';
 
 export default function ClinicLocation() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
@@ -15,10 +13,10 @@ export default function ClinicLocation() {
 
   const openGoogleMaps = () => {
     setNavigating(true);
-    const dest = `${doctor.latitude},${doctor.longitude}`;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
-    Linking.openURL(url).catch((err) => {
-      console.warn('Could not open Google Maps', err);
+    openExternalNavigation({
+      destLat: doctor.latitude,
+      destLng: doctor.longitude,
+      destTitle: doctor.clinic,
     });
   };
 
@@ -30,6 +28,7 @@ export default function ClinicLocation() {
         destTitle={doctor.clinic}
         userLat={doctor.latitude - 0.012}
         userLng={doctor.longitude + 0.012}
+        showNavButton={false}
       />
 
       <View style={styles.topBar}>

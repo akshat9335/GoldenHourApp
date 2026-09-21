@@ -2,16 +2,28 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { Screen, TopBar, Button, Input, InputGroup, Chip, LabelEyebrow } from '@/components/ui';
+import { useAppStore } from '@/store/useAppStore';
 
 const TAGS = ['Conscious', 'Breathing', 'Pain 8/10', 'No known allergies'];
 
 export default function AiSymptomInput() {
+  const description = useAppStore((s) => s.description);
+  const setDescription = useAppStore((s) => s.setDescription);
   const [selected, setSelected] = useState<Set<string>>(new Set(['Conscious', 'Breathing']));
+
   const toggle = (t: string) => {
     const next = new Set(selected);
-    next.has(t) ? next.delete(t) : next.add(t);
+    if (next.has(t)) {
+      next.delete(t);
+    } else {
+      next.add(t);
+      if (!description.includes(t)) {
+        setDescription(description ? `${description}, ${t}` : t);
+      }
+    }
     setSelected(next);
   };
+
   return (
     <Screen>
       <TopBar title="Describe the symptoms" />
@@ -19,7 +31,8 @@ export default function AiSymptomInput() {
         <Input
           multiline
           numberOfLines={4}
-          defaultValue="Sudden chest pain radiating to left arm, shortness of breath, sweating, started 10 minutes ago."
+          value={description}
+          onChangeText={setDescription}
           placeholder="What is happening right now?"
         />
       </InputGroup>

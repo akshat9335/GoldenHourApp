@@ -1,12 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button } from '@/components/ui';
+import { authService } from '@/services/auth';
 
-const DIGITS = ['6', '2', '9', '', '', ''];
+const DIGITS = ['6', '2', '9', '1', '0', '4'];
 
 export default function Otp() {
+  const [loading, setLoading] = useState(false);
+
+  const handleVerify = async () => {
+    // Phone OTP is deferred to subsequent Android Phone Auth configuration module
+    router.replace('/login');
+  };
+
   return (
     <Screen>
       <TopBar title="Verify OTP" />
@@ -19,7 +27,7 @@ export default function Otp() {
         ))}
       </View>
       <Text style={styles.resend}>Resend code in <Text style={{ color: colors.ink, fontWeight: '700' }}>00:24</Text></Text>
-      <Button title="Verify" onPress={() => router.push('/create-account')} />
+      <Button title={loading ? "Verifying…" : "Verify"} onPress={handleVerify} />
     </Screen>
   );
 }

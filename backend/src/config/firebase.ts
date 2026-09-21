@@ -21,6 +21,9 @@ if (isFirebaseConfigured()) {
       clientEmail: env.firebase.clientEmail,
       privateKey: env.firebase.privateKey,
     }),
+    storageBucket:
+      env.firebase.storageBucket ||
+      (env.firebase.projectId ? `${env.firebase.projectId}.firebasestorage.app` : undefined),
   });
 } else {
   // Intentionally do not throw here. The core backend (health check,
@@ -35,8 +38,14 @@ if (isFirebaseConfigured()) {
 
 export const firebaseApp = app;
 export const auth = app ? admin.auth(app) : null;
-export const firestore = app ? admin.firestore(app) : null;
+export const firestore = (() => {
+  if (!app) return null;
+  const db = admin.firestore(app);
+  db.settings({ ignoreUndefinedProperties: true });
+  return db;
+})();
 export const storage = app ? admin.storage(app) : null;
+export const messaging = app ? admin.messaging(app) : null;
 
 export class FirebaseNotConfiguredError extends Error {
   constructor() {

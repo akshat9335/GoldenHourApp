@@ -4,6 +4,8 @@ import {
   acceptHospitalRequest,
   addHospitalDiagnostic,
   addHospitalSpecialist,
+  clearHospitalRequests,
+  dismissHospitalRequest,
   completeHospitalRequest,
   createHospitalReferral,
   createHospitalReferralForRequest,
@@ -14,6 +16,10 @@ import {
   getHospitalCapacity,
   getHospitalDiagnosticById,
   getHospitalDiagnostics,
+  getHospitalDrivers,
+  searchDriverForHospital,
+  addHospitalDriver,
+  unlinkHospitalDriver,
   getHospitalProfile,
   getHospitalReferrals,
   getHospitalRequestById,
@@ -565,6 +571,49 @@ export async function getHospitalRequestsController(
   }
 }
 
+export async function clearHospitalRequestsController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const result = await clearHospitalRequests(req.user.uid);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: "Pending hospital emergency requests cleared successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function dismissHospitalRequestController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    await dismissHospitalRequest(req.params.id, req.user.uid);
+
+    res.status(200).json({
+      success: true,
+      message: "Hospital emergency request dismissed successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 // ============================================================
 // HOSPITAL EMERGENCY REQUEST - GET BY ID
 // ============================================================
@@ -611,6 +660,7 @@ export async function acceptHospitalRequestController(
     const emergencyRequest = await acceptHospitalRequest(
       req.user.uid,
       req.params.id,
+      req.body,
     );
 
     res.status(200).json({
@@ -769,6 +819,104 @@ export async function updateHospitalRequestStatusController(
       success: true,
       data: emergencyRequest,
       message: "Emergency request status updated successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ============================================================
+// HOSPITAL FLEET & DRIVERS
+// ============================================================
+
+export async function getHospitalDriversController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const drivers = await getHospitalDrivers(req.user.uid);
+
+    res.status(200).json({
+      success: true,
+      data: drivers,
+      message: "Hospital drivers fetched successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function addHospitalDriverController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const driver = await addHospitalDriver(req.user.uid, req.body);
+
+    res.status(201).json({
+      success: true,
+      data: driver,
+      message: "Driver added to hospital fleet successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function searchHospitalDriverController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const query = String(req.query.query || req.body?.query || "").trim();
+    const result = await searchDriverForHospital(req.user.uid, query);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: "Driver found successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function unlinkHospitalDriverController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const driverId = String(req.params.driverId || "").trim();
+    if (!driverId) {
+      throw new AppError(400, "DRIVER_ID_REQUIRED", "Driver ID is required.");
+    }
+
+    const result = await unlinkHospitalDriver(req.user.uid, driverId);
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: "Driver unlinked from hospital fleet successfully",
     });
   } catch (error) {
     next(error);

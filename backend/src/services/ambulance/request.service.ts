@@ -28,14 +28,117 @@ function mapRequest(
   };
 }
 
-export async function getAmbulanceRequests(): Promise<AmbulanceRequest[]> {
+export async function getAmbulanceRequests(
+  driverUid?: string,
+): Promise<AmbulanceRequest[]> {
   assertFirebaseReady();
+
+  let driverHospId: string | null = null;
+  let isIndependent = true;
+
+  if (driverUid && firestore) {
+    try {
+      const driverDoc = await firestore.collection("drivers").doc(driverUid).get();
+      if (driverDoc.exists) {
+        const dData = driverDoc.data();
+        driverHospId = dData?.hospitalId || null;
+        const hospName = String(dData?.hospitalName || "").toLowerCase();
+        isIndependent = !driverHospId || hospName.includes("independent") || driverHospId === "independent";
+      }
+    } catch {}
+  }
 
   const snapshot = await firestore!
     .collection(EMERGENCY_COLLECTION)
     .get();
 
-  return snapshot.docs.map((doc) => mapRequest(doc.id, doc.data()));
+  const requests = snapshot.docs.map((doc) => mapRequest(doc.id, doc.data()));
+
+  return requests
+    .filter((req) => {
+      const st = String(req.status || "").toUpperCase();
+      // Exclude terminal/closed emergencies
+      if (
+        st === "COMPLETED" ||
+        st === "CANCELLED" ||
+        st === "RESOLVED" ||
+        st === "REJECTED"
+      ) {
+        return false;
+      }
+      // If already assigned to another driver, exclude from this driver's queue
+      if (req.assignedDriverId && req.assignedDriverId !== driverUid) {
+        return false;
+      }
+      // If emergency is already en route/arrived/treated by someone else
+      if (
+        (st === "AMBULANCE_ASSIGNED" ||
+          st === "EN_ROUTE" ||
+          st === "PATIENT_ARRIVED" ||
+          st === "TREATMENT") &&
+        req.assignedDriverId !== driverUid
+      ) {
+        return false;
+      }
+
+      // If targeted to a specific driver, only that driver can see it
+      if (req.targetDriverId && driverUid && req.targetDriverId !== driverUid) {
+        return false;
+      }
+
+      // If dismissed by this driver
+      if (Array.isArray((req as any).dismissedBy) && driverUid && (req as any).dismissedBy.includes(driverUid)) {
+        return false;
+      }
+
+      // Hospital dispatch routing:
+      // If accepted by a specific hospital, show to that hospital's drivers AND independent drivers
+      if (req.assignedHospitalId && !isIndependent && driverHospId) {
+        if (req.assignedHospitalId !== driverHospId) {
+          return false;
+        }
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      const aTime = (a.createdAt as any) || 0;
+      const bTime = (b.createdAt as any) || 0;
+      return String(bTime).localeCompare(String(aTime));
+    });
+}
+
+export async function dismissAmbulanceRequest(
+  emergencyId: string,
+  driverUid: string,
+): Promise<void> {
+  assertFirebaseReady();
+  const docRef = firestore!.collection(EMERGENCY_COLLECTION).doc(emergencyId);
+  const snap = await docRef.get();
+  if (!snap.exists) return;
+
+  const data = snap.data();
+  const dismissedBy = Array.isArray(data?.dismissedBy) ? [...data!.dismissedBy] : [];
+  if (!dismissedBy.includes(driverUid)) {
+    dismissedBy.push(driverUid);
+    await docRef.update({
+      dismissedBy,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+}
+
+export async function clearAllAmbulanceRequests(
+  driverUid: string,
+): Promise<number> {
+  assertFirebaseReady();
+  const requests = await getAmbulanceRequests(driverUid);
+  let count = 0;
+  for (const req of requests) {
+    await dismissAmbulanceRequest(req.id, driverUid);
+    count++;
+  }
+  return count;
 }
 
 export async function getAmbulanceRequest(

@@ -22,6 +22,7 @@ interface FirebaseConfig {
   projectId?: string;
   clientEmail?: string;
   privateKey?: string;
+  storageBucket?: string;
 }
 
 interface OptionalConfig {
@@ -53,6 +54,7 @@ const optional: OptionalConfig = {
     projectId: process.env.FIREBASE_PROJECT_ID || undefined,
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL || undefined,
     privateKey: parsePrivateKey(process.env.FIREBASE_PRIVATE_KEY),
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined,
   },
   geminiApiKey: process.env.GEMINI_API_KEY || undefined,
   googleMapsServerApiKey: process.env.GOOGLE_MAPS_SERVER_API_KEY || undefined,

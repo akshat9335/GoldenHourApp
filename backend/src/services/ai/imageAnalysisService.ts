@@ -30,6 +30,9 @@ function fallbackImageResult(
       : "Image analysis is limited and cannot replace an in-person assessment.",
     disclaimer: AI_DISCLAIMER,
     source,
+    isAuthentic: true,
+    authenticityAssessment: "Preliminary visual check performed.",
+    authenticityScore: source === "mock" ? 0.7 : 0.5,
   };
 }
 

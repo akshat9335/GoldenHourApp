@@ -75,7 +75,8 @@ export async function analyzeEmergency(input: unknown): Promise<TriageResult> {
       result = parseTriageResponse(
         await requestGemini(buildTriagePrompt(validated)),
       );
-    } catch {
+    } catch (err: any) {
+      console.error("[analyzeEmergency] Gemini call failed:", err?.message || err);
       result = heuristicResult(validated, "fallback");
     }
   }

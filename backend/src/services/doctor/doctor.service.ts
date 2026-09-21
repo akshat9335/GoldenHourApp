@@ -58,7 +58,7 @@ export class DoctorService {
 
     dataStore.doctors.set(doctorId, newDoctor);
 
-    if (firestore) {
+    if (firestore && process.env.NODE_ENV !== "test") {
       try {
         await firestore.collection("doctors").doc(doctorId).set(newDoctor);
       } catch (err) {
@@ -77,23 +77,76 @@ export class DoctorService {
     doctorId: string,
     status: DoctorVerificationStatus
   ): Promise<DoctorProfile> {
-    const doctor = dataStore.doctors.get(doctorId);
+    let doctor = dataStore.doctors.get(doctorId);
+
+    // If not in memory (backend restarted), load from Firestore
+    if (!doctor && firestore) {
+      try {
+        const snap = await firestore.collection("doctors").doc(doctorId).get();
+        if (snap.exists) {
+          doctor = snap.data() as DoctorProfile;
+          if (doctor) dataStore.doctors.set(doctorId, doctor);
+        }
+      } catch {}
+    }
+
     if (!doctor) {
       throw new AppError(404, "DOCTOR_NOT_FOUND", `Doctor with ID '${doctorId}' not found.`);
     }
 
-    if (!["PENDING", "VERIFIED", "REJECTED"].includes(status)) {
+    const canonicalStatus = (status === "APPROVED" ? "VERIFIED" : status) as DoctorVerificationStatus;
+    if (!["PENDING", "VERIFIED", "REJECTED"].includes(canonicalStatus)) {
       throw new AppError(400, "INVALID_STATUS", "Status must be PENDING, VERIFIED, or REJECTED.");
     }
 
-    doctor.verificationStatus = status;
+    doctor.verificationStatus = canonicalStatus;
     doctor.updatedAt = new Date().toISOString();
 
-    if (status === "VERIFIED" && doctor.availability === "OFFLINE") {
+    if (canonicalStatus === "VERIFIED" && doctor.availability === "OFFLINE") {
       doctor.availability = "AVAILABLE";
+    }
+    if (canonicalStatus === "REJECTED") {
+      doctor.availability = "OFFLINE";
     }
 
     dataStore.doctors.set(doctorId, doctor);
+
+    // Also persist to Firestore
+    if (firestore) {
+      try {
+        await firestore.collection("doctors").doc(doctorId).update({
+          verificationStatus: canonicalStatus,
+          availability: doctor.availability,
+          updatedAt: doctor.updatedAt,
+        });
+      } catch (err) {
+        console.warn("[doctor] Failed to sync verification status to Firestore:", err);
+      }
+    }
+
+    if (doctor.userId) {
+      const user = dataStore.users.get(doctor.userId);
+      const approvedOrStatus = canonicalStatus === "VERIFIED" ? "APPROVED" : canonicalStatus;
+      if (user) {
+        user.roleVerificationStatus = {
+          ...(user.roleVerificationStatus || {}),
+          DOCTOR: approvedOrStatus,
+        };
+        if (user.role === "DOCTOR") {
+          user.verificationStatus = approvedOrStatus;
+        }
+        dataStore.users.set(doctor.userId, user);
+      }
+      if (firestore && process.env.NODE_ENV !== "test") {
+        try {
+          await firestore.collection("users").doc(doctor.userId).update({
+            verificationStatus: user?.verificationStatus || approvedOrStatus,
+            roleVerificationStatus: user?.roleVerificationStatus || { DOCTOR: approvedOrStatus },
+          });
+        } catch {}
+      }
+    }
+
     return doctor;
   }
 
@@ -145,6 +198,52 @@ export class DoctorService {
         return doc;
       }
     }
+
+    if (firestore) {
+      try {
+        const snap = await firestore.collection("doctors").where("userId", "==", userId).limit(1).get();
+        if (!snap.empty) {
+          const doc = snap.docs[0].data() as DoctorProfile;
+          dataStore.doctors.set(doc.doctorId, doc);
+          return doc;
+        }
+
+        const byDocId = await firestore.collection("doctors").doc(`doc-${userId}`).get();
+        if (byDocId.exists) {
+          const doc = byDocId.data() as DoctorProfile;
+          dataStore.doctors.set(doc.doctorId, doc);
+          return doc;
+        }
+      } catch {}
+    }
+
+    // Check if user is registered as DOCTOR in users table
+    const user = dataStore.users.get(userId);
+    if (user && (user.role === "DOCTOR" || (Array.isArray(user.roles) && user.roles.includes("DOCTOR")))) {
+      const docId = `doc-${userId}`;
+      const docProfile: DoctorProfile = {
+        doctorId: docId,
+        userId,
+        name: user.doctorName || user.name || "Doctor",
+        specialty: user.specialty || user.specialization || "General Physician",
+        qualification: user.qualification || "MBBS",
+        experienceYears: 1,
+        licenseNumber: user.licenseNumber || user.medicalRegistrationNumber || "KMC-PENDING",
+        verificationStatus: user.verificationStatus === "APPROVED" ? "VERIFIED" : "PENDING",
+        clinicId: "clinic-sharma-blr",
+        consultationFee: user.consultationFee || 500,
+        availability: user.verificationStatus === "APPROVED" ? "AVAILABLE" : "OFFLINE",
+        rating: 5.0,
+        servingToken: 0,
+        queueLength: 0,
+        estimatedWaitMinutes: 0,
+        createdAt: user.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      dataStore.doctors.set(docId, docProfile);
+      return docProfile;
+    }
+
     throw new AppError(404, "DOCTOR_NOT_FOUND", `No doctor profile associated with user ID '${userId}'.`);
   }
 

@@ -6,6 +6,8 @@ import { Screen, TopBar, Card, Chip, Button, Divider, LabelEyebrow } from '@/com
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById } from '@/constants/doctorData';
 
+import { api } from '@/services/api';
+
 const DATES = ['Today', 'Tomorrow', 'Day After'];
 const SLOTS = ['10:30 AM', '11:00 AM', '2:00 PM', '4:30 PM', '6:00 PM'];
 
@@ -15,10 +17,29 @@ export default function Booking() {
   const doctor = getDoctorById(selectedDoctorId);
   const [date, setDate] = useState('Today');
   const [slot, setSlot] = useState(SLOTS[0]);
+  const [loading, setLoading] = useState(false);
 
-  function confirm() {
-    setUserToken(doctor.currentToken + 3);
-    router.push('/(patient)/consult-doctor/booking-confirmed');
+  async function confirm() {
+    setLoading(true);
+    try {
+      const res = await api.appointments.book({
+        doctorId: selectedDoctorId,
+        date: new Date().toISOString().split('T')[0],
+        timeSlot: slot,
+        patientName: 'Akshat Srivastava',
+      });
+      if (res && res.tokenNumber) {
+        setUserToken(res.tokenNumber);
+      } else {
+        setUserToken(doctor.currentToken + 3);
+      }
+    } catch (_err) {
+      // Offline fallback
+      setUserToken(doctor.currentToken + 3);
+    } finally {
+      setLoading(false);
+      router.push('/(patient)/consult-doctor/booking-confirmed');
+    }
   }
 
   return (

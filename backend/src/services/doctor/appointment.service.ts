@@ -81,7 +81,7 @@ export class AppointmentService {
 
     dataStore.appointments.set(appointmentId, newAppointment);
 
-    if (firestore) {
+    if (firestore && process.env.NODE_ENV !== "test") {
       try {
         await firestore.collection("appointments").doc(appointmentId).set(newAppointment);
       } catch (err) {

@@ -1,21 +1,43 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Divider, Icon, PatientNav, HTitle, IdentitySafetyCard } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/services/api';
 
 export default function Profile() {
   const goldenHourId = useAppStore((s) => s.goldenHourId);
   const trustScore = useAppStore((s) => s.trustScore);
+  const userProfile = useAppStore((s) => s.userProfile);
+  const setUserProfile = useAppStore((s) => s.setUserProfile);
+
+  useEffect(() => {
+    api.users.getProfile().then((profile) => {
+      if (profile) {
+        setUserProfile(profile);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const displayName = userProfile?.name || 'Akshat Srivastava';
+  const phone = userProfile?.phone || userProfile?.phoneNumber || '+91 98765 43210';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .map((n: string) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'AS';
+
   return (
     <View style={{ flex: 1 }}>
       <Screen>
         <View style={styles.header}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>AS</Text></View>
+          <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
           <View>
-            <HTitle size={16}>Akshat Srivastava</HTitle>
-            <Text style={styles.phone}>+91 98765 43210</Text>
+            <HTitle size={16}>{displayName}</HTitle>
+            <Text style={styles.phone}>{phone}</Text>
           </View>
         </View>
         <View style={styles.statsRow}>
@@ -33,6 +55,8 @@ export default function Profile() {
           <Row label="Emergency History" icon="history" onPress={() => router.push('/(patient)/history')} />
         </Card>
         <Card style={{ padding: 4 }}>
+          <Row label="Switch Portal / Role" icon="idCard" onPress={() => router.push('/role-selection')} />
+          <Divider />
           <Row label="Settings" icon="gps" onPress={() => router.push('/settings')} />
           <Divider />
           <Row label="Privacy & Security" icon="pin" onPress={() => router.push('/privacy')} />

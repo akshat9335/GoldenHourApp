@@ -8,13 +8,23 @@ import { useAppStore } from '@/store/useAppStore';
 export default function Review() {
   const selectedType = useAppStore((s) => s.selectedType);
   const aiSeverity = useAppStore((s) => s.aiSeverity);
+  const userProfile = useAppStore((s) => s.userProfile);
+  const aiTriageResult = useAppStore((s) => s.aiTriageResult);
+  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+
+  const displayName = userProfile?.name || 'Emergency Caller';
+  const hospitalName =
+    aiTriageResult?.recommendedHospital || 'Nearest Verified Trauma ER';
+  const locDisplay = lastKnownLocation
+    ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E (Live GPS)`
+    : 'Live GPS Corridor (Active)';
 
   const rows: Array<[string, React.ReactNode]> = [
-    ['Emergency Type', <Text style={styles.bold}>{selectedType}</Text>],
+    ['Emergency Type', <Text style={styles.bold}>{selectedType || 'Trauma Emergency'}</Text>],
     ['AI Severity', <Pill color={severityPillColor(aiSeverity)}>{severityLabel(aiSeverity)}</Pill>],
-    ['Location', <Text style={styles.bold}>Koramangala, Blr</Text>],
-    ['Ambulance', <Text style={styles.bold}>ALS · 6 min ETA</Text>],
-    ["Hospital", <Text style={styles.bold}>St. Martha's</Text>],
+    ['Location', <Text style={styles.bold}>{locDisplay}</Text>],
+    ['Ambulance', <Text style={styles.bold}>ALS Unit · Priority Dispatch</Text>],
+    ['Hospital ER', <Text style={styles.bold}>{hospitalName}</Text>],
   ];
 
   return (
@@ -22,7 +32,7 @@ export default function Review() {
       <TopBar title="Review Before Sending" />
       <Card style={styles.card}>
         <View style={styles.rowTop}>
-          <Text style={styles.name}>Akshat Srivastava</Text>
+          <Text style={styles.name}>{displayName}</Text>
         </View>
         <Divider />
         {rows.map(([label, value], i) => (
@@ -36,7 +46,7 @@ export default function Review() {
         ))}
       </Card>
       <Banner color="amber" icon={<Icon name="bell" size={15} color={colors.amber} />}>
-        2 emergency contacts will be notified with your live location once confirmed.
+        Registered emergency contacts and the nearest ER desk will be notified immediately.
       </Banner>
       <View style={{ height: 16 }} />
       <Button title="Proceed to Confirm" onPress={() => router.push('/(patient)/emergency/confirm')} />

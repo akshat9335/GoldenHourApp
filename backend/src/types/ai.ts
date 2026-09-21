@@ -77,6 +77,9 @@ export interface ImageAnalysisResult {
   explanation: string;
   disclaimer: string;
   source: AiSource;
+  isAuthentic?: boolean;
+  authenticityAssessment?: string;
+  authenticityScore?: number;
 }
 
 export interface FirstAidInput {

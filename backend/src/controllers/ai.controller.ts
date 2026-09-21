@@ -3,6 +3,7 @@ import { sendSuccess } from "../utils/response";
 import { analyzeEmergency } from "../services/ai/aiService";
 import { analyzeImage } from "../services/ai/imageAnalysisService";
 import { getFirstAid } from "../services/ai/firstAidService";
+import { validateEmergencyInput } from "../services/ai/aiValidator";
 
 export async function triage(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -27,6 +28,19 @@ export async function imageAnalysis(
 export async function firstAid(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     sendSuccess(res, getFirstAid(req.body), "First-aid guidance generated");
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function validateInput(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const validated = validateEmergencyInput(req.body);
+    sendSuccess(res, validated, "AI input validated successfully");
   } catch (error) {
     next(error);
   }

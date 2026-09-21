@@ -7,6 +7,8 @@ import { AppError } from "../utils/AppError";
 import {
   getAmbulanceRequests,
   getAmbulanceRequest,
+  dismissAmbulanceRequest,
+  clearAllAmbulanceRequests,
 } from "../services/ambulance/request.service";
 
 export async function registerDriverController(
@@ -149,10 +151,21 @@ export async function assignAmbulanceController(
       throw new AppError(401, "UNAUTHORIZED", "Authentication is required.");
     }
 
+    let ambulanceId = req.body?.ambulanceId;
+    if (!ambulanceId) {
+      try {
+        const driver = await getDriver(req.user.uid);
+        ambulanceId = (driver as any)?.ambulanceId || (driver as any)?.vehiclePlateNumber;
+      } catch {}
+      if (!ambulanceId) {
+        ambulanceId = `AMB-${req.user.uid.slice(-4).toUpperCase()}`;
+      }
+    }
+
     const assignmentId = await assignAmbulance(
-      req.body.ambulanceId,
+      ambulanceId,
       req.params.id,
-      req.body.patientId,
+      req.body?.patientId,
       req.user.uid,
     );
 
@@ -179,7 +192,7 @@ export async function getAmbulanceRequestsController(
       throw new AppError(401, "UNAUTHORIZED", "Authentication is required.");
     }
 
-    const requests = await getAmbulanceRequests();
+    const requests = await getAmbulanceRequests(req.user.uid);
 
     res.status(200).json({
       success: true,
@@ -207,6 +220,49 @@ export async function getAmbulanceRequestController(
       success: true,
       data: request,
       message: "Ambulance request fetched successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function dismissAmbulanceRequestController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHORIZED", "Authentication is required.");
+    }
+
+    await dismissAmbulanceRequest(req.params.id, req.user.uid);
+
+    res.status(200).json({
+      success: true,
+      message: "Ambulance request dismissed successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function clearAllAmbulanceRequestsController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHORIZED", "Authentication is required.");
+    }
+
+    const count = await clearAllAmbulanceRequests(req.user.uid);
+
+    res.status(200).json({
+      success: true,
+      data: { clearedCount: count },
+      message: `${count} ambulance request(s) cleared successfully.`,
     });
   } catch (error) {
     next(error);
