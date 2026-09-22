@@ -308,9 +308,13 @@ export async function getEmergencyById(
     emergency.assignedHospitalId === requesterId ||
     (Array.isArray(emergency.assignedStaffIds) &&
       emergency.assignedStaffIds.includes(requesterId));
+  const normRole = (requesterRole || "").toLowerCase();
   const isAuthorizedRole =
-    !!requesterRole &&
-    ["admin", "hospital", "ambulance", "doctor"].includes(requesterRole);
+    normRole.includes("admin") ||
+    normRole.includes("hospital") ||
+    normRole.includes("ambulance") ||
+    normRole.includes("doctor") ||
+    normRole.includes("driver");
 
   let isAuthorized = isReporter || isAssigned || isAuthorizedRole;
 

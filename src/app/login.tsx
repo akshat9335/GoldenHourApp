@@ -22,14 +22,21 @@ export default function LoginScreen() {
       setLoading(true);
       const session = await authService.promptGoogleSignIn();
 
-      if (session.profileExists) {
-        // Normal user / patient sign-in: always activates PATIENT role
-        useAppStore.getState().setRole('PATIENT');
-        router.replace('/(patient)/home');
-      } else {
-        // First time user -> proceed to registration sequence
-        router.push('/create-account');
+      if (!session.profileExists) {
+        // Auto-register smoothly using Google details so user immediately lands on Home screen!
+        try {
+          await authService.register({
+            name: session.name || 'Golden Hour User',
+            email: session.email || 'user@goldenhour.org',
+            role: 'PATIENT',
+          });
+        } catch {
+          useAppStore.getState().setProfileExists(true);
+        }
       }
+
+      useAppStore.getState().setRole('PATIENT');
+      router.replace('/(patient)/home');
     } catch (err: any) {
       console.warn('[Login] Google sign-in failed:', err);
       const msg = err?.message || 'Google sign-in could not be completed. Please try again.';

@@ -80,7 +80,7 @@ export default function AmbulanceRequestDetail() {
         err?.message ||
         'This emergency dispatch may have already been claimed by another ambulance unit.';
 
-      Alert.alert('Dispatch Already Claimed', errMsg, [
+      Alert.alert('Unable to Accept Dispatch', errMsg, [
         {
           text: 'Return to Dashboard',
           onPress: () => router.replace('/(ambulance)/dashboard'),

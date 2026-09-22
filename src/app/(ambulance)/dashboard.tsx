@@ -5,6 +5,7 @@ import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, LabelEyebrow, TopBar, Button } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import { watchDeviceLocation } from '@/services/deviceLocation';
 
 export default function AmbulanceDashboard() {
   const userProfile = useAppStore((s) => s.userProfile);
@@ -43,46 +44,28 @@ export default function AmbulanceDashboard() {
       ]);
 
       if (profRes) {
-        const p = profRes?.data || profRes;
-        if (p) useAppStore.getState().setUserProfile(p);
+        useAppStore.getState().setUserProfile(profRes);
       }
 
-      const tripsList = Array.isArray(tripsRes) ? tripsRes : (tripsRes?.data || []);
-      if (Array.isArray(tripsList)) {
-        setTripCount(tripsList.length);
-        const ongoing = tripsList.find(
-          (t: any) => t.status && t.status !== 'COMPLETED' && t.status !== 'CANCELLED'
+      if (Array.isArray(tripsRes)) {
+        setTripCount(tripsRes.length);
+        const inProgress = tripsRes.find(
+          (t: any) => t.status === 'ASSIGNED' || t.status === 'EN_ROUTE' || t.status === 'ARRIVED' || t.status === 'TRANSPORTING'
         );
-        if (ongoing) {
-          setActiveTrip(ongoing);
-          setActiveTripId(ongoing.id);
-          if (ongoing.emergencyId) setEmergencyId(ongoing.emergencyId);
+        if (inProgress) {
+          setActiveTrip(inProgress);
+          setActiveTripId(inProgress.id || inProgress._id);
+          setEmergencyId(inProgress.emergencyId || inProgress.id || inProgress._id);
         } else {
           setActiveTrip(null);
         }
       }
 
-      if (onDuty) {
-        const reqsList = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
-        if (Array.isArray(reqsList)) {
-          // Filter to only active/pending dispatches
-          const openList = reqsList.filter((r: any) => {
-            const st = String(r.status || '').toUpperCase();
-            return (
-              st !== 'COMPLETED' &&
-              st !== 'CANCELLED' &&
-              st !== 'RESOLVED' &&
-              st !== 'REJECTED'
-            );
-          });
-          openList.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-          setRequests(openList);
-        } else {
-          setRequests([]);
-        }
-      } else {
-        setRequests([]);
+      if (Array.isArray(reqsRes)) {
+        setRequests(reqsRes);
       }
+    } catch (err) {
+      console.warn('Dashboard data load error:', err);
     } finally {
       setLoadingRequests(false);
       setRefreshing(false);
@@ -91,15 +74,13 @@ export default function AmbulanceDashboard() {
 
   useEffect(() => {
     loadDashboardData();
-    const interval = setInterval(loadDashboardData, 4500);
-    return () => clearInterval(interval);
   }, [loadDashboardData]);
 
   useEffect(() => {
     api.ambulances.updateAvailability(onDuty ? 'AVAILABLE' : 'OFFLINE').catch(() => {});
   }, [onDuty]);
 
-  // Continuous live GPS streaming for Driver while On-Duty
+  // Dynamic Driver Live Telemetry Stream
   useEffect(() => {
     if (!onDuty) return;
 
@@ -108,54 +89,15 @@ export default function AmbulanceDashboard() {
 
     const startDriverTracking = async () => {
       try {
-        let ExpoLoc: any = null;
-        try {
-          ExpoLoc = require('expo-location');
-        } catch {}
-        if (!ExpoLoc) return;
-
-        const { status } = await ExpoLoc.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-
-        // Immediate first fix
-        try {
-          const fresh = await ExpoLoc.getCurrentPositionAsync({ accuracy: ExpoLoc.Accuracy.Balanced });
-          if (fresh?.coords && isMounted) {
-            const coords = {
-              latitude: Number(fresh.coords.latitude.toFixed(6)),
-              longitude: Number(fresh.coords.longitude.toFixed(6)),
-            };
-            useAppStore.getState().setLastKnownLocation(coords);
-            api.location.updateLocation({
-              lat: coords.latitude,
-              lng: coords.longitude,
-              role: 'AMBULANCE_DRIVER',
-            }).catch(() => {});
-          }
-        } catch {}
-
-        // Continuous stream
-        sub = await ExpoLoc.watchPositionAsync(
-          {
-            accuracy: ExpoLoc.Accuracy.Balanced,
-            timeInterval: 3500,
-            distanceInterval: 5,
-          },
-          (pos: any) => {
-            if (pos?.coords && isMounted) {
-              const coords = {
-                latitude: Number(pos.coords.latitude.toFixed(6)),
-                longitude: Number(pos.coords.longitude.toFixed(6)),
-              };
-              useAppStore.getState().setLastKnownLocation(coords);
-              api.location.updateLocation({
-                lat: coords.latitude,
-                lng: coords.longitude,
-                role: 'AMBULANCE_DRIVER',
-              }).catch(() => {});
-            }
-          }
-        );
+        sub = await watchDeviceLocation((coords) => {
+          if (!isMounted) return;
+          useAppStore.getState().setLastKnownLocation(coords);
+          api.location.updateLocation({
+            lat: coords.latitude,
+            lng: coords.longitude,
+            role: 'AMBULANCE_DRIVER',
+          }).catch(() => {});
+        });
       } catch {}
     };
 

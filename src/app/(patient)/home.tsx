@@ -1,11 +1,27 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, SosHold, PatientNav, Divider } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
-import { initDeviceLocation, setManualLocation } from '@/services/deviceLocation';
+import {
+  initDeviceLocation,
+  setManualLocation,
+  PRAYAGRAJ_HUBS,
+  searchAddressGeocode,
+  refreshDeviceLocation,
+} from '@/services/deviceLocation';
 
 export default function PatientHome() {
   const voiceSosEnabled = useAppStore((s) => s.voiceSosEnabled);
@@ -14,6 +30,12 @@ export default function PatientHome() {
   const setUserProfile = useAppStore((s) => s.setUserProfile);
   const locationAddress = useAppStore((s) => s.locationAddress);
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ name: string; latitude: number; longitude: number }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [calibrating, setCalibrating] = useState(false);
 
   useEffect(() => {
     // Dynamically request OS location permission and acquire live satellite GPS from user's phone hardware
@@ -43,6 +65,39 @@ export default function PatientHome() {
     router.push('/(patient)/emergency/select-type');
   };
 
+  const handleSelectHub = (hub: { name: string; latitude: number; longitude: number }) => {
+    setManualLocation({ latitude: hub.latitude, longitude: hub.longitude }, hub.name);
+    setPickerVisible(false);
+    setSearchQuery('');
+    setSearchResults([]);
+
+    const user = useAppStore.getState().userProfile;
+    const role = user?.role || (user?.roles && user.roles[0]) || 'patient';
+    api.location.updateLocation({ lat: hub.latitude, lng: hub.longitude, role }).catch(() => {});
+  };
+
+  const handleSearch = async (text: string) => {
+    setSearchQuery(text);
+    if (!text || text.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const results = await searchAddressGeocode(text);
+      setSearchResults(results);
+    } catch {} finally {
+      setSearching(false);
+    }
+  };
+
+  const handleCalibrateGps = async () => {
+    setCalibrating(true);
+    await refreshDeviceLocation();
+    setCalibrating(false);
+    setPickerVisible(false);
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Screen padBottom={95}>
@@ -69,24 +124,127 @@ export default function PatientHome() {
           </View>
         </View>
 
-        <Card style={styles.locationCard}>
-          <Icon name="gps" color={lastKnownLocation ? colors.success : colors.amber} />
-          <View style={{ flex: 1, marginHorizontal: 8 }}>
-            <Text style={styles.locTitle}>
-              {lastKnownLocation ? '📍 Live GPS Active' : '🛰️ Acquiring GPS...'}
-            </Text>
-            <Text style={styles.locSub} numberOfLines={2}>
-              {locationAddress
-                ? `${locationAddress}${lastKnownLocation ? ` (${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E)` : ''}`
-                : (lastKnownLocation
-                    ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E (Live GPS)`
-                    : 'Locking satellite coordinates...')}
-            </Text>
+        {/* Swiggy/Zomato style Interactive Location Bar */}
+        <TouchableOpacity onPress={() => setPickerVisible(true)} activeOpacity={0.8}>
+          <Card style={styles.locationCard}>
+            <Icon name="gps" color={lastKnownLocation ? colors.success : colors.amber} />
+            <View style={{ flex: 1, marginHorizontal: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.locTitle}>
+                  {lastKnownLocation ? '📍 Current Incident Area' : '🛰️ Acquiring GPS...'}
+                </Text>
+                <Text style={{ fontSize: 10, color: colors.red, fontWeight: '700' }}>[Change ▾]</Text>
+              </View>
+              <Text style={styles.locSub} numberOfLines={2}>
+                {locationAddress
+                  ? `${locationAddress}${lastKnownLocation ? ` (${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E)` : ''}`
+                  : (lastKnownLocation
+                      ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E`
+                      : 'Tap to select or detect area...')}
+              </Text>
+            </View>
+            <Pill color={lastKnownLocation ? 'success' : 'amber'}>
+              {lastKnownLocation ? 'LOCKED' : 'DETECTING'}
+            </Pill>
+          </Card>
+        </TouchableOpacity>
+
+        {/* Area Selection / Search Modal (Swiggy / Zomato style) */}
+        <Modal visible={pickerVisible} animationType="slide" transparent={true}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Select Incident Location</Text>
+                  <Text style={styles.modalSub}>Choose your area or search any landmark</Text>
+                </View>
+                <TouchableOpacity onPress={() => setPickerVisible(false)} style={styles.modalCloseBtn}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Instant GPS Detect Button */}
+              <TouchableOpacity
+                style={styles.gpsDetectBtn}
+                onPress={handleCalibrateGps}
+                disabled={calibrating}
+                activeOpacity={0.8}
+              >
+                {calibrating ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Text style={{ fontSize: 15 }}>🛰️</Text>
+                    <Text style={styles.gpsDetectText}>Detect Current Device GPS</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Search Input */}
+              <View style={styles.searchBox}>
+                <Text style={{ fontSize: 16 }}>🔍</Text>
+                <TextInput
+                  placeholder="Search area (e.g., Allahpur, Katra, Civil Lines)..."
+                  value={searchQuery}
+                  onChangeText={handleSearch}
+                  style={styles.searchInput}
+                  placeholderTextColor={colors.inkFaint}
+                />
+                {searching ? <ActivityIndicator size="small" color={colors.red} /> : null}
+              </View>
+
+              {/* Search Autocomplete Results */}
+              {searchResults.length > 0 && (
+                <View style={styles.searchResultsWrap}>
+                  <Text style={styles.sectionHeading}>SEARCH RESULTS</Text>
+                  {searchResults.map((item, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.resultRow}
+                      onPress={() => handleSelectHub(item)}
+                    >
+                      <Icon name="pin" size={16} color={colors.red} />
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={styles.resultTitle}>{item.name}</Text>
+                        <Text style={styles.resultCoords}>
+                          {item.latitude.toFixed(4)}° N, {item.longitude.toFixed(4)}° E
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {/* Popular Neighborhood Hubs */}
+              <Text style={styles.sectionHeading}>POPULAR HUBS</Text>
+              <ScrollView style={{ maxHeight: 240 }} showsVerticalScrollIndicator={false}>
+                <View style={styles.hubGrid}>
+                  {PRAYAGRAJ_HUBS.map((hub) => {
+                    const isSelected = locationAddress === hub.name;
+                    return (
+                      <TouchableOpacity
+                        key={hub.name}
+                        style={[styles.hubCard, isSelected && styles.hubCardSelected]}
+                        onPress={() => handleSelectHub(hub)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Icon name="pin" size={14} color={isSelected ? '#fff' : colors.red} />
+                          <Text style={[styles.hubName, isSelected && styles.hubNameSelected]}>
+                            {hub.name.replace(', Prayagraj', '')}
+                          </Text>
+                        </View>
+                        <Text style={[styles.hubCoords, isSelected && styles.hubCoordsSelected]}>
+                          {hub.latitude.toFixed(3)}°N, {hub.longitude.toFixed(3)}°E
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
           </View>
-          <Pill color={lastKnownLocation ? 'success' : 'amber'}>
-            {lastKnownLocation ? 'GPS LOCKED' : 'LOCKING...'}
-          </Pill>
-        </Card>
+        </Modal>
 
         <View style={styles.sosZone}>
           <SosHold
@@ -164,4 +322,27 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 10.5, fontWeight: '700', color: colors.inkFaint, letterSpacing: 1, marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
   rowLabel: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.ink },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: colors.ink },
+  modalSub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
+  modalCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
+  modalCloseText: { fontSize: 13, fontWeight: '700', color: colors.inkSoft },
+  gpsDetectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#10B981', paddingVertical: 12, borderRadius: 12, marginBottom: 12 },
+  gpsDetectText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 },
+  searchInput: { flex: 1, fontSize: 13, color: colors.ink, padding: 0 },
+  sectionHeading: { fontSize: 10.5, fontWeight: '800', color: colors.inkFaint, letterSpacing: 0.8, marginBottom: 10, marginTop: 4 },
+  searchResultsWrap: { marginBottom: 14 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  resultTitle: { fontSize: 12.5, fontWeight: '700', color: colors.ink },
+  resultCoords: { fontSize: 10, color: colors.inkFaint, marginTop: 1 },
+  hubGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 16 },
+  hubCard: { width: '48%', backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 10, gap: 4 },
+  hubCardSelected: { backgroundColor: colors.red, borderColor: colors.red },
+  hubName: { fontSize: 12, fontWeight: '700', color: colors.ink },
+  hubNameSelected: { color: '#fff' },
+  hubCoords: { fontSize: 9.5, color: colors.inkFaint },
+  hubCoordsSelected: { color: 'rgba(255,255,255,0.8)' },
 });

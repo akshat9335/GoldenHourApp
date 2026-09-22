@@ -6,20 +6,9 @@ import Constants from 'expo-constants';
  */
 
 function resolveApiBaseUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
-  }
-  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
-  if (hostUri) {
-    const ip = hostUri.split(':')[0];
-    if (ip) {
-      return `http://${ip}:5000`;
-    }
-  }
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-  return 'http://192.168.1.5:5000';
+  // Always use HTTPS tunnel to prevent Android "CLEARTEXT communication not permitted" security errors
+  // and ensure seamless access across local Wi-Fi, hotspot, and mobile networks.
+  return process.env.EXPO_PUBLIC_API_URL || 'https://goldenhour-live.loca.lt';
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
@@ -52,6 +41,8 @@ async function request<T = any>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'bypass-tunnel-reminder': 'true',
+    'User-Agent': 'GoldenHourApp',
     ...(options.headers as Record<string, string>),
   };
 

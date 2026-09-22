@@ -7,6 +7,7 @@ import { openExternalMapPreview, openExternalVoiceNavigation } from '@/component
 
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import { watchDeviceLocation } from '@/services/deviceLocation';
 
 export default function PickedUp() {
   const activeTripId = useAppStore((s) => s.activeTripId);
@@ -45,29 +46,23 @@ export default function PickedUp() {
   // Live ambulance driver GPS tracking stream to hospital
   useEffect(() => {
     let sub: any = null;
-    try {
-      const ExpoLocation = require('expo-location');
-      ExpoLocation.watchPositionAsync(
-        { accuracy: ExpoLocation.Accuracy.High, timeInterval: 2500, distanceInterval: 5 },
-        (pos: any) => {
-          if (pos?.coords) {
-            const loc = {
-              latitude: Number(pos.coords.latitude.toFixed(6)),
-              longitude: Number(pos.coords.longitude.toFixed(6)),
-            };
-            useAppStore.getState().setLastKnownLocation(loc);
-            if (emergencyId) {
-              api.emergencies.update(emergencyId, {
-                ambulanceLocation: loc,
-              }).catch(() => {});
-            }
-          }
-        }
-      ).then((s: any) => { sub = s; }).catch(() => {});
-    } catch {}
+    let isMounted = true;
+
+    watchDeviceLocation((loc) => {
+      if (!isMounted) return;
+      useAppStore.getState().setLastKnownLocation(loc);
+      if (emergencyId) {
+        api.emergencies.update(emergencyId, {
+          ambulanceLocation: loc,
+        }).catch(() => {});
+      }
+    }).then((s) => {
+      sub = s;
+    }).catch(() => {});
 
     return () => {
-      if (sub && sub.remove) sub.remove();
+      isMounted = false;
+      if (sub?.remove) sub.remove();
     };
   }, [emergencyId]);
 

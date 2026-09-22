@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { NativeModules, PermissionsAndroid, Platform, TurboModuleRegistry } from 'react-native';
 import type * as LocationType from 'expo-location';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from './api';
@@ -9,13 +9,30 @@ export interface Coordinates {
   longitude: number;
 }
 
-// Safely obtain native ExpoLocation module without crashing on custom dev-client builds
+// Safely check if native ExpoLocation module exists in current APK binary before requiring
+function isExpoLocationAvailable(): boolean {
+  try {
+    if (typeof (globalThis as any).expo?.modules?.ExpoLocation !== 'undefined') return true;
+    if (NativeModules?.ExpoLocation) return true;
+    if (NativeModules?.NativeUnimoduleProxy?.viewManagersMetadata?.ExpoLocation) return true;
+    if (NativeModules?.NativeUnimoduleProxy?.exportedMethods?.ExpoLocation) return true;
+    const turbo = TurboModuleRegistry?.get?.('ExpoLocation');
+    if (turbo) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 let Location: typeof LocationType | null = null;
-try {
-  Location = require('expo-location');
-} catch (_err) {
-  Location = null;
-  console.warn('[Location] Native ExpoLocation module not in current APK binary. Running high-speed network/IP and Android Core telemetry.');
+if (isExpoLocationAvailable()) {
+  try {
+    Location = require('expo-location');
+  } catch (_err) {
+    Location = null;
+  }
+} else {
+  console.log('[Location] Running on baseline APK without native ExpoLocation binary. Falling back to IP/network and manual location selection.');
 }
 
 const STORAGE_KEY = '@gh_last_known_gps';
@@ -496,4 +513,50 @@ export async function refreshDeviceLocation(): Promise<Coordinates | null> {
   }
 
   return store.lastKnownLocation;
+}
+
+/**
+ * Continuous GPS tracker for Ambulance drivers and active tracking.
+ * Automatically uses native Location.watchPositionAsync if binary has it, or smart interval fallback.
+ */
+export async function watchDeviceLocation(
+  callback: (coords: Coordinates) => void
+): Promise<{ remove: () => void } | null> {
+  if (!Location) {
+    const coords = useAppStore.getState().lastKnownLocation;
+    if (coords) callback(coords);
+    const interval = setInterval(async () => {
+      const fresh = await getFastLocation();
+      if (fresh) callback(fresh);
+    }, 4000);
+    return {
+      remove: () => clearInterval(interval),
+    };
+  }
+
+  try {
+    const hasPerm = await ensureLocationPermission();
+    if (!hasPerm) return null;
+
+    const sub = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 3000,
+        distanceInterval: 5,
+      },
+      (loc) => {
+        if (loc?.coords) {
+          const coords: Coordinates = {
+            latitude: Number(loc.coords.latitude.toFixed(6)),
+            longitude: Number(loc.coords.longitude.toFixed(6)),
+          };
+          callback(coords);
+        }
+      }
+    );
+    return sub;
+  } catch (err) {
+    console.warn('[Location] watchDeviceLocation error:', err);
+    return null;
+  }
 }
