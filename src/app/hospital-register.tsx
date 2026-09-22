@@ -5,6 +5,7 @@ import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Input, InputGroup, Banner, Icon, Chip, Card } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { authService } from '@/services/auth';
+import { acquireFreshLocation } from '@/services/deviceLocation';
 
 const HOSPITAL_TYPES = [
   'Multi-Specialty Hospital',
@@ -75,6 +76,7 @@ export default function HospitalRegister() {
   const executeRegistration = async (targetEmail: string) => {
     const parsedTotalBeds = parseInt(totalBeds, 10) || 30;
     const parsedIcuBeds = parseInt(icuBeds, 10) || 6;
+    const currentLoc = await acquireFreshLocation(2500);
 
     await authService.register({
       role: 'HOSPITAL',
@@ -92,6 +94,9 @@ export default function HospitalRegister() {
       availableBeds: parsedTotalBeds,
       icuBeds: parsedIcuBeds,
       availableIcuBeds: parsedIcuBeds,
+      location: currentLoc,
+      latitude: currentLoc.latitude,
+      longitude: currentLoc.longitude,
     });
 
     Alert.alert(

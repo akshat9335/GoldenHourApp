@@ -29,6 +29,7 @@ export interface CreateEmergencyInput {
   voiceTranscript?: string;
   imageUrl?: string;
   location: EmergencyLocation;
+  locationAddress?: string | null;
   severity?: string | null;
   aiResult?: unknown;
 }
@@ -42,6 +43,7 @@ export interface Emergency {
   voiceTranscript?: string | null;
   imageUrl?: string | null;
   location: EmergencyLocation;
+  locationAddress?: string | null;
   status: EmergencyStatus;
   severity?: string | null;
   aiResult?: unknown;
@@ -157,6 +159,7 @@ export async function createEmergency(
     voiceTranscript: input.voiceTranscript?.trim() || null,
     imageUrl: input.imageUrl?.trim() || null,
     location: input.location,
+    locationAddress: input.locationAddress?.trim() || null,
     status: "REPORTED",
     severity: input.severity ? input.severity.trim().toUpperCase() : null,
     aiResult: input.aiResult || null,
@@ -240,6 +243,7 @@ export async function createEmergency(
             imageUrl: emergency.imageUrl || null,
             aiResult: emergency.aiResult || null,
             location: emergency.location,
+            locationAddress: emergency.locationAddress || null,
             status: "NEW",
             eta: `${targetHospital.etaMinutes || 8} min`,
             distanceKm: targetHospital.distanceKm || 2.5,

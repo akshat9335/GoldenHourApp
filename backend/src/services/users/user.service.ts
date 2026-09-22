@@ -346,6 +346,11 @@ export async function registerUserProfile(
       } catch {}
     }
   } else if (requestedRole === "HOSPITAL") {
+    const rawLoc = (input as any).location;
+    const hospLat = typeof (input as any).latitude === 'number' ? (input as any).latitude : rawLoc?.latitude;
+    const hospLng = typeof (input as any).longitude === 'number' ? (input as any).longitude : rawLoc?.longitude;
+    const finalLoc = (hospLat && hospLng) ? { latitude: hospLat, longitude: hospLng } : null;
+
     const hospitalRecord = {
       id: uid,
       ownerUid: uid,
@@ -359,6 +364,9 @@ export async function registerUserProfile(
       icuBeds: input.icuBeds || 5,
       emergencyCapability: input.emergencyCapability || [],
       facilities: input.facilities || [],
+      location: finalLoc,
+      latitude: hospLat || null,
+      longitude: hospLng || null,
       createdAt: now,
       updatedAt: now,
     };
@@ -369,6 +377,11 @@ export async function registerUserProfile(
       } catch {}
     }
   } else if (requestedRole === "AMBULANCE_DRIVER") {
+    const rawDriverLoc = (input as any).location;
+    const driverLat = typeof (input as any).latitude === 'number' ? (input as any).latitude : rawDriverLoc?.latitude;
+    const driverLng = typeof (input as any).longitude === 'number' ? (input as any).longitude : rawDriverLoc?.longitude;
+    const driverFinalLoc = (driverLat && driverLng) ? { latitude: driverLat, longitude: driverLng } : null;
+
     const driverRecord = {
       id: uid,
       uid,
@@ -384,6 +397,9 @@ export async function registerUserProfile(
       hospitalName: profile.hospitalName || "Independent Fleet",
       verificationStatus: "PENDING" as const,
       availability: "AVAILABLE" as const,
+      location: driverFinalLoc,
+      latitude: driverLat || null,
+      longitude: driverLng || null,
       createdAt: now,
       updatedAt: now,
     };

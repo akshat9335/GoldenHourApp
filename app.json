@@ -51,7 +51,13 @@
         }
       ],
       "expo-image",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Golden Hour to access this device's live location to dispatch emergency ambulances and connect nearby hospitals."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

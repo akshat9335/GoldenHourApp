@@ -95,8 +95,10 @@ export default function AmbulanceRequestDetail() {
   const pillColor = (sev === 'CRITICAL' || sev === 'HIGH' ? 'red' : 'amber') as 'red' | 'amber';
   const incidentName = detail?.incidentType || 'Emergency Dispatch Alert';
   const loc = detail?.location;
-  const locStr = loc
-    ? `${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)}`
+  const locStr = detail?.locationAddress
+    ? `${detail.locationAddress} (${Number(loc?.latitude).toFixed(4)}, ${Number(loc?.longitude).toFixed(4)})`
+    : loc
+    ? `${Number(loc.latitude).toFixed(4)}°N, ${Number(loc.longitude).toFixed(4)}°E`
     : 'GPS Shared';
 
   return (

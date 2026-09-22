@@ -44,10 +44,14 @@ export default function Active() {
   const setAmbStatus = useAppStore((s) => s.setAmbStatus);
   const emergencyId = useAppStore((s) => s.emergencyId);
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+  const locationAddress = useAppStore((s) => s.locationAddress);
   const [emergency, setEmergency] = useState<any | null>(null);
   const step = AMB_STEPS[ambStatus] || AMB_STEPS[0];
   const elapsed = 2 + ambStatus * 3;
   const isLast = ambStatus >= AMB_STEPS.length - 1;
+
+  const pickupLat = emergency?.location?.latitude ?? lastKnownLocation?.latitude;
+  const pickupLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude;
 
   useEffect(() => {
     // Stop polling if no emergencyId or if already completed
@@ -145,6 +149,25 @@ export default function Active() {
       </Card>
       <Card style={styles.stepperCard}>
         <Stepper steps={AMB_STEPS} currentIndex={ambStatus} />
+      </Card>
+
+      {/* Real Emergency Incident Pickup Location Card */}
+      <Card style={styles.incidentLocCard}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Icon name="pin" size={15} color={colors.red} />
+            <Text style={styles.incidentLocLabel}>INCIDENT PICKUP LOCATION</Text>
+          </View>
+          <Pill color="success">VERIFIED GPS</Pill>
+        </View>
+        <Text style={styles.incidentLocText} numberOfLines={2}>
+          {emergency?.locationAddress || locationAddress || (pickupLat && pickupLng ? `${pickupLat.toFixed(4)}° N, ${pickupLng.toFixed(4)}° E` : 'Live GPS Corridor')}
+        </Text>
+        {pickupLat && pickupLng ? (
+          <Text style={styles.incidentLocCoords}>
+            📍 Hardware GPS: {pickupLat.toFixed(4)}° N, {pickupLng.toFixed(4)}° E
+          </Text>
+        ) : null}
       </Card>
 
       {/* Real Assigned Ambulance & Hospital Cards */}
@@ -315,5 +338,31 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '800',
     fontSize: 12.5,
+  },
+  incidentLocCard: {
+    padding: 12,
+    marginBottom: 14,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  incidentLocLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    color: colors.red,
+  },
+  incidentLocText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.ink,
+    marginTop: 4,
+    lineHeight: 17,
+  },
+  incidentLocCoords: {
+    fontSize: 10.5,
+    color: colors.inkFaint,
+    marginTop: 3,
   },
 });

@@ -13,6 +13,9 @@ interface HospitalRequestItem {
   eta: string;
   color: 'red' | 'amber';
   status: string;
+  incidentType?: string;
+  locationAddress?: string;
+  location?: { latitude: number; longitude: number };
   createdAt?: string;
 }
 
@@ -44,6 +47,9 @@ export default function HospitalRequests() {
             eta: d.eta || '8 min',
             color: (sev === 'CRITICAL' || sev === 'HIGH' ? 'red' : 'amber') as 'red' | 'amber',
             status: d.status || 'NEW',
+            incidentType: d.incidentType || 'Emergency',
+            locationAddress: d.locationAddress || null,
+            location: d.location || null,
             createdAt: d.createdAt,
           };
         });
@@ -173,7 +179,10 @@ export default function HospitalRequests() {
                     </Pressable>
                   </View>
                 </View>
-                <Text style={styles.name}>{r.patientName}</Text>
+                <Text style={styles.name}>{r.patientName} · {r.incidentType || 'Emergency'}</Text>
+                <Text style={styles.locSub} numberOfLines={1}>
+                  📍 {r.locationAddress || (r.location ? `${r.location.latitude?.toFixed(4)}°N, ${r.location.longitude?.toFixed(4)}°E` : 'GPS Shared')}
+                </Text>
               </Pressable>
             </Card>
           ))}
@@ -195,6 +204,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between' },
   eta: { fontSize: 11, color: colors.inkFaint },
   name: { fontWeight: '700', fontSize: 13, marginTop: 8, color: colors.ink },
+  locSub: { fontSize: 11.5, color: colors.inkSoft, marginTop: 3 },
   loadingBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 20, justifyContent: 'center' },
   loadingText: { fontSize: 12, color: colors.inkFaint },
   emptyCard: { padding: 32, alignItems: 'center', justifyContent: 'center', marginTop: 24 },

@@ -5,6 +5,7 @@ import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, HospitalNav, HTitle, LabelEyebrow, openExternalNavigation } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import { acquireFreshLocation } from '@/services/deviceLocation';
 
 export default function HospitalDashboard() {
   const userProfile = useAppStore((s) => s.userProfile);
@@ -38,13 +39,16 @@ export default function HospitalDashboard() {
         if (hosp) {
           setHospitalName(hosp.endsWith('— ER') ? hosp : `${hosp} — ER`);
         }
-        const lastLoc = useAppStore.getState().lastKnownLocation;
-        if (lastLoc && (!data?.location || !data?.latitude)) {
-          api.hospitals.updateProfile({
-            location: lastLoc,
-            latitude: lastLoc.latitude,
-            longitude: lastLoc.longitude,
-          }).catch(() => {});
+        const hasValidLoc = data?.location && typeof data.location.latitude === 'number' && data.location.latitude !== 0;
+        if (!hasValidLoc) {
+          const fresh = await acquireFreshLocation(2500);
+          if (fresh && fresh.latitude !== 28.6139) {
+            api.hospitals.updateProfile({
+              location: fresh,
+              latitude: fresh.latitude,
+              longitude: fresh.longitude,
+            }).catch(() => {});
+          }
         }
       }
 
@@ -169,8 +173,8 @@ export default function HospitalDashboard() {
               <Text style={styles.incomingName}>
                 {pendingEmergency.patientName || 'Emergency Patient'} · {pendingEmergency.incidentType || 'Trauma Alert'}
               </Text>
-              <Text style={styles.incomingSub}>
-                Tap to review patient triage and accept/reject emergency dispatch
+              <Text style={styles.incomingSub} numberOfLines={2}>
+                📍 {pendingEmergency.locationAddress || (pendingEmergency.location ? `${pendingEmergency.location.latitude?.toFixed(4)}°N, ${pendingEmergency.location.longitude?.toFixed(4)}°E` : 'Live Incident Location')} · Tap to review & dispatch
               </Text>
             </Card>
           ) : (

@@ -18,6 +18,7 @@ interface LiveEmergencyData {
     latitude: number;
     longitude: number;
   };
+  locationAddress?: string;
   reporterId: string;
   assignedHospitalId?: string;
   assignedHospitalName?: string;
@@ -196,8 +197,8 @@ export default function LiveMap() {
                 <Text style={styles.coordValue}>{pLat.toFixed(4)}° N, {pLng.toFixed(4)}° E</Text>
               </View>
 
-              {locationAddress ? (
-                <Text style={styles.locAddress}>Area: {locationAddress}</Text>
+              {emergency?.locationAddress || locationAddress ? (
+                <Text style={styles.locAddress}>Area: {emergency?.locationAddress || locationAddress}</Text>
               ) : null}
 
               {ambLat && ambLng ? (

@@ -45,9 +45,36 @@ export class LocationService {
       try {
         await firestore.collection("locations").doc(data.userId).set(stored, { merge: true });
 
-        // If user is an ambulance driver on an active trip, stream live ambulanceLocation to emergency
+        // If user is an ambulance driver, sync to drivers, ambulances, and active emergencies
         const userRole = String(data.role || "").toUpperCase();
+        const nowIso = new Date().toISOString();
+        const liveLoc = { latitude: stored.lat, longitude: stored.lng };
+
         if (userRole.includes("DRIVER") || userRole.includes("AMBULANCE")) {
+          // 1. Update driver's own profile doc
+          await firestore.collection("drivers").doc(data.userId).set({
+            location: liveLoc,
+            latitude: stored.lat,
+            longitude: stored.lng,
+            updatedAt: nowIso,
+          }, { merge: true });
+
+          // 2. Update assigned ambulance if linked
+          try {
+            const driverSnap = await firestore.collection("drivers").doc(data.userId).get();
+            const driverData = driverSnap.data();
+            const ambId = driverData?.ambulanceId || driverData?.vehiclePlateNumber;
+            if (ambId) {
+              await firestore.collection("ambulances").doc(ambId).set({
+                location: liveLoc,
+                latitude: stored.lat,
+                longitude: stored.lng,
+                updatedAt: nowIso,
+              }, { merge: true });
+            }
+          } catch {}
+
+          // 3. Update active trip stream to emergency
           const tripSnap = await firestore
             .collection("ambulanceTrips")
             .where("driverId", "==", data.userId)
@@ -55,25 +82,46 @@ export class LocationService {
             .limit(1)
             .get();
 
+          let targetEmergencyId: string | null = null;
           if (!tripSnap.empty) {
-            const trip = tripSnap.docs[0].data();
-            if (trip?.emergencyId) {
-              const ambLoc = { latitude: stored.lat, longitude: stored.lng };
-              const nowIso = new Date().toISOString();
-              await firestore.collection("emergencies").doc(trip.emergencyId).set({
-                ambulanceLocation: ambLoc,
-                updatedAt: nowIso,
-              }, { merge: true });
+            targetEmergencyId = tripSnap.docs[0].data()?.emergencyId || null;
+          }
 
-              const hospSnap = await firestore
-                .collection("hospitalEmergencyRequests")
-                .where("emergencyId", "==", trip.emergencyId)
-                .get();
-              for (const hDoc of hospSnap.docs) {
-                await hDoc.ref.set({ ambulanceLocation: ambLoc, updatedAt: nowIso }, { merge: true });
-              }
+          if (!targetEmergencyId) {
+            // Check direct emergency assignment
+            const emgSnap = await firestore
+              .collection("emergencies")
+              .where("assignedDriverId", "==", data.userId)
+              .where("status", "in", ["ASSIGNED", "EN_ROUTE_TO_PATIENT", "ARRIVING", "AT_PATIENT", "PATIENT_ONBOARD", "EN_ROUTE_TO_HOSPITAL"])
+              .limit(1)
+              .get();
+            if (!emgSnap.empty) {
+              targetEmergencyId = emgSnap.docs[0].id;
             }
           }
+
+          if (targetEmergencyId) {
+            await firestore.collection("emergencies").doc(targetEmergencyId).set({
+              ambulanceLocation: liveLoc,
+              updatedAt: nowIso,
+            }, { merge: true });
+
+            const hospSnap = await firestore
+              .collection("hospitalEmergencyRequests")
+              .where("emergencyId", "==", targetEmergencyId)
+              .get();
+            for (const hDoc of hospSnap.docs) {
+              await hDoc.ref.set({ ambulanceLocation: liveLoc, updatedAt: nowIso }, { merge: true });
+            }
+          }
+        } else if (userRole.includes("HOSPITAL")) {
+          // Sync fixed coordinates to hospital facility document
+          await firestore.collection("hospitals").doc(data.userId).set({
+            location: liveLoc,
+            latitude: stored.lat,
+            longitude: stored.lng,
+            updatedAt: nowIso,
+          }, { merge: true });
         }
       } catch (err) {
         // eslint-disable-next-line no-console

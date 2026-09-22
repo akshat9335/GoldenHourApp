@@ -125,7 +125,11 @@ export default function HospitalRequestDetail() {
   const patientCrisisId = detail?.goldenHourId || detail?.crisisId || goldenHourId || 'Pending assignment';
   const patientTrustScore = detail?.trustScore != null ? `${detail.trustScore} / 100` : (trustScore != null ? `${trustScore} / 100` : '100 / 100');
   const incidentType = detail?.incidentType || 'Medical Emergency';
-  const incidentLocation = detail?.location ? `${detail.location.latitude.toFixed(4)}, ${detail.location.longitude.toFixed(4)}` : 'Live GPS location';
+  const incidentLocation = detail?.locationAddress
+    ? `${detail.locationAddress} (${detail.location?.latitude?.toFixed(4)}, ${detail.location?.longitude?.toFixed(4)})`
+    : detail?.location
+    ? `${detail.location.latitude.toFixed(4)}, ${detail.location.longitude.toFixed(4)}`
+    : 'Live GPS location';
   const incidentTime = detail?.createdAt ? new Date(detail.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now';
   const patientDescription = detail?.description || null;
   const photoUrl = detail?.imageUrl || null;

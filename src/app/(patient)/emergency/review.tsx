@@ -11,18 +11,33 @@ export default function Review() {
   const userProfile = useAppStore((s) => s.userProfile);
   const aiTriageResult = useAppStore((s) => s.aiTriageResult);
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+  const locationAddress = useAppStore((s) => s.locationAddress);
 
   const displayName = userProfile?.name || 'Emergency Caller';
   const hospitalName =
     aiTriageResult?.recommendedHospital || 'Nearest Verified Trauma ER';
   const locDisplay = lastKnownLocation
-    ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E (Live GPS)`
-    : 'Live GPS Corridor (Active)';
+    ? (locationAddress
+        ? `${locationAddress} (${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E)`
+        : `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E (Live GPS)`)
+    : 'Hardware GPS Corroboration Active';
 
   const rows: Array<[string, React.ReactNode]> = [
     ['Emergency Type', <Text style={styles.bold}>{selectedType || 'Trauma Emergency'}</Text>],
     ['AI Severity', <Pill color={severityPillColor(aiSeverity)}>{severityLabel(aiSeverity)}</Pill>],
-    ['Location', <Text style={styles.bold}>{locDisplay}</Text>],
+    [
+      'Location',
+      <View style={{ alignItems: 'flex-end', maxWidth: '65%' }}>
+        <Text style={[styles.bold, { textAlign: 'right' }]}>
+          📍 {locationAddress || (lastKnownLocation ? 'Live Device GPS' : 'Locking...')}
+        </Text>
+        {lastKnownLocation ? (
+          <Text style={{ fontSize: 10.5, color: colors.inkFaint, marginTop: 2, textAlign: 'right' }}>
+            {lastKnownLocation.latitude.toFixed(4)}° N, {lastKnownLocation.longitude.toFixed(4)}° E
+          </Text>
+        ) : null}
+      </View>,
+    ],
     ['Ambulance', <Text style={styles.bold}>ALS Unit · Priority Dispatch</Text>],
     ['Hospital ER', <Text style={styles.bold}>{hospitalName}</Text>],
   ];

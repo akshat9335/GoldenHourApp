@@ -99,6 +99,74 @@ export default function AmbulanceDashboard() {
     api.ambulances.updateAvailability(onDuty ? 'AVAILABLE' : 'OFFLINE').catch(() => {});
   }, [onDuty]);
 
+  // Continuous live GPS streaming for Driver while On-Duty
+  useEffect(() => {
+    if (!onDuty) return;
+
+    let sub: any = null;
+    let isMounted = true;
+
+    const startDriverTracking = async () => {
+      try {
+        let ExpoLoc: any = null;
+        try {
+          ExpoLoc = require('expo-location');
+        } catch {}
+        if (!ExpoLoc) return;
+
+        const { status } = await ExpoLoc.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+
+        // Immediate first fix
+        try {
+          const fresh = await ExpoLoc.getCurrentPositionAsync({ accuracy: ExpoLoc.Accuracy.Balanced });
+          if (fresh?.coords && isMounted) {
+            const coords = {
+              latitude: Number(fresh.coords.latitude.toFixed(6)),
+              longitude: Number(fresh.coords.longitude.toFixed(6)),
+            };
+            useAppStore.getState().setLastKnownLocation(coords);
+            api.location.updateLocation({
+              lat: coords.latitude,
+              lng: coords.longitude,
+              role: 'AMBULANCE_DRIVER',
+            }).catch(() => {});
+          }
+        } catch {}
+
+        // Continuous stream
+        sub = await ExpoLoc.watchPositionAsync(
+          {
+            accuracy: ExpoLoc.Accuracy.Balanced,
+            timeInterval: 3500,
+            distanceInterval: 5,
+          },
+          (pos: any) => {
+            if (pos?.coords && isMounted) {
+              const coords = {
+                latitude: Number(pos.coords.latitude.toFixed(6)),
+                longitude: Number(pos.coords.longitude.toFixed(6)),
+              };
+              useAppStore.getState().setLastKnownLocation(coords);
+              api.location.updateLocation({
+                lat: coords.latitude,
+                lng: coords.longitude,
+                role: 'AMBULANCE_DRIVER',
+              }).catch(() => {});
+            }
+          }
+        );
+      } catch {}
+    };
+
+    startDriverTracking();
+
+    return () => {
+      isMounted = false;
+      if (sub?.remove) sub.remove();
+    };
+  }, [onDuty]);
+
   const handleRefresh = () => {
     setRefreshing(true);
     loadDashboardData();
@@ -255,11 +323,18 @@ export default function AmbulanceDashboard() {
               </View>
             ) : null}
           </View>
-          <TouchableOpacity onPress={() => setOnDuty(!onDuty)} activeOpacity={0.8}>
-            <Pill color={onDuty ? 'success' : 'grey'}>
-              {onDuty ? '● ON DUTY' : '○ OFFLINE'}
-            </Pill>
-          </TouchableOpacity>
+          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+            <TouchableOpacity onPress={() => setOnDuty(!onDuty)} activeOpacity={0.8}>
+              <Pill color={onDuty ? 'success' : 'grey'}>
+                {onDuty ? '● ON DUTY' : '○ OFFLINE'}
+              </Pill>
+            </TouchableOpacity>
+            {onDuty && (
+              <View style={styles.gpsStreamBadge}>
+                <Text style={styles.gpsStreamText}>📡 GPS STREAMING</Text>
+              </View>
+            )}
+          </View>
         </View>
       </Card>
 
@@ -310,8 +385,10 @@ export default function AmbulanceDashboard() {
             {requests.map((req, idx) => {
               const sev = String(req.severity || 'HIGH').toUpperCase();
               const pillColor = (sev === 'CRITICAL' || sev === 'HIGH' ? 'red' : 'amber') as 'red' | 'amber';
-              const locationStr = req.location
-                ? `${req.location.latitude?.toFixed(4)}, ${req.location.longitude?.toFixed(4)}`
+              const locationStr = req.locationAddress
+                ? `${req.locationAddress} (${req.location?.latitude?.toFixed(4)}, ${req.location?.longitude?.toFixed(4)})`
+                : req.location
+                ? `${req.location.latitude?.toFixed(4)}°N, ${req.location.longitude?.toFixed(4)}°E`
                 : 'GPS Shared';
 
               return (
@@ -570,4 +647,17 @@ const styles = StyleSheet.create({
   stat: { flex: 1, padding: 12, alignItems: 'center' },
   statNum: { fontWeight: '800', fontSize: 16, color: colors.ink },
   statLabel: { fontSize: 9, color: colors.inkFaint, fontWeight: '700', marginTop: 4 },
+  gpsStreamBadge: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  gpsStreamText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#15803D',
+  },
 });

@@ -5,7 +5,7 @@ import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, SosHold, PatientNav, Divider } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
-import { initDeviceLocation } from '@/services/deviceLocation';
+import { initDeviceLocation, setManualLocation } from '@/services/deviceLocation';
 
 export default function PatientHome() {
   const voiceSosEnabled = useAppStore((s) => s.voiceSosEnabled);
@@ -16,7 +16,7 @@ export default function PatientHome() {
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
 
   useEffect(() => {
-    // Pre-warm device GPS instantly on home mount
+    // Dynamically request OS location permission and acquire live satellite GPS from user's phone hardware
     initDeviceLocation();
 
     api.users.getProfile().then((profile) => {
@@ -70,17 +70,22 @@ export default function PatientHome() {
         </View>
 
         <Card style={styles.locationCard}>
-          <Icon name="gps" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.locTitle}>Live location active</Text>
-            <Text style={styles.locSub}>
-              {locationAddress ||
-                (lastKnownLocation
-                  ? `${lastKnownLocation.latitude.toFixed(3)}°N, ${lastKnownLocation.longitude.toFixed(3)}°E`
-                  : 'Acquiring device GPS...')} · GPS active
+          <Icon name="gps" color={lastKnownLocation ? colors.success : colors.amber} />
+          <View style={{ flex: 1, marginHorizontal: 8 }}>
+            <Text style={styles.locTitle}>
+              {lastKnownLocation ? '📍 Live GPS Active' : '🛰️ Acquiring GPS...'}
+            </Text>
+            <Text style={styles.locSub} numberOfLines={2}>
+              {locationAddress
+                ? `${locationAddress}${lastKnownLocation ? ` (${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E)` : ''}`
+                : (lastKnownLocation
+                    ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E (Live GPS)`
+                    : 'Locking satellite coordinates...')}
             </Text>
           </View>
-          <Pill color="success">READY</Pill>
+          <Pill color={lastKnownLocation ? 'success' : 'amber'}>
+            {lastKnownLocation ? 'GPS LOCKED' : 'LOCKING...'}
+          </Pill>
         </Card>
 
         <View style={styles.sosZone}>

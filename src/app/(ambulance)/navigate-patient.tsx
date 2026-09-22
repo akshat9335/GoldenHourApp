@@ -35,7 +35,7 @@ export default function NavigatePatient() {
     try {
       const ExpoLocation = require('expo-location');
       ExpoLocation.watchPositionAsync(
-        { accuracy: ExpoLocation.Accuracy.High, timeInterval: 2500, distanceInterval: 5 },
+        { accuracy: ExpoLocation.Accuracy.Balanced, timeInterval: 2500, distanceInterval: 5 },
         (pos: any) => {
           if (pos?.coords) {
             const loc = {
@@ -43,6 +43,11 @@ export default function NavigatePatient() {
               longitude: Number(pos.coords.longitude.toFixed(6)),
             };
             useAppStore.getState().setLastKnownLocation(loc);
+            api.location.updateLocation({
+              lat: loc.latitude,
+              lng: loc.longitude,
+              role: 'AMBULANCE_DRIVER',
+            }).catch(() => {});
             if (emergencyId) {
               api.emergencies.update(emergencyId, {
                 ambulanceLocation: loc,
@@ -189,7 +194,9 @@ export default function NavigatePatient() {
             <View style={styles.dotDest} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.teleLabel}>Patient Pickup Destination</Text>
-              <Text style={styles.teleVal}>{pLat.toFixed(4)}° N, {pLng.toFixed(4)}° E</Text>
+              <Text style={styles.teleVal}>
+                {emergency?.locationAddress ? `${emergency.locationAddress} · ` : ''}{pLat.toFixed(4)}° N, {pLng.toFixed(4)}° E
+              </Text>
             </View>
           </View>
         </Card>

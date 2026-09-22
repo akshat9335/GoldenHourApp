@@ -103,6 +103,7 @@ export const api = {
       voiceTranscript?: string | null;
       imageUrl?: string | null;
       location: { latitude: number; longitude: number };
+      locationAddress?: string | null;
       severity?: string | null;
       aiResult?: any;
     }) => request('/emergencies', { method: 'POST', body: JSON.stringify(input) }),
