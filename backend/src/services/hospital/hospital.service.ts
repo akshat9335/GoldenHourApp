@@ -785,14 +785,20 @@ export async function getHospitalRequests(uid: string) {
     } catch {}
   }
 
-  // Sort newest first so the latest incoming emergency is at the top
-  results.sort((a: any, b: any) => {
+  // Filter out COMPLETED, REJECTED, and CANCELLED requests so the hospital console stays ultra-fast
+  const activeResults = results.filter((item: any) => {
+    const st = String(item.status || "").toUpperCase();
+    return st !== "COMPLETED" && st !== "REJECTED" && st !== "CANCELLED";
+  });
+
+  // Sort newest first so the latest incoming emergency is at the top, limit to latest 15
+  activeResults.sort((a: any, b: any) => {
     const timeA = new Date(a.createdAt || 0).getTime();
     const timeB = new Date(b.createdAt || 0).getTime();
     return timeB - timeA;
   });
 
-  return results;
+  return activeResults.slice(0, 15);
 }
 
 export async function clearHospitalRequests(uid: string) {
@@ -826,19 +832,10 @@ export async function clearHospitalRequests(uid: string) {
 
   const batch = firestore.batch();
   let count = 0;
-  const now = new Date().toISOString();
 
   for (const doc of snapshot.docs) {
-    const data = doc.data();
-    const st = String(data.status || "NEW").toUpperCase();
-    if (st === "NEW" || st === "PENDING") {
-      batch.update(doc.ref, {
-        status: "COMPLETED",
-        resolutionNotes: "Dismissed/Archived from console",
-        updatedAt: now,
-      });
-      count++;
-    }
+    batch.delete(doc.ref);
+    count++;
   }
 
   if (count > 0) {
