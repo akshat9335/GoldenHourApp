@@ -1,5 +1,6 @@
 import { firestore } from "../../config/firebase";
 import { AppError } from "../../utils/AppError";
+import { escalateEmergencyToNextHospital } from "../emergencies/emergency.service";
 
 // ============================================================
 // TYPES
@@ -390,7 +391,29 @@ async function transitionHospitalRequest(
   else if (targetStatus === "PATIENT ARRIVED")
     canonicalStatus = "PATIENT_ARRIVED";
   else if (targetStatus === "IN TREATMENT") canonicalStatus = "TREATMENT";
-  else if (targetStatus === "COMPLETED") canonicalStatus = "COMPLETED";
+  if (targetStatus === "COMPLETED") {
+    canonicalStatus = "COMPLETED";
+    // Restore bed capacity upon emergency completion
+    try {
+      if (firestore) {
+        const capRef = firestore.collection("hospitalCapacity").doc(hospital.docId);
+        const capSnap = await capRef.get();
+        if (capSnap.exists) {
+          const curCap = capSnap.data() || {};
+          const totalB = Number(curCap.totalBeds) || 25;
+          const totalI = Number(curCap.icuBeds) || 6;
+          const newAvail = Math.min(totalB, (Number(curCap.availableBeds) || 14) + 1);
+          const newIcuAvail = Math.min(totalI, (Number(curCap.availableIcuBeds) || 5) + 1);
+          await capRef.set({ availableBeds: newAvail, availableIcuBeds: newIcuAvail, updatedAt: now }, { merge: true });
+          await firestore.collection("hospitals").doc(hospital.docId).set({
+            availableBeds: newAvail,
+            availableIcuBeds: newIcuAvail,
+            updatedAt: now,
+          }, { merge: true });
+        }
+      }
+    } catch (_capErr) {}
+  }
 
   if (canonicalStatus) {
     const hospData = hospital.data || {};
@@ -1035,6 +1058,25 @@ export async function acceptHospitalRequest(
     // Non-fatal
   }
 
+  // Deduct available bed capacity automatically upon acceptance
+  try {
+    if (firestore) {
+      const capRef = firestore.collection("hospitalCapacity").doc(hospital.docId);
+      const capSnap = await capRef.get();
+      if (capSnap.exists) {
+        const curCap = capSnap.data() || {};
+        const newAvail = Math.max(0, (Number(curCap.availableBeds) || 14) - 1);
+        const newIcuAvail = Math.max(0, (Number(curCap.availableIcuBeds) || 5) - 1);
+        await capRef.set({ availableBeds: newAvail, availableIcuBeds: newIcuAvail, updatedAt: now }, { merge: true });
+        await firestore.collection("hospitals").doc(hospital.docId).set({
+          availableBeds: newAvail,
+          availableIcuBeds: newIcuAvail,
+          updatedAt: now,
+        }, { merge: true });
+      }
+    }
+  } catch (_capErr) {}
+
   return {
     requestId,
     ...requestData,
@@ -1087,6 +1129,16 @@ export async function rejectHospitalRequest(
     hospitalRejected: true,
     rejectionReason: reason ?? null,
   });
+
+  // Auto-escalate to next-ranked hospital candidate immediately upon rejection
+  try {
+    await escalateEmergencyToNextHospital(
+      emergencyId,
+      reason || "Hospital ER declined / at full capacity",
+    );
+  } catch (_escErr) {
+    // Non-blocking
+  }
 
   return {
     requestId,

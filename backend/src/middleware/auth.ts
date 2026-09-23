@@ -29,10 +29,12 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
     let decodedUid = "";
     let decodedEmail: string | undefined = undefined;
+    let decodedRole: string | undefined = undefined;
 
     if (process.env.NODE_ENV !== "production" && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("test-") || token.startsWith("dev-"))) {
       decodedUid = (req.headers["x-dev-uid"] as string) || token.slice(0, 32);
       decodedEmail = (req.headers["x-dev-email"] as string) || "user@goldenhour.org";
+      decodedRole = req.headers["x-dev-role"] as string;
     } else {
       if (!auth) {
         throw new AppError(500, "FIREBASE_NOT_CONFIGURED", "Firebase Admin is not configured on this server.");
@@ -40,6 +42,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       const decoded = await auth.verifyIdToken(token);
       decodedUid = decoded.uid;
       decodedEmail = decoded.email;
+      decodedRole = (decoded as any).role || (decoded as any).claims?.role;
     }
 
     const profile = await getUserProfile(decodedUid);
@@ -47,15 +50,24 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     const userEmail = (decodedEmail || profile?.email || "").toLowerCase();
     const isAdminEmail = userEmail === "akshatsrivastava912@gmail.com" || userEmail.startsWith("admin@");
 
-    const canonicalRole = (isAdminEmail ? "ADMIN" : (profile?.role || "PATIENT")) as CanonicalRole;
+    const devRoleHeader = (process.env.NODE_ENV !== "production" ? (req.headers["x-dev-role"] as string)?.toUpperCase() : undefined) as CanonicalRole | undefined;
+
+    const resolvedRole = (devRoleHeader || profile?.role || decodedRole || "PATIENT").toUpperCase();
+    const canonicalRole = (isAdminEmail ? "ADMIN" : resolvedRole) as CanonicalRole;
     let canonicalRoles = (profile?.roles || (canonicalRole ? [canonicalRole] : ["PATIENT"])) as CanonicalRole[];
     if (isAdminEmail && !canonicalRoles.includes("ADMIN" as CanonicalRole)) {
       canonicalRoles = ["ADMIN" as CanonicalRole, ...canonicalRoles];
     }
+    if (devRoleHeader && !canonicalRoles.includes(devRoleHeader)) {
+      canonicalRoles = [devRoleHeader, ...canonicalRoles];
+    }
     const verificationStatus = (profile?.verificationStatus || "APPROVED") as VerificationStatus;
-    const roleVerificationStatus = (profile?.roleVerificationStatus || { ADMIN: "APPROVED" as const, PATIENT: "APPROVED" as const }) as Partial<Record<CanonicalRole, VerificationStatus>>;
+    const roleVerificationStatus = (profile?.roleVerificationStatus || { ADMIN: "APPROVED" as const, PATIENT: "APPROVED" as const, HOSPITAL: "APPROVED" as const }) as Partial<Record<CanonicalRole, VerificationStatus>>;
     if (isAdminEmail) {
       roleVerificationStatus.ADMIN = "APPROVED";
+    }
+    if (devRoleHeader) {
+      roleVerificationStatus[devRoleHeader] = "APPROVED";
     }
 
     req.user = {

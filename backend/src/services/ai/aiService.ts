@@ -26,38 +26,71 @@ function heuristicResult(input: EmergencyInput, source: "mock" | "fallback"): Tr
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+
   let severity: TriageResult["severity"] = "MEDIUM";
   let emergencyType = "Unspecified medical concern";
-  if (/\b(minor|small|superficial|scratch|bruise)\b/.test(text)) {
+  let requiredCapabilities: string[] = ["EMERGENCY_ROOM", "TRAUMA_BAY"];
+  let specialtyNeeded = "GENERAL";
+  let recommendedHospitalType = "Emergency Care Facility";
+
+  if (!text.trim() || text.length < 3) {
+    // Fail-safe golden rule: Blank SOS or panic tap must default to CRITICAL resuscitation capability
+    severity = "CRITICAL";
+    emergencyType = "Emergency Rapid SOS (Unspecified Trauma/Medical)";
+    requiredCapabilities = ["EMERGENCY_ROOM", "TRAUMA_BAY", "ICU_STANDBY"];
+    specialtyNeeded = "GENERAL";
+    recommendedHospitalType = "Level-1 Multi-Specialty ER Trauma Center";
+  } else if (/\b(minor|small|superficial|scratch|bruise|chhoti chot)\b/.test(text)) {
     severity = "LOW";
     emergencyType = "Minor injury or symptoms";
-  } else if (/\b(chest pain|difficulty breathing|shortness of breath|fracture|head injury|burn)\b/.test(text)) {
+    requiredCapabilities = ["OUTPATIENT_CLINIC", "FIRST_AID"];
+    specialtyNeeded = "GENERAL";
+    recommendedHospitalType = "Primary Healthcare Center / Outpatient Clinic";
+  } else if (
+    /\b(chest pain|difficulty breathing|shortness of breath|seene me dard|chhaati me dard|heart|saans|cardiac)\b/.test(text)
+  ) {
+    severity = "CRITICAL";
+    emergencyType = "Acute Cardiac / Respiratory Distress";
+    requiredCapabilities = ["ICU", "CATH_LAB", "CARDIAC_TEAM"];
+    specialtyNeeded = "CARDIOLOGY";
+    recommendedHospitalType = "Tertiary Cardiac & Emergency Hospital";
+  } else if (
+    /\b(fracture|head injury|burn|accident|khoon|bleeding|haddi|behoshi|unconscious|paralysis|stroke)\b/.test(text)
+  ) {
     severity = "HIGH";
-    emergencyType = "Potentially serious injury or symptom";
+    emergencyType = "Acute Physical Trauma / Neurological Incident";
+    requiredCapabilities = ["TRAUMA_BAY", "ORTHOPEDIC", "BLOOD_BANK", "ICU"];
+    specialtyNeeded = "TRAUMA_ORTHO";
+    recommendedHospitalType = "Level-1 Multi-Specialty Trauma Center";
   }
+
   const rule = evaluateSafetyRules(input);
   if (rule) {
     severity = maxSeverity(severity, rule.severity);
     emergencyType = rule.emergencyType;
   }
+
   return {
     severity,
     emergencyType,
     confidence: source === "mock" ? 0.72 : 0.35,
+    requiredCapabilities,
+    specialtyNeeded,
+    recommendedHospitalType,
     immediateActions: rule?.immediateActions || [
-      "Keep the person comfortable and monitor for changes.",
-      "Arrange a medical assessment if symptoms persist or worsen.",
+      "Keep the person comfortable and monitor vital signs closely.",
+      "Stand by for incoming ambulance paramedic assessment.",
     ],
     avoidActions: rule?.avoidActions || [
-      "Do not ignore worsening symptoms.",
-      "Do not give medication unless it is normally prescribed for the person.",
+      "Do not give food, water, or oral medication unless directed by emergency physicians.",
+      "Do not move the patient unnecessarily if spinal or head injury is suspected.",
     ],
     hospitalRequired: severity !== "LOW",
-    ambulanceRecommended: severity === "CRITICAL",
+    ambulanceRecommended: severity === "CRITICAL" || severity === "HIGH",
     explanation:
       source === "mock"
-        ? "This deterministic mock response is based only on the supplied emergency information."
-        : "The AI provider was unavailable, so a conservative safety fallback was used.",
+        ? "Deterministic clinical protocol applied based on emergency criteria."
+        : "Conservative clinical safety protocol applied while live telemetry was streaming.",
     disclaimer: AI_DISCLAIMER,
     source,
   };

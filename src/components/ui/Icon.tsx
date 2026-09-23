@@ -5,7 +5,7 @@ import { colors } from '@/constants/theme';
 export type IconName =
   | 'chevL' | 'chevR' | 'home' | 'ai' | 'map' | 'history' | 'profile' | 'bell'
   | 'pin' | 'phone' | 'check' | 'bed' | 'wifiOff' | 'ambulance' | 'hospital' | 'gps' | 'close'
-  | 'doctor' | 'search' | 'calendar' | 'clock' | 'camera' | 'mic' | 'users' | 'idCard';
+  | 'doctor' | 'search' | 'calendar' | 'clock' | 'camera' | 'mic' | 'users' | 'idCard' | 'alert-triangle';
 
 export function Icon({ name, size = 19, color = colors.ink }: { name: IconName; size?: number; color?: string }) {
   const sw = 1.8;
@@ -60,6 +60,8 @@ export function Icon({ name, size = 19, color = colors.ink }: { name: IconName; 
       return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Circle cx={9} cy={8} r={3} stroke={color} strokeWidth={sw} /><Path d="M2.5 20a6.5 6.5 0 0113 0" stroke={color} strokeWidth={sw} strokeLinecap="round" /><Path d="M15.5 5.5a3 3 0 010 5.8M18 20a6 6 0 00-3.8-5.6" stroke={color} strokeWidth={sw} strokeLinecap="round" /></Svg>;
     case 'idCard':
       return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Path d="M3 6h18v12H3z" stroke={color} strokeWidth={sw} strokeLinejoin="round" /><Circle cx={8} cy={12} r={2} stroke={color} strokeWidth={sw} /><Path d="M13 10h6M13 14h4" stroke={color} strokeWidth={sw} strokeLinecap="round" /></Svg>;
+    case 'alert-triangle':
+      return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
     default:
       return null;
   }

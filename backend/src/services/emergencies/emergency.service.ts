@@ -2,6 +2,7 @@ import { firestore } from "../../config/firebase";
 import { AppError } from "../../utils/AppError";
 import { emergencyAlertService } from "../notifications/emergencyAlert.service";
 import { locationService } from "../location/location.service";
+import { analyzeEmergency } from "../ai/aiService";
 
 const USERS_COLLECTION = "users";
 const EMERGENCIES_COLLECTION = "emergencies";
@@ -67,8 +68,78 @@ export interface Emergency {
   patientName?: string | null;
   patientPhone?: string | null;
   dismissedBy?: string[];
+  hospitalCandidates?: any[];
+  alertedCandidateIndex?: number;
+  alertedHospitalId?: string | null;
+  alertedHospitalName?: string | null;
+  alertedAt?: string | null;
+  matchScore?: number;
+  triageSummary?: string | null;
+  escalationMessage?: string | null;
+  fallbackMode?: string | null;
   createdAt: unknown;
   updatedAt: unknown;
+}
+
+function calculateHaversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function computeHospitalMatchScore(
+  hosp: { name?: string; facilities?: string[]; availableBeds?: number; availableIcuBeds?: number; totalBeds?: number },
+  distanceKm: number,
+  reqCaps: string[],
+  specialtyNeeded: string,
+): number {
+  let score = 0;
+  const facilities = (hosp.facilities || []).map((f) => String(f).toLowerCase());
+  const hospName = String(hosp.name || "").toLowerCase();
+
+  // 1. Capability Match (0 to 50 pts)
+  let capabilityMatch = 30; // base emergency capability
+  if (
+    specialtyNeeded === "CARDIOLOGY" &&
+    (facilities.some((f) => f.includes("cardiac") || f.includes("cath")) ||
+      hospName.includes("medanta") ||
+      hospName.includes("heart"))
+  ) {
+    capabilityMatch += 20;
+  } else if (
+    specialtyNeeded === "TRAUMA_ORTHO" &&
+    (facilities.some((f) => f.includes("trauma") || f.includes("ortho")) ||
+      hospName.includes("trauma") ||
+      hospName.includes("srn"))
+  ) {
+    capabilityMatch += 20;
+  } else if (
+    reqCaps.includes("ICU") &&
+    ((hosp.availableIcuBeds ?? 0) > 0 || facilities.some((f) => f.includes("icu")))
+  ) {
+    capabilityMatch += 15;
+  }
+  score += Math.min(50, capabilityMatch);
+
+  // 2. Bed Availability (0 to 30 pts)
+  const availBeds = hosp.availableBeds ?? 14;
+  if (availBeds > 10) score += 30;
+  else if (availBeds > 3) score += 20;
+  else if (availBeds > 0) score += 10;
+
+  // 3. Proximity / Shortest ETA (0 to 20 pts)
+  const proximityPts = Math.max(0, Math.round(20 - distanceKm * 2));
+  score += Math.min(20, proximityPts);
+
+  return score;
 }
 
 function getFirestore() {
@@ -156,6 +227,21 @@ export async function createEmergency(
 
   const now = new Date().toISOString();
 
+  let triageResult = input.aiResult as any;
+  if (!triageResult) {
+    try {
+      triageResult = await analyzeEmergency({
+        incidentType: input.incidentType,
+        symptoms: input.description || input.voiceTranscript || "",
+        description: input.description || "",
+      });
+    } catch (e) {
+      console.warn("[createEmergency] analyzeEmergency fallback:", e);
+    }
+  }
+
+  const determinedSeverity = (input.severity ? input.severity.trim().toUpperCase() : triageResult?.severity) || "CRITICAL";
+
   const emergency: Emergency = {
     id: emergencyRef.id,
     reporterId,
@@ -167,8 +253,8 @@ export async function createEmergency(
     location: input.location,
     locationAddress: input.locationAddress?.trim() || null,
     status: "REPORTED",
-    severity: input.severity ? input.severity.trim().toUpperCase() : null,
-    aiResult: input.aiResult || null,
+    severity: determinedSeverity,
+    aiResult: triageResult || null,
     confirmationCount: 0,
     patientName: user.name || user.patientName || "Emergency Patient",
     patientPhone: user.phone || null,
@@ -178,58 +264,120 @@ export async function createEmergency(
 
   await emergencyRef.set(emergency);
 
-  // Auto-bridge emergency to nearby hospitals in hospitalEmergencyRequests (skipped in isolated unit test runner)
+  // Auto-bridge emergency using Smart Multi-Factor Hospital Capability Ranking
   if (process.env.NODE_ENV !== "test") {
     try {
-      const targetMap = new Map<string, { hospitalId: string; name: string; etaMinutes: number; distanceKm: number }>();
+      const reqCaps = ((emergency.aiResult as any)?.requiredCapabilities as string[]) || ["EMERGENCY_ROOM", "TRAUMA_BAY"];
+      const specialtyNeeded = ((emergency.aiResult as any)?.specialtyNeeded as string) || "GENERAL";
 
-      // 1. First find nearby hospitals using spatial proximity
-      let nearby = await locationService.getNearbyHospitals(
-        emergency.location.latitude,
-        emergency.location.longitude,
-        50,
-      );
-      if (!nearby || nearby.length === 0) {
-        nearby = await locationService.getNearbyHospitals(
-          emergency.location.latitude,
-          emergency.location.longitude,
-          500,
-        );
-      }
-      if (Array.isArray(nearby)) {
-        for (const targetHospital of nearby) {
-          if (targetHospital.hospitalId) {
-            targetMap.set(targetHospital.hospitalId, {
-              hospitalId: targetHospital.hospitalId,
-              name: targetHospital.name || "Hospital Facility",
-              etaMinutes: targetHospital.etaMinutes || 8,
-              distanceKm: targetHospital.distanceKm || 2.5,
-            });
-          }
-        }
-      }
-
-      // 2. Guarantee all registered and active hospitals in Firestore receive the emergency
+      const candidateList: any[] = [];
       const allHospitalsSnap = await db.collection("hospitals").get();
+
       if (allHospitalsSnap && !allHospitalsSnap.empty) {
         for (const hDoc of allHospitalsSnap.docs) {
           if (hDoc.id.startsWith("test-")) continue;
           const hData = hDoc.data();
           const vStatus = String(hData.verificationStatus || "").toUpperCase();
           if (vStatus === "REJECTED") continue;
-          if (!targetMap.has(hDoc.id)) {
-            targetMap.set(hDoc.id, {
-              hospitalId: hDoc.id,
-              name: hData.name || "Hospital Facility",
-              etaMinutes: 10,
-              distanceKm: 3.5,
-            });
-          }
+
+          const hLoc = hData.location || {
+            latitude: hData.latitude || 25.4538,
+            longitude: hData.longitude || 81.854,
+          };
+          const dist = calculateHaversineKm(
+            emergency.location.latitude,
+            emergency.location.longitude,
+            hLoc.latitude,
+            hLoc.longitude,
+          );
+          const eta = Math.max(4, Math.round(dist * 2.5));
+
+          const score = computeHospitalMatchScore(
+            hData,
+            dist,
+            reqCaps,
+            specialtyNeeded,
+          );
+
+          candidateList.push({
+            hospitalId: hDoc.id,
+            name: hData.name || "Hospital Emergency Wing",
+            phone: hData.phone || hData.emergencyContact || "+91-532-2460108",
+            location: hLoc,
+            distanceKm: Number(dist.toFixed(1)),
+            etaMinutes: eta,
+            score,
+            availableBeds: Number(hData.availableBeds ?? 14),
+            availableIcuBeds: Number(hData.availableIcuBeds ?? 5),
+          });
         }
       }
 
-      // 3. Write one clean doc per target hospital (no duplicate root docs)
-      for (const targetHospital of targetMap.values()) {
+      // If Prayagraj hospitals not yet initialized in Firestore, guarantee high-priority emergency ER candidates
+      if (candidateList.length === 0) {
+        candidateList.push(
+          {
+            hospitalId: "hosp-medanta-prayagraj",
+            name: "Medanta Hospital Prayagraj",
+            phone: "+91-532-2460108",
+            location: { latitude: 25.4538, longitude: 81.854 },
+            distanceKm: 2.2,
+            etaMinutes: 6,
+            score: 95,
+            availableBeds: 18,
+            availableIcuBeds: 5,
+          },
+          {
+            hospitalId: "hosp-srn-prayagraj",
+            name: "Swaroop Rani Nehru (SRN) Hospital Prayagraj",
+            phone: "+91-532-2256050",
+            location: { latitude: 25.4484, longitude: 81.846 },
+            distanceKm: 3.1,
+            etaMinutes: 8,
+            score: 88,
+            availableBeds: 35,
+            availableIcuBeds: 8,
+          },
+        );
+      }
+
+      // Sort candidate hospitals by score descending
+      candidateList.sort((a, b) => b.score - a.score);
+
+      // Rank candidate hospitals
+      const rankedCandidates = candidateList.map((c, idx) => ({
+        ...c,
+        rank: idx + 1,
+        status: idx === 0 ? ("ALERTED" as const) : ("QUEUED_STANDBY" as const),
+        alertedAt: idx === 0 ? now : null,
+      }));
+
+      const topRank = rankedCandidates[0];
+
+      // Update emergency record with ranked hospital candidates
+      const emergencyUpdates = {
+        hospitalCandidates: rankedCandidates,
+        alertedCandidateIndex: 0,
+        alertedHospitalId: topRank.hospitalId,
+        alertedHospitalName: topRank.name,
+        assignedHospitalName: topRank.name,
+        assignedHospitalLocation: topRank.location,
+        assignedHospitalPhone: topRank.phone,
+        alertedAt: now,
+        status: "HOSPITAL_SEARCH" as EmergencyStatus,
+        matchScore: topRank.score,
+        severity: emergency.severity || triageResult?.severity || "CRITICAL",
+        triageSummary: (emergency.aiResult as any)?.emergencyType || (emergency.aiResult as any)?.summary || "Emergency Triage Evaluated",
+        updatedAt: now,
+      };
+
+      await emergencyRef.set(emergencyUpdates, { merge: true });
+      Object.assign(emergency, emergencyUpdates);
+
+      // Write requests to hospitalEmergencyRequests:
+      // Rank 1 gets "NEW" (Immediate ER alert banner/sound).
+      // Remaining backup candidates get "QUEUED_STANDBY" ready for 45s escalation.
+      for (const targetHospital of rankedCandidates) {
         const reqDocId = `${emergency.id}_${targetHospital.hospitalId}`;
         await db.collection(HOSPITAL_REQUESTS_COLLECTION).doc(reqDocId).set(
           {
@@ -238,6 +386,8 @@ export async function createEmergency(
             emergencyId: emergency.id,
             hospitalId: targetHospital.hospitalId,
             hospitalName: targetHospital.name,
+            rank: targetHospital.rank,
+            matchScore: targetHospital.score,
             patientName: (user as any).name || (user as any).patientName || "Emergency Patient",
             patientPhone: (user as any).phone || null,
             goldenHourId: user.crisisId,
@@ -250,9 +400,9 @@ export async function createEmergency(
             aiResult: emergency.aiResult || null,
             location: emergency.location,
             locationAddress: emergency.locationAddress || null,
-            status: "NEW",
-            eta: `${targetHospital.etaMinutes || 8} min`,
-            distanceKm: targetHospital.distanceKm || 2.5,
+            status: targetHospital.rank === 1 ? "NEW" : "QUEUED_STANDBY",
+            eta: `${targetHospital.etaMinutes} min`,
+            distanceKm: targetHospital.distanceKm,
             trustScore: (user as any).trustScore ?? 100,
             confirmationCount: emergency.confirmationCount || 0,
             createdAt: now,
@@ -262,7 +412,7 @@ export async function createEmergency(
         );
       }
     } catch (bridgeErr) {
-      console.warn("[createEmergency] Hospital request bridge error:", bridgeErr);
+      console.warn("[createEmergency] Smart hospital ranking error:", bridgeErr);
     }
   }
 
@@ -442,7 +592,111 @@ export async function getEmergencyById(
     }
   }
 
+  // 4. Smart Auto-Escalation Check:
+  // If emergency is still waiting for hospital acceptance (REPORTED / HOSPITAL_SEARCH),
+  // and alertedAt was more than 45 seconds ago, auto-escalate to next hospital candidate!
+  if (
+    (emergency.status === "REPORTED" || emergency.status === "HOSPITAL_SEARCH") &&
+    !emergency.assignedHospitalId &&
+    (emergency as any).alertedAt
+  ) {
+    const alertedTime = new Date((emergency as any).alertedAt).getTime();
+    const elapsedMs = Date.now() - alertedTime;
+    if (elapsedMs > 45000) {
+      try {
+        const escalated = await escalateEmergencyToNextHospital(
+          emergency.id,
+          "Hospital response timeout (45s) without acceptance",
+        );
+        if (escalated) {
+          Object.assign(emergency, escalated);
+        }
+      } catch (_escErr) {
+        // Non-blocking
+      }
+    }
+  }
+
   return emergency;
+}
+
+export async function escalateEmergencyToNextHospital(
+  emergencyId: string,
+  reason: string = "Hospital request timeout (45s) without response",
+) {
+  const db = getFirestore();
+  const emergencyRef = db.collection(EMERGENCIES_COLLECTION).doc(emergencyId);
+  const snap = await emergencyRef.get();
+  if (!snap.exists) return null;
+  const em = snap.data() as any;
+
+  // Don't escalate if already accepted or in transit
+  if (
+    em.status === "HOSPITAL_ACCEPTED" ||
+    em.status === "AMBULANCE_ASSIGNED" ||
+    em.status === "EN_ROUTE" ||
+    em.status === "PATIENT_ONBOARD" ||
+    em.assignedHospitalId
+  ) {
+    return em;
+  }
+
+  const candidates: Array<any> = Array.isArray(em.hospitalCandidates) ? em.hospitalCandidates : [];
+  const currentIdx = typeof em.alertedCandidateIndex === "number" ? em.alertedCandidateIndex : 0;
+  const nextIdx = currentIdx + 1;
+
+  const now = new Date().toISOString();
+
+  if (nextIdx < candidates.length) {
+    const nextHospital = candidates[nextIdx];
+    candidates[currentIdx].status = "TIMEOUT";
+    candidates[nextIdx].status = "ALERTED";
+    candidates[nextIdx].alertedAt = now;
+
+    // Activate next hospital's request doc in hospitalEmergencyRequests
+    const reqDocId = `${emergencyId}_${nextHospital.hospitalId}`;
+    try {
+      await db.collection(HOSPITAL_REQUESTS_COLLECTION).doc(reqDocId).set(
+        {
+          status: "NEW",
+          escalated: true,
+          escalatedFrom: candidates[currentIdx]?.name || "Previous ER",
+          escalationReason: reason,
+          updatedAt: now,
+        },
+        { merge: true },
+      );
+    } catch (_e) {}
+
+    const updates = {
+      hospitalCandidates: candidates,
+      alertedCandidateIndex: nextIdx,
+      alertedHospitalId: nextHospital.hospitalId,
+      alertedHospitalName: nextHospital.name,
+      assignedHospitalName: nextHospital.name,
+      assignedHospitalLocation: nextHospital.location || { latitude: 25.4538, longitude: 81.854 },
+      assignedHospitalPhone: nextHospital.phone || null,
+      status: "HOSPITAL_SEARCH",
+      escalationMessage: `ER desk ${candidates[currentIdx]?.name || "initial hospital"} busy. Automatically escalating alert to ${nextHospital.name}...`,
+      alertedAt: now,
+      updatedAt: now,
+    };
+
+    await emergencyRef.set(updates, { merge: true });
+    console.log(`[Auto-Escalation] Emergency ${emergencyId} successfully escalated to ${nextHospital.name}`);
+    return { ...em, ...updates };
+  } else {
+    // All local candidates exhausted -> Fallback to Central 108 Dispatch
+    const updates = {
+      fallbackMode: "CENTRAL_108_DISPATCH",
+      assignedHospitalName: "Prayagraj 108 Emergency Control Center",
+      assignedHospitalPhone: "108",
+      escalationMessage: "All local trauma ERs at peak capacity. Linked to Prayagraj Central 108 Emergency Dispatch.",
+      updatedAt: now,
+    };
+    await emergencyRef.set(updates, { merge: true });
+    return { ...em, ...updates };
+  }
 }
 
 export async function updateEmergency(

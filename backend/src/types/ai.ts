@@ -52,6 +52,9 @@ export interface TriageResult {
   avoidActions: string[];
   hospitalRequired: boolean;
   ambulanceRecommended: boolean;
+  requiredCapabilities?: string[];
+  specialtyNeeded?: string;
+  recommendedHospitalType?: string;
   explanation: string;
   disclaimer: string;
   source: AiSource;

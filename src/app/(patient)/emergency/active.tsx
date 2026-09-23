@@ -107,13 +107,16 @@ export default function Active() {
     !!emergency?.assignedDriverName ||
     (!!emergency?.assignedAmbulanceId && emergency?.assignedAmbulanceId !== 'Unit Dispatching');
 
+  const targetedHospName = emergency?.assignedHospitalName || (emergency as any)?.alertedHospitalName;
   const hospitalName = hasHospitalAccepted
     ? emergency?.assignedHospitalName || 'Emergency ER Hospital'
+    : targetedHospName
+    ? `Alerting ${targetedHospName}...`
     : 'Alerting Hospitals...';
   const hospitalSub = hasHospitalAccepted
     ? 'Trauma Desk Standing By'
-    : 'Broadcasting emergency to nearest ERs';
-  const hospitalPhone = hasHospitalAccepted ? emergency?.assignedHospitalPhone : null;
+    : (emergency as any)?.escalationMessage || 'Broadcasting triage to nearest emergency ER';
+  const hospitalPhone = emergency?.assignedHospitalPhone || null;
 
   const ambulancePlate = hasAmbulanceAssigned
     ? emergency?.assignedAmbulanceId || 'Unit Dispatched'
@@ -139,7 +142,14 @@ export default function Active() {
   return (
     <Screen>
       <View style={styles.topRow}>
-        <Pill color="red">{ambStatus === 0 ? 'ALERT BROADCASTED' : 'EMERGENCY ACTIVE'}</Pill>
+        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+          <Pill color="red">{ambStatus === 0 ? 'ALERT BROADCASTED' : 'EMERGENCY ACTIVE'}</Pill>
+          {emergency?.severity && (
+            <Pill color={emergency.severity === 'CRITICAL' || emergency.severity === 'HIGH' ? 'red' : 'amber'}>
+              {emergency.severity}
+            </Pill>
+          )}
+        </View>
         <Text style={styles.elapsed}>{elapsed} min elapsed</Text>
       </View>
       <Card style={styles.statusCard}>
@@ -169,6 +179,18 @@ export default function Active() {
           </Text>
         ) : null}
       </Card>
+
+      {(emergency as any)?.escalationMessage ? (
+        <Card style={{ backgroundColor: '#FEF3C7', borderColor: '#FDE68A', borderWidth: 1, padding: 12, marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Icon name="alert-triangle" size={16} color={colors.amber} />
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.amber }}>LIVE ER RE-ROUTING</Text>
+          </View>
+          <Text style={{ fontSize: 11.5, color: '#92400E', marginTop: 4, lineHeight: 16 }}>
+            {(emergency as any).escalationMessage}
+          </Text>
+        </Card>
+      ) : null}
 
       {/* Real Assigned Ambulance & Hospital Cards */}
       <View style={styles.pairRow}>
@@ -319,18 +341,18 @@ export default function Active() {
       })()}
 
       <View style={{ height: 10 }} />
-      <View style={{ flexDirection: 'row', gap: 8 }}>
+      {isLast ? (
         <Button
-          title="📡 Live Updates & Map"
+          title="Emergency Resolved • View Summary →"
+          onPress={() => router.replace('/(patient)/emergency/completed')}
+        />
+      ) : (
+        <Button
+          title="📡 Live Mission Updates & Tracking"
           variant="secondary"
           onPress={() => router.push(emergencyId ? `/(patient)/live-map?emergencyId=${emergencyId}` : '/(patient)/live-map')}
         />
-        {isLast ? (
-          <Button title="Complete" onPress={() => router.replace('/(patient)/emergency/completed')} />
-        ) : (
-          <Button title="Advance Status →" onPress={handleAdvance} />
-        )}
-      </View>
+      )}
     </Screen>
   );
 }

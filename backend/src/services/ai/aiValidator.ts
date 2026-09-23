@@ -122,6 +122,11 @@ export function validateTriageResponse(value: unknown): TriageResult {
     severity: value.severity as TriageResult["severity"],
     emergencyType: value.emergencyType.trim(),
     confidence: value.confidence,
+    requiredCapabilities: Array.isArray(value.requiredCapabilities)
+      ? (value.requiredCapabilities as unknown[]).filter((c): c is string => typeof c === "string").slice(0, 10)
+      : undefined,
+    specialtyNeeded: typeof value.specialtyNeeded === "string" ? value.specialtyNeeded.trim() : undefined,
+    recommendedHospitalType: typeof value.recommendedHospitalType === "string" ? value.recommendedHospitalType.trim() : undefined,
     immediateActions: value.immediateActions.slice(0, 10),
     avoidActions: value.avoidActions.slice(0, 10),
     hospitalRequired: value.hospitalRequired,

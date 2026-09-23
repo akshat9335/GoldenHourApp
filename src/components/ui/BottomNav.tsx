@@ -37,7 +37,7 @@ export function PatientNav({ active }: { active: string }) {
       items={[
         { href: '/(patient)/home', label: 'Home', icon: 'home' },
         { href: '/(patient)/ai-home', label: 'AI Assist', icon: 'ai' },
-        { href: '/(patient)/live-map', label: 'Map', icon: 'map' },
+        { href: '/(patient)/live-map', label: 'Updates', icon: 'map' },
         { href: '/(patient)/history', label: 'History', icon: 'history' },
       ]}
     />

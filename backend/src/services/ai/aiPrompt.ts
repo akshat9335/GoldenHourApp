@@ -9,14 +9,26 @@ Return ONLY valid JSON, with no markdown, using the requested schema.
 
 export function buildTriagePrompt(input: EmergencyInput): string {
   return `${safetyInstruction}
-Analyze this emergency input:
+Analyze this emergency input (which may be written in English, Hindi, or conversational Hinglish such as 'seene me dard', 'bahut khoon beh raha hai', 'accident ho gaya'):
 ${JSON.stringify(input)}
+
+CLINICAL TRIAGE & CAPABILITY MATCHING GUIDELINES:
+1. Language: Comprehend clinical indications in English, Hindi, or Hinglish seamlessly.
+2. Capability Extraction: Identify the exact specialized medical facilities needed:
+   - Cardiac emergency (chest pain, shortness of breath, radiating arm pain) -> ["ICU", "CATH_LAB", "CARDIAC_TEAM"], specialty: "CARDIOLOGY"
+   - Severe trauma/accident (head injury, major hemorrhage, open fracture) -> ["TRAUMA_BAY", "ORTHOPEDIC", "BLOOD_BANK", "ICU"], specialty: "TRAUMA_ORTHO"
+   - Neurological (stroke symptoms, sudden paralysis, unconsciousness) -> ["ICU", "CT_SCAN", "NEURO_TEAM"], specialty: "NEUROLOGY"
+   - Pediatric / Burn / Respiratory -> appropriately specialized capabilities.
+3. Fail-Safe Principle: If input is empty, minimal, or ambiguous during an emergency SOS, FAIL-SAFE TO "CRITICAL" with requiredCapabilities: ["EMERGENCY_ROOM", "TRAUMA_BAY", "ICU_STANDBY"], specialty: "GENERAL".
 
 Return exactly:
 {
   "severity": "LOW|MEDIUM|HIGH|CRITICAL",
   "emergencyType": "short non-diagnostic description",
   "confidence": 0.0,
+  "requiredCapabilities": ["e.g. ICU", "CATH_LAB"],
+  "specialtyNeeded": "CARDIOLOGY|TRAUMA_ORTHO|NEUROLOGY|GENERAL",
+  "recommendedHospitalType": "Level-1 Multi-Specialty ER Trauma Center",
   "immediateActions": ["safe action"],
   "avoidActions": ["unsafe action to avoid"],
   "hospitalRequired": true,
