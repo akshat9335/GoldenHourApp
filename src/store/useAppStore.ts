@@ -128,6 +128,10 @@ interface AppState {
   setLastKnownLocation: (loc: { latitude: number; longitude: number } | null) => void;
   locationAddress: string | null;
   setLocationAddress: (addr: string | null) => void;
+
+  // --- Teleconsultation ---
+  activeConsultationId: string | null;
+  setActiveConsultationId: (id: string | null) => void;
   resetEmergencySession: () => void;
 }
 
@@ -268,4 +272,8 @@ export const useAppStore = create<AppState>((set) => ({
   setLastKnownLocation: (loc) => set({ lastKnownLocation: loc }),
   locationAddress: null,
   setLocationAddress: (addr) => set({ locationAddress: addr }),
+
+  // --- Teleconsultation ---
+  activeConsultationId: null,
+  setActiveConsultationId: (id) => set({ activeConsultationId: id }),
 }));

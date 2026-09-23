@@ -41,6 +41,24 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGuestLogin = () => {
+    const store = useAppStore.getState();
+    store.setIsAuthenticated(true);
+    store.setProfileExists(true);
+    store.setRole('PATIENT');
+    store.setRoles(['PATIENT', 'user']);
+    store.setUserProfile({
+      uid: 'guest-patient-101',
+      name: 'Guest Patient',
+      email: 'guest@goldenhour.org',
+      crisisId: 'GH-8821',
+      trustScore: 95,
+      role: 'PATIENT',
+      roles: ['PATIENT', 'user'],
+    });
+    router.replace('/(patient)/home');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -94,6 +112,17 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
+          {/* Guest Demo Login Button */}
+          <TouchableOpacity
+            style={[styles.googleButton, { backgroundColor: '#208AEF', borderColor: '#208AEF', marginTop: 12 }]}
+            activeOpacity={0.85}
+            onPress={handleGuestLogin}
+          >
+            <Text style={[styles.googleText, { color: '#FFFFFF', fontWeight: '700' }]}>
+              🚀 Quick Guest / Demo Login
+            </Text>
+          </TouchableOpacity>
+
           {/* Divider */}
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
@@ -102,12 +131,11 @@ export default function LoginScreen() {
           </View>
 
           <Text style={styles.infoText}>
-            New to Golden Hour?
+            Testing & Evaluating?
           </Text>
 
           <Text style={styles.infoDescription}>
-            Your account will be created automatically when you
-            continue with Google.
+            Tap "Quick Guest / Demo Login" above to instantly test all features without Firebase setup.
           </Text>
         </View>
 

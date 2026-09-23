@@ -78,14 +78,16 @@ export default function DriverLogin() {
 
   return (
     <Screen center>
-      <Pressable
-        onPress={() => router.replace('/role-selection')}
-        style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, left: 16, zIndex: 10, padding: 8 }}
-      >
-        <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
-      </Pressable>
+      <View style={{ width: '100%', alignItems: 'flex-start', marginBottom: 12 }}>
+        <Pressable
+          onPress={() => router.replace('/role-selection')}
+          style={{ paddingVertical: 8, paddingHorizontal: 4 }}
+        >
+          <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
+        </Pressable>
+      </View>
 
-      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 40 }}>
+      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 10 }}>
         <View style={styles.iconCircle}>
           <Icon name="ambulance" size={36} color={colors.red} />
         </View>
@@ -106,6 +108,27 @@ export default function DriverLogin() {
         title={loading ? "Verifying Driver Credentials…" : "Sign In with Google"}
         onPress={handleGoogleSignIn}
         disabled={loading}
+      />
+
+      <Button
+        title="🚀 Quick Ambulance Demo Login"
+        variant="blue"
+        style={{ marginTop: 12 }}
+        onPress={() => {
+          const store = useAppStore.getState();
+          store.setIsAuthenticated(true);
+          store.setRole('AMBULANCE_DRIVER');
+          store.setRoles(['AMBULANCE_DRIVER']);
+          store.setVerificationStatus('APPROVED');
+          store.setUserProfile({
+            uid: 'demo-driver-001',
+            name: 'Ramesh Driver',
+            role: 'AMBULANCE_DRIVER',
+            roles: ['AMBULANCE_DRIVER'],
+            verificationStatus: 'APPROVED',
+          });
+          router.replace('/(ambulance)/dashboard');
+        }}
       />
 
       <Button

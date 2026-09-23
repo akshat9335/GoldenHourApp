@@ -13,24 +13,22 @@ export default function DoctorLayout() {
     r.toUpperCase()
   );
   const isDoctor = activeRoles.includes('DOCTOR');
-  const doctorStatus = userProfile?.roleVerificationStatus?.DOCTOR || verificationStatus;
-  const isAuthorizedDoctor = isAuthenticated && isDoctor && doctorStatus === 'APPROVED';
+  const doctorStatus = (
+    userProfile?.roleVerificationStatus?.DOCTOR ||
+    verificationStatus ||
+    'PENDING'
+  ).toUpperCase();
+  const isAuthorizedDoctor = isAuthenticated && isDoctor && (doctorStatus === 'APPROVED' || doctorStatus === 'VERIFIED');
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/');
     } else if (!isDoctor) {
       router.replace('/(patient)/home');
-    } else if (doctorStatus !== 'APPROVED') {
+    } else if (doctorStatus !== 'APPROVED' && doctorStatus !== 'VERIFIED') {
       router.replace('/doctor-login');
-    } else if (role !== 'DOCTOR') {
-      useAppStore.getState().setRole('DOCTOR');
     }
-  }, [isAuthenticated, isDoctor, doctorStatus, role]);
-
-  if (!isAuthorizedDoctor) {
-    return null;
-  }
+  }, [isAuthenticated, isDoctor, doctorStatus]);
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

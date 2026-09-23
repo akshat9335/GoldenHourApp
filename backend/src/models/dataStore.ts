@@ -184,6 +184,7 @@ class InMemoryDataStore {
 
     this.doctors.set(docBlr1.doctorId, docBlr1);
     this.doctors.set(docBlr2.doctorId, docBlr2);
+    this.doctors.set("doc-be-0", { ...docBlr1, doctorId: "doc-be-0" });
 
     // Seed Queues
     const today = new Date().toISOString().split("T")[0];
@@ -210,8 +211,17 @@ class InMemoryDataStore {
       date: today,
       servingToken: 14,
       totalTokensIssued: 18,
-      avgConsultationMinutes: 10,
+      avgConsultationMinutes: 15,
       waitingCount: 4,
+    });
+
+    this.queues.set(`doc-be-0_${today}`, {
+      doctorId: "doc-be-0",
+      date: today,
+      servingToken: 14,
+      totalTokensIssued: 25,
+      avgConsultationMinutes: 10,
+      waitingCount: 11,
     });
 
     this.queues.set(`${docBlr2.doctorId}_${today}`, {

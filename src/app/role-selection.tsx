@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { router } from 'expo-router';
-import { colors } from '@/constants/theme';
-import { Card, Icon, IconName, HTitle } from '@/components/ui';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { router, Link } from 'expo-router';
+import { colors, radii, shadow } from '@/constants/theme';
+import { Icon, IconName, HTitle } from '@/components/ui';
 import { useAppStore, Role } from '@/store/useAppStore';
 import '@/services/i18n'; // Initialize i18n for the whole app
 
@@ -17,41 +17,50 @@ const ROLES: Array<{ role: Role; label: string; sub: string; icon: IconName; hre
 
 export default function RoleSelection() {
   const setRole = useAppStore((s) => s.setRole);
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
       <HTitle size={21}>Continue as</HTitle>
       <Text style={styles.sub}>Select how you'll be using Golden Hour</Text>
-      <View style={{ gap: 12, marginTop: 24 }}>
+
+      <View style={{ marginTop: 24 }}>
         {ROLES.map((r) => {
           const isASHA = r.role === 'FRONTLINE_WORKER';
           const isAdmin = r.role === 'ADMIN';
           const iconColor = r.accent ?? colors.red;
           const iconBg = isASHA ? '#F0FDF4' : isAdmin ? '#FEF2F2' : colors.redGlow;
+
           return (
-            <Card key={r.role} style={[styles.card, isASHA && styles.ashaCard]}>
-              <TouchableOpacity
-                style={styles.rowTouchable}
-                onPress={() => {
-                  setRole(r.role);
-                  router.push(r.href as any);
-                }}
-                activeOpacity={0.7}
+            <Link key={r.role} href={r.href as any} asChild onPress={() => setRole(r.role)}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.card,
+                  isASHA && styles.ashaCard,
+                  pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+                ]}
               >
-                <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
-                  <Icon name={r.icon} size={22} color={iconColor} />
+                <View style={styles.rowTouchable}>
+                  <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
+                    <Icon name={r.icon} size={22} color={iconColor} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.roleLabel}>{r.label}</Text>
+                    <Text style={styles.roleSub}>{r.sub}</Text>
+                    {isASHA && (
+                      <View style={styles.ashaBadge}>
+                        <Text style={styles.ashaBadgeText}>🌾 Works Offline • Hindi/English</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Icon name="chevR" color={colors.inkFaint} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.roleLabel}>{r.label}</Text>
-                  <Text style={styles.roleSub}>{r.sub}</Text>
-                  {isASHA && (
-                    <View style={styles.ashaBadge}>
-                      <Text style={styles.ashaBadgeText}>🌾 Works Offline • Hindi/English</Text>
-                    </View>
-                  )}
-                </View>
-                <Icon name="chevR" color={colors.inkFaint} />
-              </TouchableOpacity>
-            </Card>
+              </Pressable>
+            </Link>
           );
         })}
       </View>
@@ -62,7 +71,14 @@ export default function RoleSelection() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, padding: 24, paddingTop: 70 },
   sub: { color: colors.inkSoft, fontSize: 12.5, marginTop: 6 },
-  card: { padding: 4 },
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: '#EEF1F5',
+    marginBottom: 12,
+    ...shadow.card,
+  },
   ashaCard: { borderWidth: 1.5, borderColor: '#86EFAC' },
   rowTouchable: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14 },
   iconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.redGlow, alignItems: 'center', justifyContent: 'center' },

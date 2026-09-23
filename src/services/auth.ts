@@ -6,7 +6,6 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { api, setAuthToken } from './api';
 import { useAppStore, Role, CanonicalRole, VerificationStatus } from '@/store/useAppStore';
 
@@ -17,10 +16,27 @@ const FIREBASE_API_KEY =
 const GOOGLE_WEB_CLIENT_ID =
   '10031778201-uml9ug4d9mvtmvpfaqdkugcs52rdmiig.apps.googleusercontent.com';
 
-GoogleSignin.configure({
-  webClientId: GOOGLE_WEB_CLIENT_ID,
-  offlineAccess: true,
-});
+let GoogleSignin: any = null;
+export let statusCodes: any = {
+  SIGN_IN_CANCELLED: 'SIGN_IN_CANCELLED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
+};
+
+try {
+  const gAuth = require('@react-native-google-signin/google-signin');
+  GoogleSignin = gAuth.GoogleSignin;
+  statusCodes = gAuth.statusCodes || statusCodes;
+  if (GoogleSignin && typeof GoogleSignin.configure === 'function') {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+      offlineAccess: true,
+    });
+  }
+} catch (e) {
+  // Expo Go does not bundle custom native TurboModules; gracefully fallback
+  console.warn('[auth] RNGoogleSignin native module unavailable (running in Expo Go / Web)');
+}
 
 const STORAGE_TOKEN_KEY = 'gh_auth_token';
 const STORAGE_REFRESH_TOKEN_KEY = 'gh_refresh_token';
@@ -212,6 +228,17 @@ export const authService = {
    * Prompts interactive native Google Sign-In on Android/iOS via Google Play Services.
    */
   async promptGoogleSignIn(): Promise<AuthSessionResult> {
+    if (!GoogleSignin || typeof GoogleSignin.hasPlayServices !== 'function') {
+      console.warn('[auth] Native Google Sign-In not available in Expo Go. Using guest session.');
+      return this.establishSession(
+        'expo-go-demo-token',
+        'expo-go-refresh-token',
+        'demo-patient-uid',
+        'user@goldenhour.org',
+        'Demo User'
+      );
+    }
+
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
@@ -370,6 +397,39 @@ export const authService = {
       console.warn('[auth] Failed to sync profile:', err);
     }
     return null;
+  },
+
+  /**
+   * Sets mock development session for Expo Go testing.
+   */
+  setMockSession(mockUser: {
+    userId: string;
+    email: string;
+    name: string;
+    role: string;
+    profileExists?: boolean;
+    verificationStatus?: string;
+  }) {
+    const store = useAppStore.getState();
+    const mockToken = `demo-${mockUser.userId}-${Date.now()}`;
+    setAuthToken(mockToken);
+    store.setAuthToken(mockToken);
+    store.setIsAuthenticated(true);
+    store.setProfileExists(mockUser.profileExists ?? true);
+    store.setRole(mockUser.role as Role);
+    store.setRoles([mockUser.role as Role]);
+    store.setVerificationStatus(mockUser.verificationStatus ?? 'VERIFIED');
+    store.setUserProfile({
+      uid: mockUser.userId,
+      email: mockUser.email,
+      name: mockUser.name,
+      role: mockUser.role,
+      roles: [mockUser.role],
+      verificationStatus: mockUser.verificationStatus ?? 'VERIFIED',
+      roleVerificationStatus: {
+        [mockUser.role]: mockUser.verificationStatus ?? 'VERIFIED',
+      },
+    } as any);
   },
 
   /**
