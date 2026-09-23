@@ -983,7 +983,7 @@ export async function acceptHospitalRequest(
   const currentStatus = (requestData.status ??
     "NEW") as string;
 
-  if (currentStatus !== "NEW" && currentStatus !== "PENDING") {
+  if (currentStatus !== "NEW" && currentStatus !== "PENDING" && currentStatus !== "QUEUED_STANDBY") {
     throw new AppError(
       400,
       "INVALID_REQUEST_STATE",
@@ -1042,11 +1042,12 @@ export async function acceptHospitalRequest(
         .where("emergencyId", "==", emergencyId)
         .get();
       for (const sDoc of siblingSnaps.docs) {
-        if (sDoc.id !== requestId && sDoc.data().status === "NEW") {
+        const sStatus = sDoc.data().status;
+        if (sDoc.id !== requestId && (sStatus === "NEW" || sStatus === "QUEUED_STANDBY" || sStatus === "PENDING")) {
           await sDoc.ref.set(
             {
               status: "REJECTED",
-              rejectionReason: "Accepted by another hospital",
+              rejectionReason: `Accepted by ${hospData.name || "another hospital"}`,
               updatedAt: now,
             },
             { merge: true },
@@ -1064,9 +1065,16 @@ export async function acceptHospitalRequest(
       const capRef = firestore.collection("hospitalCapacity").doc(hospital.docId);
       const capSnap = await capRef.get();
       if (capSnap.exists) {
+        const reqSeverity = String(requestData.severity || "").toUpperCase();
+        const reqCaps = ((requestData.aiResult as any)?.requiredCapabilities as string[]) || [];
+        const isIcuNeeded = reqSeverity === "CRITICAL" || reqCaps.includes("ICU") || reqCaps.includes("ICU_STANDBY");
+
         const curCap = capSnap.data() || {};
         const newAvail = Math.max(0, (Number(curCap.availableBeds) || 14) - 1);
-        const newIcuAvail = Math.max(0, (Number(curCap.availableIcuBeds) || 5) - 1);
+        const newIcuAvail = isIcuNeeded
+          ? Math.max(0, (Number(curCap.availableIcuBeds) || 5) - 1)
+          : Number(curCap.availableIcuBeds ?? 5);
+
         await capRef.set({ availableBeds: newAvail, availableIcuBeds: newIcuAvail, updatedAt: now }, { merge: true });
         await firestore.collection("hospitals").doc(hospital.docId).set({
           availableBeds: newAvail,

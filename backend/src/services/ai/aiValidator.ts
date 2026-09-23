@@ -23,11 +23,16 @@ export function validateEmergencyInput(input: unknown): EmergencyInput {
     throw invalidInput("Emergency input must be a JSON object.");
   }
 
-  if (!isStringArray(input.symptoms)) {
-    throw invalidInput("symptoms must be an array of strings.");
+  let rawSymptoms: string[] = [];
+  if (typeof input.symptoms === "string") {
+    rawSymptoms = input.symptoms.trim() ? [input.symptoms.trim()] : [];
+  } else if (isStringArray(input.symptoms)) {
+    rawSymptoms = input.symptoms;
+  } else {
+    throw invalidInput("symptoms must be an array of strings or a string.");
   }
 
-  const symptoms = input.symptoms
+  const symptoms = rawSymptoms
     .map((symptom) => symptom.trim())
     .filter(Boolean);
   if (symptoms.length > 50) {

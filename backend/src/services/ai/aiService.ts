@@ -46,6 +46,12 @@ function heuristicResult(input: EmergencyInput, source: "mock" | "fallback"): Tr
     requiredCapabilities = ["OUTPATIENT_CLINIC", "FIRST_AID"];
     specialtyNeeded = "GENERAL";
     recommendedHospitalType = "Primary Healthcare Center / Outpatient Clinic";
+  } else if (/\b(dog bite|animal bite|kutta|kutte|snake bite|saanp|cat bite|rabies|bite)\b/.test(text)) {
+    severity = "MEDIUM";
+    emergencyType = "Animal Bite / Potential Rabies Exposure";
+    requiredCapabilities = ["EMERGENCY_ROOM", "WOUND_CARE", "RABIES_VACCINE"];
+    specialtyNeeded = "GENERAL";
+    recommendedHospitalType = "Emergency Care Center / Anti-Rabies Clinic";
   } else if (
     /\b(chest pain|difficulty breathing|shortness of breath|seene me dard|chhaati me dard|heart|saans|cardiac)\b/.test(text)
   ) {

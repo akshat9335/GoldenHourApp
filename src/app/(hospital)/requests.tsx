@@ -32,7 +32,7 @@ export default function HospitalRequests() {
       if (Array.isArray(raw)) {
         const pending = raw.filter((d: any) => {
           const s = String(d.status || 'NEW').toUpperCase();
-          return s === 'NEW' || s === 'PENDING';
+          return s === 'NEW' || s === 'PENDING' || s === 'QUEUED_STANDBY';
         });
 
         // Sort newest first

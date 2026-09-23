@@ -101,7 +101,20 @@ export default function Active() {
     }
   };
 
-  const hasHospitalAccepted = ambStatus >= 1 || !!emergency?.assignedHospitalName;
+  const isHospitalConfirmed =
+    (ambStatus >= 1 ||
+      emergency?.status === 'HOSPITAL_ACCEPTED' ||
+      emergency?.status === 'AMBULANCE_ASSIGNED' ||
+      emergency?.status === 'EN_ROUTE_TO_PATIENT' ||
+      emergency?.status === 'ARRIVING' ||
+      emergency?.status === 'PATIENT_ONBOARD' ||
+      emergency?.status === 'EN_ROUTE_TO_HOSPITAL' ||
+      emergency?.status === 'COMPLETED') &&
+    emergency?.status !== 'REPORTED' &&
+    emergency?.status !== 'HOSPITAL_SEARCH' &&
+    !!emergency?.assignedHospitalName;
+
+  const hasHospitalAccepted = isHospitalConfirmed;
   const hasAmbulanceAssigned =
     ambStatus >= 2 ||
     !!emergency?.assignedDriverName ||
@@ -116,7 +129,7 @@ export default function Active() {
   const hospitalSub = hasHospitalAccepted
     ? 'Trauma Desk Standing By'
     : (emergency as any)?.escalationMessage || 'Broadcasting triage to nearest emergency ER';
-  const hospitalPhone = emergency?.assignedHospitalPhone || null;
+  const hospitalPhone = hasHospitalAccepted ? emergency?.assignedHospitalPhone || null : null;
 
   const ambulancePlate = hasAmbulanceAssigned
     ? emergency?.assignedAmbulanceId || 'Unit Dispatched'
@@ -217,7 +230,7 @@ export default function Active() {
 
         <Card style={styles.pairCard}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Icon name="hospital" size={18} color={hasHospitalAccepted ? colors.blue : colors.inkFaint} />
+            <Icon name="hospital" size={18} color={hasHospitalAccepted ? colors.blue : colors.amber} />
             <Text style={styles.pairTitle} numberOfLines={1}>
               {hospitalName}
             </Text>

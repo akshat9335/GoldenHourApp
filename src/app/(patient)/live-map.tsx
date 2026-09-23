@@ -124,6 +124,19 @@ export default function LiveMap() {
     emergency?.tripStatus === 'PATIENT_ONBOARD' ||
     emergency?.tripStatus === 'EN_ROUTE_TO_HOSPITAL';
 
+  const hasHospitalAccepted =
+    (ambStatus >= 1 ||
+      emergency?.status === 'HOSPITAL_ACCEPTED' ||
+      emergency?.status === 'AMBULANCE_ASSIGNED' ||
+      emergency?.status === 'EN_ROUTE_TO_PATIENT' ||
+      emergency?.status === 'ARRIVING' ||
+      emergency?.status === 'PATIENT_ONBOARD' ||
+      emergency?.status === 'EN_ROUTE_TO_HOSPITAL' ||
+      emergency?.status === 'COMPLETED') &&
+    emergency?.status !== 'REPORTED' &&
+    emergency?.status !== 'HOSPITAL_SEARCH' &&
+    !!emergency?.assignedHospitalName;
+
   const handleOpenGoogleMaps = () => {
     if (isEnRouteToHospital && hospCoord?.latitude && hospCoord?.longitude) {
       openExternalMapPreview({
@@ -288,43 +301,51 @@ export default function LiveMap() {
             {/* Assigned Hospital Card */}
             <Card style={styles.entityCard}>
               <View style={styles.entityRow}>
-                <View style={styles.iconCircleGreen}>
-                  <Icon name="hospital" size={22} color={colors.success} />
+                <View style={hasHospitalAccepted ? styles.iconCircleGreen : [styles.iconCircleGreen, { backgroundColor: '#FEF3C7' }]}>
+                  <Icon name="hospital" size={22} color={hasHospitalAccepted ? colors.success : colors.amber} />
                 </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.entityTitle}>
-                    {emergency?.assignedHospitalName || 'Emergency ER Trauma Center'}
+                    {hasHospitalAccepted
+                      ? (emergency?.assignedHospitalName || 'Emergency ER Trauma Center')
+                      : ((emergency as any)?.alertedHospitalName ? `Alerting ${(emergency as any).alertedHospitalName}...` : 'Alerting Nearest ER...')}
                   </Text>
-                  <Text style={styles.entitySub}>Trauma Desk standing by with critical care team</Text>
+                  <Text style={styles.entitySub}>
+                    {hasHospitalAccepted
+                      ? 'Trauma Desk standing by with critical care team'
+                      : 'Awaiting ER hospital acceptance & bed confirmation'}
+                  </Text>
                 </View>
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  {hospCoord?.latitude && hospCoord?.longitude ? (
-                    <TouchableOpacity
-                      style={[styles.callBtn, { backgroundColor: '#EFF6FF', borderColor: colors.blue }]}
-                      onPress={() => {
-                        openExternalMapPreview({
-                          lat: hospCoord.latitude,
-                          lng: hospCoord.longitude,
-                          title: emergency?.assignedHospitalName || 'Hospital ER',
-                          originLat: pLat,
-                          originLng: pLng,
-                        });
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.callBtnText, { color: colors.blue }]}>📍 Pin</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {emergency?.assignedHospitalPhone ? (
-                    <TouchableOpacity
-                      style={styles.callBtn}
-                      onPress={() => Linking.openURL(`tel:${emergency.assignedHospitalPhone}`)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.callBtnText}>📞 Call</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
+                {hasHospitalAccepted ? (
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {hospCoord?.latitude && hospCoord?.longitude ? (
+                      <TouchableOpacity
+                        style={[styles.callBtn, { backgroundColor: '#EFF6FF', borderColor: colors.blue }]}
+                        onPress={() => {
+                          openExternalMapPreview({
+                            lat: hospCoord.latitude,
+                            lng: hospCoord.longitude,
+                            title: emergency?.assignedHospitalName || 'Hospital ER',
+                            originLat: pLat,
+                            originLng: pLng,
+                          });
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.callBtnText, { color: colors.blue }]}>📍 Pin</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {emergency?.assignedHospitalPhone ? (
+                      <TouchableOpacity
+                        style={styles.callBtn}
+                        onPress={() => Linking.openURL(`tel:${emergency.assignedHospitalPhone}`)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.callBtnText}>📞 Call</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
             </Card>
 

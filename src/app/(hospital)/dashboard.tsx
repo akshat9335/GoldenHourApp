@@ -69,7 +69,7 @@ export default function HospitalDashboard() {
         const items = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
         const pending = items.filter((d: any) => {
           const s = String(d.status || 'NEW').toUpperCase();
-          return s === 'NEW' || s === 'PENDING';
+          return s === 'NEW' || s === 'PENDING' || s === 'QUEUED_STANDBY';
         });
         const inbound = items.filter((d: any) => {
           const s = String(d.status || '').toUpperCase();

@@ -100,33 +100,79 @@ function computeHospitalMatchScore(
   distanceKm: number,
   reqCaps: string[],
   specialtyNeeded: string,
-): number {
+  severity: string = "MEDIUM",
+  hasEquippedFacilityNearby: boolean = true,
+): { score: number; matchReason: string; isStabilizationOnly: boolean } {
   let score = 0;
   const facilities = (hosp.facilities || []).map((f) => String(f).toLowerCase());
   const hospName = String(hosp.name || "").toLowerCase();
 
-  // 1. Capability Match (0 to 50 pts)
+  const hasIcu = (hosp.availableIcuBeds ?? 0) > 0 || facilities.some((f) => f.includes("icu"));
+  const hasCathLab = facilities.some((f) => f.includes("cath") || f.includes("cardiac") || hospName.includes("heart") || hospName.includes("medanta"));
+  const hasTrauma = facilities.some((f) => f.includes("trauma") || f.includes("ortho") || hospName.includes("trauma") || hospName.includes("srn"));
+
   let capabilityMatch = 30; // base emergency capability
-  if (
-    specialtyNeeded === "CARDIOLOGY" &&
-    (facilities.some((f) => f.includes("cardiac") || f.includes("cath")) ||
-      hospName.includes("medanta") ||
-      hospName.includes("heart"))
-  ) {
-    capabilityMatch += 20;
-  } else if (
-    specialtyNeeded === "TRAUMA_ORTHO" &&
-    (facilities.some((f) => f.includes("trauma") || f.includes("ortho")) ||
-      hospName.includes("trauma") ||
-      hospName.includes("srn"))
-  ) {
-    capabilityMatch += 20;
-  } else if (
-    reqCaps.includes("ICU") &&
-    ((hosp.availableIcuBeds ?? 0) > 0 || facilities.some((f) => f.includes("icu")))
-  ) {
-    capabilityMatch += 15;
+  let isStabilizationOnly = false;
+  let matchReason = "General Emergency Services";
+
+  if (severity === "CRITICAL" || severity === "HIGH") {
+    if (specialtyNeeded === "CARDIOLOGY") {
+      if (hasCathLab) {
+        capabilityMatch = 50;
+        matchReason = "Equipped Cardiac & Cath Lab Resuscitation Center";
+      } else if (hasIcu) {
+        capabilityMatch = 35;
+        matchReason = "ICU Resuscitation Bed Available";
+      } else {
+        isStabilizationOnly = true;
+        if (hasEquippedFacilityNearby) {
+          capabilityMatch = 5;
+          matchReason = "Bypassed: Lacks Cardiac/Cath Lab (Equipped Center Nearby)";
+        } else {
+          capabilityMatch = 25;
+          matchReason = "Primary Stabilization Center (Airway & Anti-Shock Prepped)";
+        }
+      }
+    } else if (specialtyNeeded === "TRAUMA_ORTHO") {
+      if (hasTrauma) {
+        capabilityMatch = 50;
+        matchReason = "Equipped Level-1 Trauma & Orthopedic Center";
+      } else if (hasIcu) {
+        capabilityMatch = 35;
+        matchReason = "ICU Trauma Resuscitation Available";
+      } else {
+        isStabilizationOnly = true;
+        if (hasEquippedFacilityNearby) {
+          capabilityMatch = 5;
+          matchReason = "Bypassed: Lacks Major Trauma Unit (Equipped Center Nearby)";
+        } else {
+          capabilityMatch = 25;
+          matchReason = "Primary Stabilization Center (Hemorrhage & Fracture Control)";
+        }
+      }
+    } else if (reqCaps.includes("ICU") || reqCaps.includes("ICU_STANDBY")) {
+      if (hasIcu) {
+        capabilityMatch = 45;
+        matchReason = "Critical Care / ICU Standby Available";
+      } else {
+        isStabilizationOnly = true;
+        if (hasEquippedFacilityNearby) {
+          capabilityMatch = 10;
+          matchReason = "Bypassed: Zero ICU Beds Available (Equipped Center Nearby)";
+        } else {
+          capabilityMatch = 25;
+          matchReason = "Primary Stabilization Center (Oxygen & Vitals Monitoring)";
+        }
+      }
+    }
+  } else {
+    // Non-critical / minor (Dog bite, minor laceration, fever, etc.)
+    capabilityMatch = 45;
+    matchReason = reqCaps.includes("RABIES_VACCINE")
+      ? "Outpatient Wound Care & Anti-Rabies Vaccine Ready"
+      : "Standard Emergency Outpatient & Minor Care";
   }
+
   score += Math.min(50, capabilityMatch);
 
   // 2. Bed Availability (0 to 30 pts)
@@ -139,7 +185,7 @@ function computeHospitalMatchScore(
   const proximityPts = Math.max(0, Math.round(20 - distanceKm * 2));
   score += Math.min(20, proximityPts);
 
-  return score;
+  return { score, matchReason, isStabilizationOnly };
 }
 
 function getFirestore() {
@@ -230,9 +276,11 @@ export async function createEmergency(
   let triageResult = input.aiResult as any;
   if (!triageResult) {
     try {
+      const rawText = input.description || input.voiceTranscript || "";
+      const symptomsList = rawText.trim() ? [rawText.trim()] : [];
       triageResult = await analyzeEmergency({
         incidentType: input.incidentType,
-        symptoms: input.description || input.voiceTranscript || "",
+        symptoms: symptomsList,
         description: input.description || "",
       });
     } catch (e) {
@@ -273,6 +321,24 @@ export async function createEmergency(
       const candidateList: any[] = [];
       const allHospitalsSnap = await db.collection("hospitals").get();
 
+      // Pre-check if any equipped hospital is within Golden Hour corridor (< 25km)
+      let hasEquippedFacilityNearby = false;
+      if (allHospitalsSnap && !allHospitalsSnap.empty) {
+        for (const hDoc of allHospitalsSnap.docs) {
+          if (hDoc.id.startsWith("test-")) continue;
+          const hData = hDoc.data();
+          const hLoc = hData.location || { latitude: hData.latitude || 25.4538, longitude: hData.longitude || 81.854 };
+          const dist = calculateHaversineKm(emergency.location.latitude, emergency.location.longitude, hLoc.latitude, hLoc.longitude);
+          const facilities = (hData.facilities || []).map((f: any) => String(f).toLowerCase());
+          const hospName = String(hData.name || "").toLowerCase();
+          const isEquipped = (hData.availableIcuBeds ?? 0) > 0 || facilities.some((f: string) => f.includes("icu") || f.includes("cath") || f.includes("trauma")) || hospName.includes("medanta") || hospName.includes("srn");
+          if (dist <= 25 && isEquipped) {
+            hasEquippedFacilityNearby = true;
+            break;
+          }
+        }
+      }
+
       if (allHospitalsSnap && !allHospitalsSnap.empty) {
         for (const hDoc of allHospitalsSnap.docs) {
           if (hDoc.id.startsWith("test-")) continue;
@@ -292,11 +358,13 @@ export async function createEmergency(
           );
           const eta = Math.max(4, Math.round(dist * 2.5));
 
-          const score = computeHospitalMatchScore(
+          const match = computeHospitalMatchScore(
             hData,
             dist,
             reqCaps,
             specialtyNeeded,
+            emergency.severity || "MEDIUM",
+            hasEquippedFacilityNearby,
           );
 
           candidateList.push({
@@ -306,7 +374,9 @@ export async function createEmergency(
             location: hLoc,
             distanceKm: Number(dist.toFixed(1)),
             etaMinutes: eta,
-            score,
+            score: match.score,
+            matchReason: match.matchReason,
+            isStabilizationOnly: match.isStabilizationOnly,
             availableBeds: Number(hData.availableBeds ?? 14),
             availableIcuBeds: Number(hData.availableIcuBeds ?? 5),
           });
@@ -353,6 +423,12 @@ export async function createEmergency(
       }));
 
       const topRank = rankedCandidates[0];
+      const isRuralStabilization = topRank.isStabilizationOnly && !hasEquippedFacilityNearby;
+      const tertiaryBackup = rankedCandidates.find((c) => !c.isStabilizationOnly && c.hospitalId !== topRank.hospitalId);
+
+      const ruralEscalationNotice = isRuralStabilization && tertiaryBackup
+        ? `Life-Support Bridge Active: En route to nearest local emergency facility for initial stabilization (${topRank.name}), with standby ICU reservation at ${tertiaryBackup.name}.`
+        : null;
 
       // Update emergency record with ranked hospital candidates
       const emergencyUpdates = {
@@ -360,14 +436,15 @@ export async function createEmergency(
         alertedCandidateIndex: 0,
         alertedHospitalId: topRank.hospitalId,
         alertedHospitalName: topRank.name,
-        assignedHospitalName: topRank.name,
-        assignedHospitalLocation: topRank.location,
-        assignedHospitalPhone: topRank.phone,
+        assignedHospitalName: null,
+        assignedHospitalLocation: null,
+        assignedHospitalPhone: null,
         alertedAt: now,
         status: "HOSPITAL_SEARCH" as EmergencyStatus,
         matchScore: topRank.score,
         severity: emergency.severity || triageResult?.severity || "CRITICAL",
         triageSummary: (emergency.aiResult as any)?.emergencyType || (emergency.aiResult as any)?.summary || "Emergency Triage Evaluated",
+        escalationMessage: ruralEscalationNotice || emergency.escalationMessage || null,
         updatedAt: now,
       };
 
@@ -673,9 +750,9 @@ export async function escalateEmergencyToNextHospital(
       alertedCandidateIndex: nextIdx,
       alertedHospitalId: nextHospital.hospitalId,
       alertedHospitalName: nextHospital.name,
-      assignedHospitalName: nextHospital.name,
-      assignedHospitalLocation: nextHospital.location || { latitude: 25.4538, longitude: 81.854 },
-      assignedHospitalPhone: nextHospital.phone || null,
+      assignedHospitalName: null,
+      assignedHospitalLocation: null,
+      assignedHospitalPhone: null,
       status: "HOSPITAL_SEARCH",
       escalationMessage: `ER desk ${candidates[currentIdx]?.name || "initial hospital"} busy. Automatically escalating alert to ${nextHospital.name}...`,
       alertedAt: now,

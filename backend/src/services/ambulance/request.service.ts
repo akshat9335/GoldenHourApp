@@ -104,11 +104,6 @@ export async function getAmbulanceRequests(
         } else if (driverHospId && req.assignedHospitalId) {
           if (req.assignedHospitalId !== driverHospId) return false;
         }
-      } else {
-        // If hospital dispatched to independent/broadcast, drivers bound exclusively to a different hospital don't see it
-        if (req.assignedHospitalId && !isIndependent && driverHospId && req.assignedHospitalId !== driverHospId) {
-          return false;
-        }
       }
 
       // If dismissed by this driver
