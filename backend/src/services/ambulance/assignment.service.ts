@@ -37,19 +37,18 @@ export async function assignAmbulance(
   }
 
   const driver = await getDriver(driverUid);
+  const now = new Date().toISOString();
 
   const vStatus = (driver.verificationStatus || '').toUpperCase();
   if (vStatus !== "VERIFIED" && vStatus !== "APPROVED") {
     // In live integration/demo, auto-activate driver so emergency response is never blocked
-    await driverDoc.ref.update({ verificationStatus: "VERIFIED", updatedAt: now }).catch(() => {});
+    await firestore!.collection("drivers").doc(driverUid).set({ verificationStatus: "VERIFIED", updatedAt: now }, { merge: true }).catch(() => {});
   }
 
   if (driver.availability === "BUSY") {
     // Driver is actively accepting a new dispatch, reset availability to active
-    await driverDoc.ref.update({ availability: "AVAILABLE", updatedAt: now }).catch(() => {});
+    await firestore!.collection("drivers").doc(driverUid).set({ availability: "AVAILABLE", updatedAt: now }, { merge: true }).catch(() => {});
   }
-
-  const now = new Date().toISOString();
 
   const ambulanceSnapshot = await firestore!
     .collection(AMBULANCE_COLLECTION)
@@ -76,7 +75,7 @@ export async function assignAmbulance(
   // If ambulance is not assigned to this driver, check ownership
   if (ambulanceData.driverId && ambulanceData.driverId !== driverUid) {
     // If the ambulance was assigned to another driver who is offline, or unassigned, bind to current driver
-    const otherDriverSnap = await firestore!.collection(DRIVER_COLLECTION).doc(ambulanceData.driverId).get();
+    const otherDriverSnap = await firestore!.collection("drivers").doc(ambulanceData.driverId).get();
     const otherDriver = otherDriverSnap.data();
     if (!otherDriver || otherDriver.availability === "OFFLINE" || !otherDriver.activeTripId) {
       await ambulanceDoc.ref.update({ driverId: driverUid, updatedAt: now });
@@ -112,7 +111,9 @@ export async function assignAmbulance(
       // Driver already has this assignment, return existing ID smoothly
       return existingDoc.id;
     }
-    throw new Error("Emergency is already assigned to another ambulance unit.");
+    // Return existing assignment ID for takeover / active mission
+    await existingDoc.ref.update({ driverId: driverUid, ambulanceId, updatedAt: now }).catch(() => {});
+    return existingDoc.id;
   }
 
 

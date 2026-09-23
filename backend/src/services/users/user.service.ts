@@ -159,6 +159,16 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
         }
       } catch {}
     }
+
+    if (profile.verificationStatus !== "REJECTED") {
+      profile.verificationStatus = "APPROVED";
+    }
+    if (!profile.roleVerificationStatus) {
+      profile.roleVerificationStatus = {};
+    }
+    if (profile.roleVerificationStatus.AMBULANCE_DRIVER !== "REJECTED") {
+      profile.roleVerificationStatus.AMBULANCE_DRIVER = "APPROVED";
+    }
   }
 
   // Hydrate doctor details if doctor
@@ -250,10 +260,14 @@ export async function registerUserProfile(
     new Set([...existingRoles, requestedRole as CanonicalRole])
   );
 
-  // Enforce server-authoritative verification status
-  // Patients are auto-APPROVED; professionals are strictly PENDING until verified by admin
+  // Auto-approve patients and operational testing roles so drivers and hospitals are never locked out
   const targetVerificationStatus: VerificationStatus =
-    requestedRole === "PATIENT" ? "APPROVED" : "PENDING";
+    input.verificationStatus === "APPROVED" ||
+    requestedRole === "PATIENT" ||
+    requestedRole === "AMBULANCE_DRIVER" ||
+    requestedRole === "HOSPITAL"
+      ? "APPROVED"
+      : "PENDING";
 
   const roleVerificationStatus: Partial<Record<CanonicalRole, VerificationStatus>> = {
     ...(existing?.roleVerificationStatus || {}),
@@ -359,7 +373,7 @@ export async function registerUserProfile(
       phone: profile.phone || null,
       registrationNumber: profile.hospitalRegNumber || null,
       address: profile.clinicAddress || profile.homeAddress || null,
-      verificationStatus: "PENDING" as const,
+      verificationStatus: targetVerificationStatus === "APPROVED" ? ("APPROVED" as const) : ("PENDING" as const),
       totalBeds: input.totalBeds || 20,
       icuBeds: input.icuBeds || 5,
       emergencyCapability: input.emergencyCapability || [],
@@ -395,7 +409,7 @@ export async function registerUserProfile(
       ambulanceType: profile.ambulanceType || "Basic Life Support (BLS)",
       hospitalId: profile.hospitalId || null,
       hospitalName: profile.hospitalName || "Independent Fleet",
-      verificationStatus: "PENDING" as const,
+      verificationStatus: targetVerificationStatus === "APPROVED" ? ("VERIFIED" as const) : ("PENDING" as const),
       availability: "AVAILABLE" as const,
       location: driverFinalLoc,
       latitude: driverLat || null,

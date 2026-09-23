@@ -49,9 +49,20 @@ export default function AmbulanceDashboard() {
 
       if (Array.isArray(tripsRes)) {
         setTripCount(tripsRes.length);
-        const inProgress = tripsRes.find(
-          (t: any) => t.status === 'ASSIGNED' || t.status === 'EN_ROUTE' || t.status === 'ARRIVED' || t.status === 'TRANSPORTING'
-        );
+        const inProgress = tripsRes.find((t: any) => {
+          const s = String(t.status || '').toUpperCase();
+          return (
+            s === 'ASSIGNED' ||
+            s === 'EN_ROUTE' ||
+            s === 'EN_ROUTE_TO_PATIENT' ||
+            s === 'ARRIVED' ||
+            s === 'AT_PATIENT' ||
+            s === 'PATIENT_ONBOARD' ||
+            s === 'TRANSPORTING' ||
+            s === 'EN_ROUTE_TO_HOSPITAL' ||
+            s === 'AT_HOSPITAL'
+          );
+        });
         if (inProgress) {
           setActiveTrip(inProgress);
           setActiveTripId(inProgress.id || inProgress._id);
@@ -74,6 +85,10 @@ export default function AmbulanceDashboard() {
 
   useEffect(() => {
     loadDashboardData();
+    const interval = setInterval(() => {
+      loadDashboardData();
+    }, 3500);
+    return () => clearInterval(interval);
   }, [loadDashboardData]);
 
   useEffect(() => {
@@ -151,17 +166,37 @@ export default function AmbulanceDashboard() {
 
   const handleResumeTrip = () => {
     if (!activeTrip) return;
-    const st = activeTrip.status;
-    if (st === 'EN_ROUTE_TO_PATIENT' || st === 'ASSIGNED') {
-      router.push('/(ambulance)/navigate-patient');
-    } else if (st === 'AT_PATIENT') {
-      router.push('/(ambulance)/arrived-patient');
-    } else if (st === 'PATIENT_ONBOARD' || st === 'EN_ROUTE_TO_HOSPITAL') {
-      router.push('/(ambulance)/picked-up');
+    const st = String(activeTrip.status || '').toUpperCase();
+    const tripId = activeTrip.id || activeTrip._id;
+    const emId = activeTrip.emergencyId || activeTrip.id || activeTrip._id;
+    if (tripId) setActiveTripId(tripId);
+    if (emId) setEmergencyId(emId);
+
+    if (st === 'EN_ROUTE_TO_PATIENT' || st === 'ASSIGNED' || st === 'EN_ROUTE') {
+      router.push({
+        pathname: '/(ambulance)/navigate-patient',
+        params: { emergencyId: emId, tripId },
+      });
+    } else if (st === 'AT_PATIENT' || st === 'ARRIVED') {
+      router.push({
+        pathname: '/(ambulance)/arrived-patient',
+        params: { emergencyId: emId, tripId },
+      });
+    } else if (st === 'PATIENT_ONBOARD' || st === 'EN_ROUTE_TO_HOSPITAL' || st === 'TRANSPORTING') {
+      router.push({
+        pathname: '/(ambulance)/picked-up',
+        params: { emergencyId: emId, tripId },
+      });
     } else if (st === 'AT_HOSPITAL') {
-      router.push('/(ambulance)/hospital-arrival');
+      router.push({
+        pathname: '/(ambulance)/hospital-arrival',
+        params: { emergencyId: emId, tripId },
+      });
     } else {
-      router.push('/(ambulance)/navigate-patient');
+      router.push({
+        pathname: '/(ambulance)/navigate-patient',
+        params: { emergencyId: emId, tripId },
+      });
     }
   };
 

@@ -21,14 +21,18 @@ export default function HospitalLogin() {
       const rawRoles = (session.profile?.roles || [session.role || 'PATIENT']).map((r: string) => String(r).toUpperCase());
       const hasHospitalRole = rawRoles.includes('HOSPITAL');
 
+      const facilityName = session.name
+        ? `${session.name} Emergency Desk`
+        : (session.email ? `${session.email.split('@')[0].toUpperCase()} Hospital` : 'City Emergency Hospital');
+
       if (!session.profileExists || !hasHospitalRole) {
         try {
           await authService.register({
-            name: session.name || 'Swaroop Rani Nehru Hospital Desk',
+            name: session.name || facilityName,
             email: session.email || 'hospital@goldenhour.org',
             role: 'HOSPITAL',
             verificationStatus: 'APPROVED',
-            hospitalName: 'Swaroop Rani Nehru Hospital',
+            hospitalName: facilityName,
           });
         } catch {}
       }

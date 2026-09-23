@@ -122,6 +122,12 @@ export class LocationService {
             longitude: stored.lng,
             updatedAt: nowIso,
           }, { merge: true });
+          await firestore.collection("hospitals").doc(`hosp-${data.userId}`).set({
+            location: liveLoc,
+            latitude: stored.lat,
+            longitude: stored.lng,
+            updatedAt: nowIso,
+          }, { merge: true });
         }
       } catch (err) {
         // eslint-disable-next-line no-console

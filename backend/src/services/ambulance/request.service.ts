@@ -66,6 +66,17 @@ export async function getAmbulanceRequests(
       ) {
         return false;
       }
+      // 1. HOSPITAL MUST ACCEPT FIRST!
+      // An ambulance driver should NEVER see an emergency before a hospital has accepted and dispatched it.
+      const hasHospitalAccepted = !!req.assignedHospitalId || st === "HOSPITAL_ACCEPTED" || st === "AMBULANCE_SEARCH";
+      if (!hasHospitalAccepted) {
+        return false;
+      }
+
+      // If already assigned to this driver, it is an active mission, not a pending alert in queue
+      if (req.assignedDriverId && req.assignedDriverId === driverUid) {
+        return false;
+      }
       // If already assigned to another driver, exclude from this driver's queue
       if (req.assignedDriverId && req.assignedDriverId !== driverUid) {
         return false;
@@ -86,17 +97,23 @@ export async function getAmbulanceRequests(
         return false;
       }
 
+      // If hospital chose AFFILIATED dispatch, only show to targeted driver or hospital's affiliated fleet
+      if (req.dispatchMode === "AFFILIATED") {
+        if (req.targetDriverId && driverUid) {
+          if (req.targetDriverId !== driverUid) return false;
+        } else if (driverHospId && req.assignedHospitalId) {
+          if (req.assignedHospitalId !== driverHospId) return false;
+        }
+      } else {
+        // If hospital dispatched to independent/broadcast, drivers bound exclusively to a different hospital don't see it
+        if (req.assignedHospitalId && !isIndependent && driverHospId && req.assignedHospitalId !== driverHospId) {
+          return false;
+        }
+      }
+
       // If dismissed by this driver
       if (Array.isArray((req as any).dismissedBy) && driverUid && (req as any).dismissedBy.includes(driverUid)) {
         return false;
-      }
-
-      // Hospital dispatch routing:
-      // If accepted by a specific hospital, show to that hospital's drivers AND independent drivers
-      if (req.assignedHospitalId && !isIndependent && driverHospId) {
-        if (req.assignedHospitalId !== driverHospId) {
-          return false;
-        }
       }
 
       return true;

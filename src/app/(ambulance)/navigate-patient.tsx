@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/constants/theme';
 import { Card, Button, Icon, Pill, TopBar, Banner } from '@/components/ui';
@@ -11,28 +11,48 @@ import { initDeviceLocation, watchDeviceLocation } from '@/services/deviceLocati
 
 export default function NavigatePatient() {
   const insets = useSafeAreaInsets();
-  const activeTripId = useAppStore((s) => s.activeTripId);
-  const emergencyId = useAppStore((s) => s.emergencyId);
+  const params = useLocalSearchParams<{ emergencyId?: string; tripId?: string }>();
+  const activeTripId = useAppStore((s) => s.activeTripId) || params.tripId;
+  const storeEmergencyId = useAppStore((s) => s.emergencyId);
+  const emergencyId = storeEmergencyId || params.emergencyId;
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
 
   const [emergency, setEmergency] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Sync params to store if store was unhydrated
+  useEffect(() => {
+    if (params.tripId && !useAppStore.getState().activeTripId) {
+      useAppStore.getState().setActiveTripId(params.tripId);
+    }
+    if (params.emergencyId && !useAppStore.getState().emergencyId) {
+      useAppStore.getState().setEmergencyId(params.emergencyId);
+    }
+  }, [params.tripId, params.emergencyId]);
+
+  const fetchEmergency = useCallback(async () => {
+    const id = emergencyId || useAppStore.getState().emergencyId || params.emergencyId;
+    if (!id) return;
+    try {
+      const data = await api.emergencies.getById(id);
+      if (data) {
+        setEmergency(data);
+      }
+    } catch {}
+  }, [emergencyId, params.emergencyId]);
+
   useEffect(() => {
     initDeviceLocation();
-
-    if (emergencyId) {
-      api.emergencies
-        .getById(emergencyId)
-        .then((data) => setEmergency(data))
-        .catch(() => {});
-    }
-  }, [emergencyId]);
+    fetchEmergency();
+    const interval = setInterval(fetchEmergency, 3000);
+    return () => clearInterval(interval);
+  }, [fetchEmergency]);
 
   // Live ambulance driver GPS tracking stream
   useEffect(() => {
     let sub: any = null;
     let isMounted = true;
+    const targetId = emergencyId || params.emergencyId;
 
     watchDeviceLocation((loc) => {
       if (!isMounted) return;
@@ -42,8 +62,8 @@ export default function NavigatePatient() {
         lng: loc.longitude,
         role: 'AMBULANCE_DRIVER',
       }).catch(() => {});
-      if (emergencyId) {
-        api.emergencies.update(emergencyId, {
+      if (targetId) {
+        api.emergencies.update(targetId, {
           ambulanceLocation: loc,
         }).catch(() => {});
       }
@@ -55,26 +75,32 @@ export default function NavigatePatient() {
       isMounted = false;
       if (sub?.remove) sub.remove();
     };
-  }, [emergencyId]);
+  }, [emergencyId, params.emergencyId]);
 
   const handleMarkArrived = async () => {
-    if (activeTripId) {
+    const effectiveTripId = activeTripId || params.tripId;
+    if (effectiveTripId) {
       setSubmitting(true);
       try {
-        await api.ambulances.arrivedPatient(activeTripId);
+        await api.ambulances.arrivedPatient(effectiveTripId);
       } catch (_err) {
         // Handled
       } finally {
         setSubmitting(false);
       }
     }
-    router.push('/(ambulance)/arrived-patient');
+    router.push({
+      pathname: '/(ambulance)/arrived-patient',
+      params: { emergencyId: emergencyId || params.emergencyId, tripId: effectiveTripId },
+    });
   };
 
-  const pLat = emergency?.location?.latitude ?? (lastKnownLocation?.latitude ?? 28.6139);
-  const pLng = emergency?.location?.longitude ?? (lastKnownLocation?.longitude ?? 77.2090);
-  const ambLat = lastKnownLocation?.latitude ?? pLat;
-  const ambLng = lastKnownLocation?.longitude ?? pLng;
+  const parsedPLat = Number(emergency?.location?.latitude) || Number(lastKnownLocation?.latitude) || 28.6139;
+  const parsedPLng = Number(emergency?.location?.longitude) || Number(lastKnownLocation?.longitude) || 77.2090;
+  const pLat = parsedPLat;
+  const pLng = parsedPLng;
+  const ambLat = Number(lastKnownLocation?.latitude) || Number((pLat - 0.007).toFixed(6));
+  const ambLng = Number(lastKnownLocation?.longitude) || Number((pLng - 0.005).toFixed(6));
 
   const patientName = emergency?.patientName || 'Emergency Patient';
   const patientPhone = emergency?.patientPhone;

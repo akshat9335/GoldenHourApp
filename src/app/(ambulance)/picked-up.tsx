@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Banner, Icon, Pill } from '@/components/ui';
 import { openExternalMapPreview, openExternalVoiceNavigation } from '@/components/ui';
@@ -10,8 +10,10 @@ import { api } from '@/services/api';
 import { watchDeviceLocation } from '@/services/deviceLocation';
 
 export default function PickedUp() {
-  const activeTripId = useAppStore((s) => s.activeTripId);
-  const emergencyId = useAppStore((s) => s.emergencyId);
+  const params = useLocalSearchParams<{ emergencyId?: string; tripId?: string }>();
+  const activeTripId = useAppStore((s) => s.activeTripId) || params.tripId;
+  const storeEmergencyId = useAppStore((s) => s.emergencyId);
+  const emergencyId = storeEmergencyId || params.emergencyId;
   const [loading, setLoading] = useState(false);
   const [emergency, setEmergency] = useState<any | null>(null);
   const [hospitalTitle, setHospitalTitle] = useState("Designated Hospital — ER");
@@ -21,27 +23,41 @@ export default function PickedUp() {
   const [bp, setBp] = useState('120/80');
 
   useEffect(() => {
-    if (activeTripId) {
+    if (params.tripId && !useAppStore.getState().activeTripId) {
+      useAppStore.getState().setActiveTripId(params.tripId);
+    }
+    if (params.emergencyId && !useAppStore.getState().emergencyId) {
+      useAppStore.getState().setEmergencyId(params.emergencyId);
+    }
+  }, [params.tripId, params.emergencyId]);
+
+  const fetchEmergency = useCallback(async () => {
+    const id = emergencyId || useAppStore.getState().emergencyId || params.emergencyId;
+    if (!id) return;
+    try {
+      const em: any = await api.emergencies.getById(id);
+      if (em) {
+        setEmergency(em);
+        if (em.assignedHospitalName) {
+          setHospitalTitle(em.assignedHospitalName);
+        } else if (em?.aiResult?.recommendedHospital) {
+          setHospitalTitle(em.aiResult.recommendedHospital);
+        }
+      }
+    } catch {}
+  }, [emergencyId, params.emergencyId]);
+
+  useEffect(() => {
+    const effectiveTripId = activeTripId || params.tripId;
+    if (effectiveTripId) {
       // Transition trip to EN_ROUTE_TO_HOSPITAL
-      api.ambulances.startToHospital(activeTripId).catch(() => {});
+      api.ambulances.startToHospital(effectiveTripId).catch(() => {});
     }
 
-    if (emergencyId) {
-      api.emergencies
-        .getById(emergencyId)
-        .then((em: any) => {
-          if (em) {
-            setEmergency(em);
-            if (em.assignedHospitalName) {
-              setHospitalTitle(em.assignedHospitalName);
-            } else if (em?.aiResult?.recommendedHospital) {
-              setHospitalTitle(em.aiResult.recommendedHospital);
-            }
-          }
-        })
-        .catch(() => {});
-    }
-  }, [activeTripId, emergencyId]);
+    fetchEmergency();
+    const interval = setInterval(fetchEmergency, 3000);
+    return () => clearInterval(interval);
+  }, [activeTripId, params.tripId, fetchEmergency]);
 
   // Live ambulance driver GPS tracking stream to hospital
   useEffect(() => {

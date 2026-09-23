@@ -73,11 +73,31 @@ export default function HospitalDashboard() {
         });
         const inbound = items.filter((d: any) => {
           const s = String(d.status || '').toUpperCase();
+          const ts = String(d.tripStatus || '').toUpperCase();
+          if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
           return (
             s === 'ACCEPTED' ||
+            s === 'HOSPITAL_ACCEPTED' ||
+            s === 'AMBULANCE_ASSIGNED' ||
             s === 'AMBULANCE EN ROUTE' ||
+            s === 'EN_ROUTE_TO_PATIENT' ||
+            s === 'ARRIVING' ||
+            s === 'AT_PATIENT' ||
+            s === 'PATIENT_ONBOARD' ||
+            s === 'EN_ROUTE_TO_HOSPITAL' ||
             s === 'PATIENT ARRIVED' ||
-            s === 'IN TREATMENT'
+            s === 'AT_HOSPITAL' ||
+            s === 'IN TREATMENT' ||
+            s.includes('ACCEPT') ||
+            s.includes('AMBULANCE') ||
+            s.includes('ROUTE') ||
+            s.includes('ARRIV') ||
+            ts === 'ASSIGNED' ||
+            ts === 'EN_ROUTE_TO_PATIENT' ||
+            ts === 'AT_PATIENT' ||
+            ts === 'PATIENT_ONBOARD' ||
+            ts === 'EN_ROUTE_TO_HOSPITAL' ||
+            ts === 'AT_HOSPITAL'
           );
         });
         pending.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
