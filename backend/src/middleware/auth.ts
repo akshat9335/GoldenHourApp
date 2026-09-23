@@ -90,6 +90,18 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 }
 
 /**
+ * Optional authentication middleware: if Bearer token is provided, validates it;
+ * otherwise allows the request through without populating req.user.
+ */
+export async function optionalAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const token = extractBearerToken(req);
+  if (!token) {
+    return next();
+  }
+  return requireAuth(req, res, next);
+}
+
+/**
  * Role-based authorization middleware.
  * Verifies that the authenticated user possesses the required role.
  */

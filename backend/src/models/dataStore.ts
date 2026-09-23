@@ -115,9 +115,9 @@ class InMemoryDataStore {
       consultationFee: 600,
       availability: "AVAILABLE",
       rating: 4.9,
-      servingToken: 3,
-      queueLength: 6,
-      estimatedWaitMinutes: 25,
+      servingToken: 0,
+      queueLength: 0,
+      estimatedWaitMinutes: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -135,9 +135,9 @@ class InMemoryDataStore {
       consultationFee: 350,
       availability: "AVAILABLE",
       rating: 4.8,
-      servingToken: 5,
-      queueLength: 8,
-      estimatedWaitMinutes: 20,
+      servingToken: 0,
+      queueLength: 0,
+      estimatedWaitMinutes: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -155,9 +155,9 @@ class InMemoryDataStore {
       consultationFee: 500,
       availability: "AVAILABLE",
       rating: 4.9,
-      servingToken: 2,
-      queueLength: 5,
-      estimatedWaitMinutes: 30,
+      servingToken: 0,
+      queueLength: 0,
+      estimatedWaitMinutes: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -175,9 +175,9 @@ class InMemoryDataStore {
       consultationFee: 500,
       availability: "AVAILABLE",
       rating: 4.8,
-      servingToken: 4,
-      queueLength: 7,
-      estimatedWaitMinutes: 25,
+      servingToken: 0,
+      queueLength: 0,
+      estimatedWaitMinutes: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -191,42 +191,42 @@ class InMemoryDataStore {
     this.doctors.set("doc-sharma-trauma", { ...doc3, doctorId: "doc-sharma-trauma" });
     this.doctors.set("doc-verma-ortho", { ...doc4, doctorId: "doc-verma-ortho" });
 
-    // Seed Queues
+    // Seed Queues (clean initial 0 state)
     const today = new Date().toISOString().split("T")[0];
     this.queues.set(`${doc1.doctorId}_${today}`, {
       doctorId: doc1.doctorId,
       date: today,
-      servingToken: 3,
-      totalTokensIssued: 9,
+      servingToken: 0,
+      totalTokensIssued: 0,
       avgConsultationMinutes: 10,
-      waitingCount: 6,
+      waitingCount: 0,
     });
 
     this.queues.set(`${doc2.doctorId}_${today}`, {
       doctorId: doc2.doctorId,
       date: today,
-      servingToken: 5,
-      totalTokensIssued: 13,
+      servingToken: 0,
+      totalTokensIssued: 0,
       avgConsultationMinutes: 8,
-      waitingCount: 8,
+      waitingCount: 0,
     });
 
     this.queues.set(`${doc3.doctorId}_${today}`, {
       doctorId: doc3.doctorId,
       date: today,
-      servingToken: 2,
-      totalTokensIssued: 7,
+      servingToken: 0,
+      totalTokensIssued: 0,
       avgConsultationMinutes: 10,
-      waitingCount: 5,
+      waitingCount: 0,
     });
 
     this.queues.set(`${doc4.doctorId}_${today}`, {
       doctorId: doc4.doctorId,
       date: today,
-      servingToken: 4,
-      totalTokensIssued: 11,
+      servingToken: 0,
+      totalTokensIssued: 0,
       avgConsultationMinutes: 10,
-      waitingCount: 7,
+      waitingCount: 0,
     });
 
     // Seed Hospitals (Coordinate with Aastha's hospital network)

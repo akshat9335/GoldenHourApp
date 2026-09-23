@@ -18,44 +18,58 @@ const tabColor: Record<string, 'blue' | 'success' | 'grey'> = {
 export default function DoctorAppointments() {
   const [tab, setTab] = useState<(typeof TABS)[number]>('Today');
   const userProfile = useAppStore((s) => s.userProfile);
-  const doctorId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
-  const [appointmentsList, setAppointmentsList] = useState(APPOINTMENTS);
+  const [appointmentsList, setAppointmentsList] = useState<any[]>([]);
 
   React.useEffect(() => {
     let mounted = true;
-    api.appointments
-      .getDoctorAppointments({ doctorId })
-      .then((data: any) => {
-        if (mounted && Array.isArray(data) && data.length > 0) {
-          const todayIso = new Date().toISOString().split('T')[0];
-          const mapped = data.map((a: any) => {
-            const rawStatus = (a.status || 'CONFIRMED').toUpperCase();
-            const normalizedStatus: 'upcoming' | 'completed' | 'cancelled' =
-              rawStatus === 'COMPLETED'
-                ? 'completed'
-                : rawStatus === 'CANCELLED' || rawStatus === 'NO_SHOW'
-                ? 'cancelled'
-                : 'upcoming';
 
-            return {
-              id: a.appointmentId || a.id,
-              doctorId: a.doctorId,
-              patientName: a.patientName || 'Patient',
-              date: a.date === todayIso ? 'Today' : a.date,
-              time: a.timeSlot || '10:00 AM',
-              token: a.tokenNumber || 1,
-              status: normalizedStatus,
-            };
-          });
-          setAppointmentsList(mapped);
-        }
+    const loadAppts = (resolvedDocId: string) => {
+      api.appointments
+        .getDoctorAppointments({ doctorId: resolvedDocId })
+        .then((data: any) => {
+          if (mounted && Array.isArray(data)) {
+            const todayIso = new Date().toISOString().split('T')[0];
+            const mapped = data.map((a: any) => {
+              const rawStatus = (a.status || 'CONFIRMED').toUpperCase();
+              const normalizedStatus: 'upcoming' | 'completed' | 'cancelled' =
+                rawStatus === 'COMPLETED'
+                  ? 'completed'
+                  : rawStatus === 'CANCELLED' || rawStatus === 'NO_SHOW'
+                  ? 'cancelled'
+                  : 'upcoming';
+
+              return {
+                id: a.appointmentId || a.id,
+                doctorId: a.doctorId,
+                patientName: a.patientName || 'Patient',
+                date: a.date === todayIso ? 'Today' : a.date,
+                time: a.timeSlot || '10:00 AM',
+                token: a.tokenNumber || 1,
+                status: normalizedStatus,
+              };
+            });
+            setAppointmentsList(mapped);
+          }
+        })
+        .catch(() => {});
+    };
+
+    api.doctors
+      .getMyProfile()
+      .then((res: any) => {
+        const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
+        const resolvedId = doc?.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
+        loadAppts(resolvedId);
       })
-      .catch(() => {});
+      .catch(() => {
+        const resolvedId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
+        loadAppts(resolvedId);
+      });
 
     return () => {
       mounted = false;
     };
-  }, [doctorId]);
+  }, [userProfile?.uid]);
 
   const list = appointmentsList.filter((a) => {
     if (tab === 'Today') return a.date === 'Today';

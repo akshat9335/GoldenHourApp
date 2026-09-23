@@ -6,11 +6,57 @@ import { Screen, TopBar, Card, Pill, Button, Divider, LabelEyebrow } from '@/com
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById } from '@/constants/doctorData';
 
+import { api } from '@/services/api';
+
 export default function AppointmentDetail() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const selectedDoctor = useAppStore((s) => s.selectedDoctor);
   const userToken = useAppStore((s) => s.userToken);
-  const doctor = getDoctorById(selectedDoctorId);
+  const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
+  const [activeAppt, setActiveAppt] = useState<any>(null);
   const [cancelled, setCancelled] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    api.appointments
+      .getMyAppointments()
+      .then((res: any) => {
+        const appts = Array.isArray(res) ? res : res?.data;
+        if (mounted && Array.isArray(appts) && appts.length > 0) {
+          const matched =
+            appts.find((a: any) => a.doctorId === selectedDoctorId && a.status !== 'CANCELLED') ||
+            appts[0];
+          if (matched) {
+            setActiveAppt(matched);
+            if (matched.status === 'CANCELLED') {
+              setCancelled(true);
+            }
+          }
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedDoctorId]);
+
+  const handleCancel = async () => {
+    if (activeAppt?.appointmentId) {
+      setCancelling(true);
+      try {
+        await api.appointments.cancel(activeAppt.appointmentId);
+      } catch {}
+      setCancelling(false);
+    }
+    setCancelled(true);
+  };
+
+  const displayDate = activeAppt?.date || 'Today';
+  const displayTime = activeAppt?.timeSlot || '10:30 AM';
+  const displayToken = String(activeAppt?.tokenNumber ?? userToken ?? (doctor.servingToken || 0) + 1);
+  const displayStatus = cancelled ? 'Cancelled' : (activeAppt?.status || 'Confirmed');
 
   return (
     <Screen>
@@ -25,11 +71,11 @@ export default function AppointmentDetail() {
         <View style={{ marginVertical: 12 }}><Divider /></View>
         <View style={styles.grid}>
           <Stat label="CLINIC" value={doctor.clinic} />
-          <Stat label="DATE" value="Today" />
-          <Stat label="TIME" value="4:30 PM" />
-          <Stat label="TOKEN" value={String(userToken ?? doctor.currentToken)} />
-          <Stat label="ESTIMATED WAIT" value={`~${doctor.estimatedWaitMin} min`} />
-          <Stat label="STATUS" value={cancelled ? 'Cancelled' : 'Confirmed'} />
+          <Stat label="DATE" value={displayDate} />
+          <Stat label="TIME" value={displayTime} />
+          <Stat label="TOKEN" value={displayToken} />
+          <Stat label="ESTIMATED WAIT" value={`~${doctor.estimatedWaitMin || 15} min`} />
+          <Stat label="STATUS" value={displayStatus} />
         </View>
         <View style={{ marginVertical: 12 }}><Divider /></View>
         <LabelEyebrow>CLINIC ADDRESS</LabelEyebrow>
@@ -42,7 +88,12 @@ export default function AppointmentDetail() {
             <Button title="Get Directions" variant="blue" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/clinic-location')} />
             <Button title="View Queue" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/live-queue')} />
           </View>
-          <Button title="Cancel Appointment" variant="ghost" onPress={() => setCancelled(true)} />
+          <Button
+            title={cancelling ? 'Cancelling...' : 'Cancel Appointment'}
+            variant="ghost"
+            disabled={cancelling}
+            onPress={handleCancel}
+          />
         </View>
       )}
     </Screen>

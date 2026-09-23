@@ -205,7 +205,7 @@ export const useAppStore = create<AppState>((set) => ({
   userToken: null,
   setUserToken: (n) => set({ userToken: n }),
 
-  servingToken: 14,
+  servingToken: 0,
   advanceServingToken: () => set((state) => ({ servingToken: state.servingToken + 1 })),
 
   queueStatus: 'running',

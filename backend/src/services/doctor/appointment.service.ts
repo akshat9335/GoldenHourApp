@@ -30,13 +30,29 @@ export class AppointmentService {
       );
     }
 
-    const doctor = dataStore.doctors.get(data.doctorId);
+    let doctor = dataStore.doctors.get(data.doctorId);
+    if (!doctor && firestore) {
+      try {
+        const docSnap = await firestore.collection("doctors").doc(data.doctorId).get();
+        if (docSnap.exists) {
+          doctor = docSnap.data() as any;
+          if (doctor) dataStore.doctors.set(data.doctorId, doctor);
+        }
+      } catch {}
+    }
+
+    if (!doctor) {
+      doctor = Array.from(dataStore.doctors.values()).find(
+        (d) => d.doctorId === data.doctorId || d.userId === data.doctorId
+      );
+    }
+
     if (!doctor) {
       throw new AppError(404, "DOCTOR_NOT_FOUND", `Doctor with ID '${data.doctorId}' not found.`);
     }
 
-    if (doctor.verificationStatus !== "VERIFIED") {
-      throw new AppError(400, "DOCTOR_UNAVAILABLE", "Cannot book appointments with unverified doctors.");
+    if (doctor.verificationStatus === "REJECTED") {
+      throw new AppError(400, "DOCTOR_UNAVAILABLE", "Cannot book appointments with rejected doctors.");
     }
 
     // Check slot duplicate for the same patient & doctor on the same date
@@ -102,6 +118,18 @@ export class AppointmentService {
   }
 
   public async getPatientAppointments(patientId: string): Promise<Appointment[]> {
+    if (firestore) {
+      try {
+        const snap = await firestore.collection("appointments").where("patientId", "==", patientId).get();
+        for (const doc of snap.docs) {
+          const a = doc.data() as Appointment;
+          if (a && a.appointmentId) {
+            dataStore.appointments.set(a.appointmentId, a);
+          }
+        }
+      } catch {}
+    }
+
     const results: Appointment[] = [];
     for (const appt of dataStore.appointments.values()) {
       if (appt.patientId === patientId) {
@@ -112,6 +140,22 @@ export class AppointmentService {
   }
 
   public async getDoctorAppointments(doctorId: string, date?: string): Promise<Appointment[]> {
+    if (firestore) {
+      try {
+        let q: FirebaseFirestore.Query = firestore.collection("appointments").where("doctorId", "==", doctorId);
+        if (date) {
+          q = q.where("date", "==", date);
+        }
+        const snap = await q.get();
+        for (const doc of snap.docs) {
+          const a = doc.data() as Appointment;
+          if (a && a.appointmentId) {
+            dataStore.appointments.set(a.appointmentId, a);
+          }
+        }
+      } catch {}
+    }
+
     const results: Appointment[] = [];
     for (const appt of dataStore.appointments.values()) {
       if (appt.doctorId === doctorId && (!date || appt.date === date)) {
@@ -142,6 +186,16 @@ export class AppointmentService {
     appt.status = nextStatus;
     appt.updatedAt = new Date().toISOString();
     dataStore.appointments.set(appointmentId, appt);
+
+    if (firestore && process.env.NODE_ENV !== "test") {
+      try {
+        await firestore.collection("appointments").doc(appointmentId).update({
+          status: nextStatus,
+          updatedAt: appt.updatedAt,
+        });
+      } catch {}
+    }
+
     return appt;
   }
 

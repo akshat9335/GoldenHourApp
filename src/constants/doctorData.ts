@@ -51,10 +51,10 @@ export const DOCTORS: Doctor[] = [
     workingHours: '09:00 AM – 8:00 PM',
     availableToday: true,
     status: 'open',
-    currentToken: 9,
-    servingToken: 3,
-    queueLength: 6,
-    estimatedWaitMin: 25,
+    currentToken: 0,
+    servingToken: 0,
+    queueLength: 0,
+    estimatedWaitMin: 0,
   },
   {
     id: 'doc-2',
@@ -73,10 +73,10 @@ export const DOCTORS: Doctor[] = [
     workingHours: '08:30 AM – 6:30 PM',
     availableToday: true,
     status: 'open',
-    currentToken: 13,
-    servingToken: 5,
-    queueLength: 8,
-    estimatedWaitMin: 20,
+    currentToken: 0,
+    servingToken: 0,
+    queueLength: 0,
+    estimatedWaitMin: 0,
   },
   {
     id: 'doc-3',
@@ -94,11 +94,11 @@ export const DOCTORS: Doctor[] = [
     fee: 500,
     workingHours: '10:00 AM – 9:00 PM',
     availableToday: true,
-    status: 'busy',
-    currentToken: 7,
-    servingToken: 2,
-    queueLength: 5,
-    estimatedWaitMin: 30,
+    status: 'open',
+    currentToken: 0,
+    servingToken: 0,
+    queueLength: 0,
+    estimatedWaitMin: 0,
   },
   {
     id: 'doc-4',
@@ -117,10 +117,10 @@ export const DOCTORS: Doctor[] = [
     workingHours: '09:30 AM – 7:30 PM',
     availableToday: true,
     status: 'open',
-    currentToken: 11,
-    servingToken: 4,
-    queueLength: 7,
-    estimatedWaitMin: 25,
+    currentToken: 0,
+    servingToken: 0,
+    queueLength: 0,
+    estimatedWaitMin: 0,
   },
   {
     id: 'doc-5',
@@ -139,10 +139,10 @@ export const DOCTORS: Doctor[] = [
     workingHours: '12:00 PM – 8:00 PM',
     availableToday: true,
     status: 'open',
-    currentToken: 12,
-    servingToken: 10,
-    queueLength: 12,
-    estimatedWaitMin: 20,
+    currentToken: 0,
+    servingToken: 0,
+    queueLength: 0,
+    estimatedWaitMin: 0,
   },
   {
     id: 'doc-6',
@@ -161,10 +161,10 @@ export const DOCTORS: Doctor[] = [
     workingHours: '9:00 AM – 2:00 PM',
     availableToday: true,
     status: 'open',
-    currentToken: 27,
-    servingToken: 24,
-    queueLength: 27,
-    estimatedWaitMin: 22,
+    currentToken: 0,
+    servingToken: 0,
+    queueLength: 0,
+    estimatedWaitMin: 0,
   },
   {
     id: 'doc-7',
@@ -183,10 +183,10 @@ export const DOCTORS: Doctor[] = [
     workingHours: '11:00 AM – 6:00 PM',
     availableToday: true,
     status: 'open',
-    currentToken: 6,
-    servingToken: 4,
-    queueLength: 6,
-    estimatedWaitMin: 18,
+    currentToken: 0,
+    servingToken: 0,
+    queueLength: 0,
+    estimatedWaitMin: 0,
   },
   {
     id: 'doc-8',
@@ -205,10 +205,10 @@ export const DOCTORS: Doctor[] = [
     workingHours: '24 Hours',
     availableToday: true,
     status: 'open',
-    currentToken: 41,
-    servingToken: 38,
-    queueLength: 41,
-    estimatedWaitMin: 12,
+    currentToken: 0,
+    servingToken: 0,
+    queueLength: 0,
+    estimatedWaitMin: 0,
   },
 ];
 
@@ -222,22 +222,11 @@ export type Appointment = {
   status: 'upcoming' | 'completed' | 'cancelled';
 };
 
-export const APPOINTMENTS: Appointment[] = [
-  { id: 'apt-1', doctorId: 'doc-1', patientName: 'Akshat Srivastava', date: 'Today', time: '4:30 PM', token: 18, status: 'upcoming' },
-  { id: 'apt-2', doctorId: 'doc-2', patientName: 'Priya Menon', date: 'Today', time: '5:00 PM', token: 33, status: 'upcoming' },
-  { id: 'apt-3', doctorId: 'doc-1', patientName: 'Rohan Gupta', date: 'Yesterday', time: '3:15 PM', token: 9, status: 'completed' },
-  { id: 'apt-4', doctorId: 'doc-1', patientName: 'Sana Khan', date: 'Yesterday', time: '2:00 PM', token: 6, status: 'cancelled' },
-];
+export const APPOINTMENTS: Appointment[] = [];
 
 export type DoctorNotification = { title: string; desc: string; time: string };
 
-export const DOCTOR_NOTIFICATIONS: DoctorNotification[] = [
-  { title: 'New appointment booked', desc: 'Akshat Srivastava booked Token #18 for today.', time: '3 min ago' },
-  { title: 'Patient took Token #18', desc: 'Walk-in patient joined the live queue.', time: '10 min ago' },
-  { title: 'Patient cancelled appointment', desc: 'Sana Khan cancelled Token #6.', time: '1 hr ago' },
-  { title: 'Queue is almost full', desc: 'Only 4 slots left for today at Sharma Heart Clinic.', time: '2 hr ago' },
-  { title: 'Your clinic queue has started', desc: 'Token counter reset for today.', time: '6 hr ago' },
-];
+export const DOCTOR_NOTIFICATIONS: DoctorNotification[] = [];
 
 export function getDoctorById(id: string): Doctor {
   return DOCTORS.find((d) => d.id === id) ?? DOCTORS[0];

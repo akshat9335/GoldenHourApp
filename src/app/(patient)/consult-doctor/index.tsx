@@ -15,6 +15,9 @@ export default function ConsultDoctor() {
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
   const [query, setQuery] = useState('');
   const [allDoctors, setAllDoctors] = useState(DOCTORS);
+  const [myAppointments, setMyAppointments] = useState<any[]>([]);
+  const userProfile = useAppStore((s) => s.userProfile);
+  const setUserToken = useAppStore((s) => s.setUserToken);
 
   React.useEffect(() => {
     let mounted = true;
@@ -66,10 +69,21 @@ export default function ConsultDoctor() {
         // Offline demo fallback preserves DOCTORS
       });
 
+    // Fetch user's booked appointments
+    api.appointments
+      .getMyAppointments()
+      .then((res: any) => {
+        const appts = Array.isArray(res) ? res : res?.data;
+        if (mounted && Array.isArray(appts)) {
+          setMyAppointments(appts);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       mounted = false;
     };
-  }, [selectedSpecialty, lastKnownLocation?.latitude, lastKnownLocation?.longitude]);
+  }, [selectedSpecialty, lastKnownLocation?.latitude, lastKnownLocation?.longitude, userProfile?.uid]);
 
   const doctors = allDoctors.filter((d) => {
     const matchesSpecialty = selectedSpecialty === 'All' || d.specialization.toLowerCase().includes(selectedSpecialty.toLowerCase());
@@ -113,6 +127,68 @@ export default function ConsultDoctor() {
           Need emergency help? Use SOS — Consult Doctor is for non-emergency consultations only.
         </Banner>
         <View style={{ height: 14 }} />
+
+        {/* My Booked Appointments Section */}
+        {myAppointments.length > 0 && (
+          <View style={{ marginBottom: 18 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <Text style={styles.eyebrow}>MY BOOKED APPOINTMENTS</Text>
+              <Pill color="blue">{myAppointments.length} Active</Pill>
+            </View>
+            {myAppointments.map((apt: any) => {
+              const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
+              const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
+              const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';
+              const isCompleted = apt.status === 'COMPLETED';
+              const isCancelled = apt.status === 'CANCELLED' || apt.status === 'NO_SHOW';
+
+              return (
+                <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.blue, borderWidth: 1.5, backgroundColor: '#f9fbff', marginBottom: 10 }]}>
+                  <View style={styles.rowTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.name, { color: colors.blue }]}>{docName}</Text>
+                      <Text style={styles.sub}>{clinicName}</Text>
+                      <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Pill color={isCompleted ? 'success' : isCancelled ? 'grey' : 'blue'}>
+                        {apt.status || 'CONFIRMED'}
+                      </Pill>
+                      <View style={{ backgroundColor: colors.blue, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Token #{apt.tokenNumber}</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {!isCancelled && !isCompleted && (
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                      <Button
+                        title="Track Live Queue"
+                        style={{ flex: 1 }}
+                        onPress={() => {
+                          setSelectedDoctorId(apt.doctorId);
+                          if (matchedDoc) setSelectedDoctor(matchedDoc);
+                          setUserToken(apt.tokenNumber);
+                          router.push('/(patient)/consult-doctor/live-queue');
+                        }}
+                      />
+                      <Button
+                        title="Directions"
+                        variant="blue"
+                        style={{ flex: 1 }}
+                        onPress={() => {
+                          setSelectedDoctorId(apt.doctorId);
+                          if (matchedDoc) setSelectedDoctor(matchedDoc);
+                          router.push('/(patient)/consult-doctor/clinic-location');
+                        }}
+                      />
+                    </View>
+                  )}
+                </Card>
+              );
+            })}
+          </View>
+        )}
 
         <Text style={styles.eyebrow}>DOCTORS NEAR YOU</Text>
         {doctors.length === 0 ? (

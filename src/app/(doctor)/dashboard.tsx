@@ -17,9 +17,7 @@ export default function DoctorDashboard() {
   const doctorId = doctorDetails?.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
 
   const defaultDoctor = getDoctorById('doc-1');
-  const [appointments, setAppointments] = useState(
-    APPOINTMENTS.filter((a) => a.doctorId === defaultDoctor.id && a.date === 'Today')
-  );
+  const [appointments, setAppointments] = useState<any[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -40,7 +38,7 @@ export default function DoctorDashboard() {
       api.appointments
         .getDoctorAppointments({ doctorId: resolvedId })
         .then((apptData: any) => {
-          if (mounted && Array.isArray(apptData) && apptData.length > 0) {
+          if (mounted && Array.isArray(apptData)) {
             const mapped = apptData.map((a: any) => ({
               id: a.appointmentId || a.id,
               doctorId: a.doctorId,
@@ -92,9 +90,9 @@ export default function DoctorDashboard() {
   };
 
   const todaysAppointments = appointments;
-  const totalToday = Math.max(todaysAppointments.length, servingToken > 0 ? servingToken + 2 : 5);
-  const completedToday = todaysAppointments.filter((a) => a.status === 'completed' || a.token <= servingToken).length;
-  const waitingToday = todaysAppointments.filter((a) => a.token > servingToken && a.status !== 'cancelled').length;
+  const completedToday = todaysAppointments.filter((a) => a.status === 'completed' || (servingToken > 0 && a.token <= servingToken)).length;
+  const waitingToday = todaysAppointments.filter((a) => a.status !== 'cancelled' && a.status !== 'completed' && (servingToken === 0 || a.token > servingToken)).length;
+  const totalToday = Math.max(todaysAppointments.length, servingToken);
   const remainingToday = Math.max(totalToday - completedToday, 0);
 
   return (
@@ -142,16 +140,22 @@ export default function DoctorDashboard() {
         </Card>
 
         <LabelEyebrow>TODAY'S APPOINTMENTS</LabelEyebrow>
-        <Card style={{ padding: 4 }}>
-          {todaysAppointments.map((a) => (
-            <View key={a.id} style={styles.aptRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.aptName}>{a.patientName}</Text>
-                <Text style={styles.aptSub}>Token #{a.token} · {a.time}</Text>
-              </View>
-              <Pill color="blue">{a.status.toUpperCase()}</Pill>
+        <Card style={{ padding: todaysAppointments.length === 0 ? 16 : 4 }}>
+          {todaysAppointments.length === 0 ? (
+            <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, color: colors.inkFaint }}>No appointments booked for today yet.</Text>
             </View>
-          ))}
+          ) : (
+            todaysAppointments.map((a) => (
+              <View key={a.id} style={styles.aptRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.aptName}>{a.patientName}</Text>
+                  <Text style={styles.aptSub}>Token #{a.token} · {a.time}</Text>
+                </View>
+                <Pill color={a.status === 'completed' ? 'success' : a.status === 'cancelled' ? 'red' : 'blue'}>{a.status.toUpperCase()}</Pill>
+              </View>
+            ))
+          )}
         </Card>
       </Screen>
       <DoctorNav active="/(doctor)/dashboard" />
