@@ -192,7 +192,7 @@ export default function DriverRegister() {
       </InputGroup>
       <InputGroup label="Ambulance Vehicle Plate Number">
         <Input
-          placeholder="e.g. KA-05-AB-1234"
+          placeholder="e.g. UP-70-AB-1234"
           value={ambulanceId}
           onChangeText={setAmbulanceId}
         />

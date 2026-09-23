@@ -120,6 +120,33 @@ export class QueueService {
 
     return queue;
   }
+
+  /**
+   * Resets today's queue for a doctor back to clean 0 state.
+   */
+  public async resetQueue(doctorId: string): Promise<LiveQueueState> {
+    const today = new Date().toISOString().split("T")[0];
+    const key = `${doctorId}_${today}`;
+    const queue: LiveQueueState = {
+      doctorId,
+      date: today,
+      servingToken: 0,
+      totalTokensIssued: 0,
+      avgConsultationMinutes: 10,
+      waitingCount: 0,
+    };
+    dataStore.queues.set(key, queue);
+
+    const doctor = dataStore.doctors.get(doctorId);
+    if (doctor) {
+      doctor.servingToken = 0;
+      doctor.queueLength = 0;
+      doctor.estimatedWaitMinutes = 0;
+      dataStore.doctors.set(doctorId, doctor);
+    }
+
+    return queue;
+  }
 }
 
 export const queueService = new QueueService();

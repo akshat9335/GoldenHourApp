@@ -5,10 +5,12 @@ import Constants from 'expo-constants';
  * Single canonical entry point for all frontend-to-backend communication.
  */
 
-function resolveApiBaseUrl(): string {
-  // Always use HTTPS tunnel to prevent Android "CLEARTEXT communication not permitted" security errors
-  // and ensure seamless access across local Wi-Fi, hotspot, and mobile networks.
+export function getApiBaseUrl(): string {
   return process.env.EXPO_PUBLIC_API_URL || 'https://goldenhour-live.loca.lt';
+}
+
+function resolveApiBaseUrl(): string {
+  return getApiBaseUrl();
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
@@ -108,15 +110,22 @@ export const api = {
 
   // Confirmations (Multi-user concurrency & verification)
   confirmations: {
-    // Backend expects POST /confirmations with body {emergencyId, location}
-    confirm: (emergencyId: string, location?: { latitude: number; longitude: number }) =>
-      request('/confirmations', {
+    confirm: (emergencyId: string, data?: { latitude?: number; longitude?: number; location?: { latitude: number; longitude: number } }) => {
+      const lat = data?.latitude ?? data?.location?.latitude;
+      const lng = data?.longitude ?? data?.location?.longitude;
+      return request('/confirmations', {
         method: 'POST',
-        body: JSON.stringify({ emergencyId, ...(location ? { location } : {}) }),
-      }),
+        body: JSON.stringify({
+          emergencyId,
+          ...(lat !== undefined && lng !== undefined ? { latitude: lat, longitude: lng, location: { latitude: lat, longitude: lng } } : {}),
+        }),
+      });
+    },
     getCount: (emergencyId: string) => request<{ count: number }>(`/confirmations/${emergencyId}/count`),
     getMyStatus: (emergencyId: string) => request(`/confirmations/${emergencyId}/me`),
     getIncidentConfirmations: (emergencyId: string) => request(`/confirmations/${emergencyId}`),
+    getSummary: (emergencyId: string) => request(`/confirmations/${emergencyId}`),
+    getMyHistory: () => request('/confirmations/my'),
   },
 
   // Hospitals & Capacity
@@ -207,6 +216,7 @@ export const api = {
       request(`/location/route?originLat=${originLat}&originLng=${originLng}&destLat=${destLat}&destLng=${destLng}`),
   },
 
+
   // Doctors & Clinics
   doctors: {
     register: (data: any) => request('/doctors/register', { method: 'POST', body: JSON.stringify(data) }),
@@ -238,7 +248,10 @@ export const api = {
       timeSlot: string;
       notes?: string;
     }) => request('/appointments', { method: 'POST', body: JSON.stringify(data) }),
-    getMyAppointments: () => request('/appointments/my'),
+    getMyAppointments: (patientId?: string) => {
+      const q = patientId ? `?patientId=${encodeURIComponent(patientId)}` : '';
+      return request(`/appointments/my${q}`);
+    },
     getDoctorAppointments: (params?: { doctorId?: string; date?: string }) => {
       const q = new URLSearchParams();
       if (params?.doctorId) q.append('doctorId', params.doctorId);
@@ -267,6 +280,7 @@ export const api = {
       return request(`/queues/${doctorId}${qs}`);
     },
     advanceQueue: (doctorId: string) => request(`/queues/${doctorId}/next`, { method: 'POST' }),
+    resetQueue: (doctorId: string) => request(`/queues/${doctorId}/reset`, { method: 'POST' }),
   },
 
   // Notifications
@@ -282,6 +296,8 @@ export const api = {
   ai: {
     triage: (data: { symptoms: string[]; consciousness?: string; [key: string]: any }) =>
       request('/ai/triage', { method: 'POST', body: JSON.stringify(data) }),
+    voiceTriage: (data: { transcript: string; language?: string; location?: { latitude: number; longitude: number } }) =>
+      request('/ai/voice-triage', { method: 'POST', body: JSON.stringify(data) }),
     imageAnalysis: (data: { imageBase64: string; mimeType: string; context?: string }) =>
       request('/ai/image-analysis', { method: 'POST', body: JSON.stringify(data) }),
     firstAid: (data: { injuryType: string }) =>
@@ -310,6 +326,37 @@ export const api = {
         body: JSON.stringify({ status, notes }),
       }),
   },
+
+  // Health Records, Digital Prescriptions, FHIR R4
+  healthRecords: {
+    create: (data: any) => request('/health-records', { method: 'POST', body: JSON.stringify(data) }),
+    getPatientRecords: (patientId: string) => request(`/health-records/patient/${patientId}`),
+    getFHIRBundle: (patientId: string) => request(`/health-records/fhir/${patientId}`),
+    getById: (id: string) => request(`/health-records/${id}`),
+  },
+
+  // Referrals
+  referrals: {
+    create: (data: any) => request('/referrals', { method: 'POST', body: JSON.stringify(data) }),
+    getHospitalReferrals: (hospitalId?: string) => request(`/referrals/hospital${hospitalId ? `/${hospitalId}` : ''}`),
+    getPatientReferrals: (patientId: string) => request(`/referrals/patient/${patientId}`),
+    updateStatus: (id: string, status: string) => request(`/referrals/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  },
+
+  // Medicines & Stock Availability
+  medicines: {
+    search: (query?: string, hospitalId?: string) => {
+      const q = new URLSearchParams();
+      if (query) q.append('query', query);
+      if (hospitalId) q.append('hospitalId', hospitalId);
+      const qs = q.toString();
+      return request(`/medicines/search${qs ? `?${qs}` : ''}`);
+    },
+    getHospitalInventory: (hospitalId: string) => request(`/medicines/hospital/${hospitalId}`),
+    updateStock: (data: { hospitalId: string; medicineName: string; stockStatus: string; quantity?: number }) =>
+      request('/medicines/update-stock', { method: 'POST', body: JSON.stringify(data) }),
+  },
 };
 
 export default api;
+

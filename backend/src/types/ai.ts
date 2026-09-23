@@ -105,5 +105,29 @@ export interface FirstAidResult {
   source: AiSource;
 }
 
+export interface VoiceTriageInput {
+  transcript: string;
+  language?: "en" | "hi" | "mr" | string;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+  };
+}
+
+export interface VoiceTriageResult {
+  severity: Severity;
+  emergencyType: string;
+  confidence: number;
+  detectedSymptoms: string[];
+  recommendedAmbulance: "ALS" | "BLS";
+  firstAidSteps: string[];
+  avoidActions: string[];
+  transcriptProcessed: string;
+  language: string;
+  summary: string;
+  disclaimer: string;
+  source: AiSource;
+}
+
 export const AI_DISCLAIMER =
   "AI-generated emergency decision support. It is not a medical diagnosis.";

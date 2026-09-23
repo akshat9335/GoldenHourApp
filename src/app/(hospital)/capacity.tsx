@@ -29,6 +29,10 @@ export default function HospitalCapacity() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Medicine Inventory (Phase 6)
+  const hospitalId = userProfile?.uid || 'hosp-srn-prayagraj';
+  const [medicines, setMedicines] = useState<any[]>([]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -67,10 +71,20 @@ export default function HospitalCapacity() {
       })
       .catch(() => {});
 
+    // 3. Fetch emergency medicine stock (Phase 6)
+    api.medicines
+      .getHospitalInventory(hospitalId)
+      .then((res: any) => {
+        if (!mounted) return;
+        const list = Array.isArray(res) ? res : (res?.data || []);
+        if (list.length > 0) setMedicines(list);
+      })
+      .catch(() => {});
+
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [hospitalId]);
 
   const handleAdjustWard = (delta: number) => {
     setAvailableBeds((prev) => Math.max(0, Math.min(totalBeds, prev + delta)));
@@ -103,6 +117,29 @@ export default function HospitalCapacity() {
   const handleAdjustEmergency = (delta: number) => {
     setEmergencyCapacity((prev) => Math.max(0, prev + delta));
     setSaveSuccess(false);
+  };
+
+  const handleToggleMedicine = async (medName: string, currentStatus: string) => {
+    const nextStatus =
+      currentStatus === 'AVAILABLE'
+        ? 'LOW_STOCK'
+        : currentStatus === 'LOW_STOCK'
+        ? 'OUT_OF_STOCK'
+        : 'AVAILABLE';
+
+    setMedicines((prev) =>
+      prev.map((m) => (m.medicineName === medName ? { ...m, stockStatus: nextStatus } : m))
+    );
+
+    try {
+      await api.medicines.updateStock({
+        hospitalId,
+        medicineName: medName,
+        stockStatus: nextStatus,
+      });
+    } catch (_err) {
+      // Revert if error
+    }
   };
 
   const handleSave = async () => {
@@ -276,8 +313,46 @@ export default function HospitalCapacity() {
           </View>
         </Card>
 
+        {/* Emergency Medicines Inventory (Phase 6) */}
+        <LabelEyebrow>EMERGENCY MEDICINE INVENTORY (PHASE 6)</LabelEyebrow>
+        <Card style={{ padding: 4, marginBottom: 14 }}>
+          {medicines.length === 0 ? (
+            <View style={{ padding: 16, alignItems: 'center' }}>
+              <Text style={{ fontSize: 12, color: colors.inkFaint }}>Loading hospital medicine stock...</Text>
+            </View>
+          ) : (
+            medicines.slice(0, 8).map((med, idx) => {
+              const pillColor =
+                med.stockStatus === 'AVAILABLE'
+                  ? 'success'
+                  : med.stockStatus === 'LOW_STOCK'
+                  ? 'amber'
+                  : 'red';
+              return (
+                <React.Fragment key={med.id || idx}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10 }}>
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>{med.medicineName}</Text>
+                      <Text style={{ fontSize: 10.5, color: colors.inkFaint, marginTop: 2 }}>
+                        {med.category} · Qty: {med.quantity}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => handleToggleMedicine(med.medicineName, med.stockStatus)}
+                      hitSlop={8}
+                    >
+                      <Pill color={pillColor}>{med.stockStatus.replace('_', ' ')} ▾</Pill>
+                    </Pressable>
+                  </View>
+                  {idx < Math.min(medicines.length, 8) - 1 && <View style={{ height: 1, backgroundColor: colors.line }} />}
+                </React.Fragment>
+              );
+            })
+          )}
+        </Card>
+
         {/* Save button */}
-        <View style={{ marginTop: 10, marginBottom: 20 }}>
+        <View style={{ marginTop: 6, marginBottom: 20 }}>
           <Button
             title={saving ? 'Updating Capacity...' : 'Sync Capacity with Golden Hour Network'}
             onPress={handleSave}

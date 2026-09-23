@@ -21,7 +21,7 @@ export default function AmbulanceDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTrip, setActiveTrip] = useState<any | null>(null);
 
-  const vehiclePlate = userProfile?.ambulanceId || (userProfile as any)?.vehiclePlateNumber || 'Unit KA-05-AB';
+  const vehiclePlate = userProfile?.ambulanceId || (userProfile as any)?.vehiclePlateNumber || 'Unit UP-70-AMB';
   const driverName = (userProfile as any)?.driverName || userProfile?.name || 'Crew Pilot';
   const rawHospital = (userProfile as any)?.hospitalName;
   const isLinkedToHospital = !!rawHospital && rawHospital !== 'Independent Fleet' && rawHospital !== 'Emergency Response Fleet';

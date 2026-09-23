@@ -6,6 +6,8 @@ import { Screen, TopBar, Card, Divider, Toggle, LabelEyebrow } from '@/component
 import { useAppStore } from '@/store/useAppStore';
 import { voiceSosService } from '@/services/voiceSos.service';
 import { authService } from '@/services/auth';
+import LanguageSelector from '@/components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 export default function Settings() {
   const [autoCall, setAutoCall] = useState(true);
@@ -118,6 +120,14 @@ export default function Settings() {
       </Card>
       <LabelEyebrow>PREFERENCES</LabelEyebrow>
       <Card style={{ padding: 4, marginBottom: 18 }}>
+        <View style={styles.row}>
+          <View>
+            <Text style={styles.rowLabel}>App Language / भाषा</Text>
+            <Text style={styles.rowDesc}>English • हिंदी • मराठी</Text>
+          </View>
+          <LanguageSelector />
+        </View>
+        <Divider />
         <Pressable style={styles.row} onPress={() => router.push('/notifications')}>
           <Text style={styles.rowLabel}>Notifications</Text>
         </Pressable>

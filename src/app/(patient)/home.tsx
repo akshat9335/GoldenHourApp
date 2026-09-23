@@ -22,6 +22,10 @@ import {
   searchAddressGeocode,
   refreshDeviceLocation,
 } from '@/services/deviceLocation';
+import LanguageSelector from '@/components/LanguageSelector';
+import VoiceAiEmergencyModal from '@/components/VoiceAiEmergencyModal';
+import NearbyAlertBanner from '@/components/NearbyAlertBanner';
+import { useTranslation } from 'react-i18next';
 
 export default function PatientHome() {
   const voiceSosEnabled = useAppStore((s) => s.voiceSosEnabled);
@@ -32,10 +36,12 @@ export default function PatientHome() {
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
 
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ name: string; latitude: number; longitude: number }>>([]);
   const [searching, setSearching] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     // Dynamically request OS location permission and acquire live satellite GPS from user's phone hardware
@@ -103,10 +109,11 @@ export default function PatientHome() {
       <Screen padBottom={95}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>EMERGENCY DASHBOARD</Text>
+            <Text style={styles.greeting}>{t('home.title', 'EMERGENCY DASHBOARD')}</Text>
             <Text style={styles.name}>{displayName}</Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <LanguageSelector />
             <Pressable
               style={styles.switchRoleBtn}
               onPress={() => router.push('/role-selection')}
@@ -131,9 +138,9 @@ export default function PatientHome() {
             <View style={{ flex: 1, marginHorizontal: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.locTitle}>
-                  {lastKnownLocation ? '📍 Current Incident Area' : '🛰️ Acquiring GPS...'}
+                  {lastKnownLocation ? `📍 ${t('home.currentLocation', 'Current Incident Area')}` : `🛰️ ${t('home.detectingGps', 'Acquiring GPS...')}`}
                 </Text>
-                <Text style={{ fontSize: 10, color: colors.red, fontWeight: '700' }}>[Change ▾]</Text>
+                <Text style={{ fontSize: 10, color: colors.red, fontWeight: '700' }}>[{t('home.changeArea', 'Change')} ▾]</Text>
               </View>
               <Text style={styles.locSub} numberOfLines={2}>
                 {locationAddress
@@ -148,6 +155,9 @@ export default function PatientHome() {
             </Pill>
           </Card>
         </TouchableOpacity>
+
+        {/* Proactive Nearby Emergency Alert Banner */}
+        <NearbyAlertBanner />
 
         {/* Area Selection / Search Modal (Swiggy / Zomato style) */}
         <Modal visible={pickerVisible} animationType="slide" transparent={true}>
@@ -247,45 +257,79 @@ export default function PatientHome() {
         </Modal>
 
         <View style={styles.sosZone}>
-          <SosHold
-            label="SOS"
-            sublabel="EMERGENCY"
-            onPress={startEmergency}
-            onConfirm={startEmergency}
-          />
+          <View style={styles.sosDualContainer}>
+            <SosHold
+              label={t('emergency.sos', 'SOS')}
+              sublabel="EMERGENCY"
+              onPress={startEmergency}
+              onConfirm={startEmergency}
+            />
+            {/* Dedicated Button for Voice SOS & AI Triage */}
+            <TouchableOpacity
+              style={styles.voiceSosBtn}
+              onPress={() => setVoiceModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={{ fontSize: 24 }}>🎙️</Text>
+              <Text style={styles.voiceSosBtnLabel}>
+                {t('home.voiceSosBtn', 'Voice SOS')}
+              </Text>
+              <Text style={styles.voiceSosBtnSub}>
+                {t('voiceSos.tapToSpeak', 'Tap to Speak')}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.sosHint}>
             {voiceSosEnabled
-              ? `Say "${voiceSosPhrase}" or press SOS to report emergency`
-              : 'Press SOS to report emergency with photo, voice & AI assistance'}
+              ? t('home.voiceSosHint', { phrase: voiceSosPhrase, defaultValue: `Say "${voiceSosPhrase}" or tap Voice SOS / Hold SOS to report` })
+              : t('home.sosHint', 'Press SOS or tap Voice SOS to report emergency with AI triage')}
           </Text>
         </View>
 
         <View style={styles.quickRow}>
-          <QuickAction icon="ai" color={colors.blue} label="AI First Aid" onPress={() => router.push('/(patient)/ai-home')} />
-          <QuickAction icon="ambulance" color={colors.red} label="Report Accident" onPress={startEmergency} />
-          <QuickAction icon="hospital" color={colors.ink} label="Hospitals" onPress={() => router.push('/nearby-hospitals')} />
+          <QuickAction icon="ai" color={colors.blue} label={t('home.aiFirstAid', 'AI First Aid')} onPress={() => router.push('/(patient)/ai-home')} />
+          <QuickAction icon="ambulance" color={colors.red} label={t('home.reportAccident', 'Report Accident')} onPress={startEmergency} />
+          <QuickAction icon="hospital" color={colors.ink} label={t('home.hospitals', 'Hospitals')} onPress={() => router.push('/nearby-hospitals')} />
         </View>
 
-        <Text style={styles.eyebrow}>QUICK ACCESS</Text>
+        <Text style={styles.eyebrow}>{t('home.quickAccess', 'QUICK ACCESS')}</Text>
         <Card style={{ padding: 4 }}>
           <Pressable style={styles.row} onPress={() => router.push('/(patient)/consult-doctor')}>
             <Icon name="doctor" color={colors.ink} />
-            <Text style={styles.rowLabel}>Consult Doctor</Text>
+            <Text style={styles.rowLabel}>{t('home.consultDoctor', 'Consult Doctor')}</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
+          <Pressable style={styles.row} onPress={() => router.push('/(patient)/health-records' as any)}>
+            <Icon name="history" color={colors.blue} />
+            <Text style={styles.rowLabel}>{t('home.healthRecords', 'My Health Records & Prescriptions (Rx)')}</Text>
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
           <Divider />
           <Pressable style={styles.row} onPress={() => router.push('/contacts-setup')}>
             <Icon name="phone" color={colors.ink} />
-            <Text style={styles.rowLabel}>Emergency Contacts</Text>
+            <Text style={styles.rowLabel}>{t('home.emergencyContacts', 'Emergency Contacts')}</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
+          <Pressable style={styles.row} onPress={() => router.push('/nearby-incident' as any)}>
+            <Icon name="pin" color={colors.red} />
+            <Text style={styles.rowLabel}>{t('home.nearbyAlerts', 'Nearby Alerts (Community Assist)')}</Text>
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
           <Divider />
           <Pressable style={styles.row} onPress={() => router.push('/(patient)/history')}>
             <Icon name="history" color={colors.ink} />
-            <Text style={styles.rowLabel}>Emergency History</Text>
+            <Text style={styles.rowLabel}>{t('home.emergencyHistory', 'Emergency History')}</Text>
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
         </Card>
+
+        {/* Voice AI Emergency Modal */}
+        <VoiceAiEmergencyModal
+          visible={voiceModalVisible}
+          onClose={() => setVoiceModalVisible(false)}
+        />
       </Screen>
       <PatientNav active="/(patient)/home" />
     </View>
@@ -314,8 +358,36 @@ const styles = StyleSheet.create({
   locationCard: { padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 16 },
   locTitle: { fontSize: 12, fontWeight: '700', color: colors.ink },
   locSub: { fontSize: 10.5, color: colors.inkFaint },
-  sosZone: { alignItems: 'center', marginVertical: 20 },
-  sosHint: { fontSize: 11, color: colors.inkFaint, marginTop: 14 },
+  sosZone: { alignItems: 'center', marginVertical: 18 },
+  sosDualContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18 },
+  voiceSosBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 2,
+    borderColor: '#F87171',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 105,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  voiceSosBtnLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.red,
+    marginTop: 4,
+  },
+  voiceSosBtnSub: {
+    fontSize: 9.5,
+    color: colors.inkFaint,
+    marginTop: 1,
+  },
+  sosHint: { fontSize: 11, color: colors.inkFaint, marginTop: 14, textAlign: 'center', paddingHorizontal: 16 },
   quickRow: { flexDirection: 'row', gap: 10, marginVertical: 18 },
   quickCard: { flex: 1, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#EEF1F5', padding: 14, alignItems: 'center', gap: 8 },
   quickLabel: { fontSize: 11.5, fontWeight: '700', textAlign: 'center', color: colors.ink },

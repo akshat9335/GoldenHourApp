@@ -42,14 +42,32 @@ export default function Booking() {
         patientName,
         patientId,
       });
-      if (res && res.tokenNumber) {
-        setUserToken(res.tokenNumber);
-      } else {
-        setUserToken((doctor.servingToken || 0) + (doctor.queueLength || 0) + 1);
-      }
+      const tokenNum = res?.tokenNumber || (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
+      setUserToken(tokenNum);
+      useAppStore.getState().addBookedAppointment({
+        appointmentId: res?.appointmentId || `appt-${Date.now()}`,
+        doctorId: selectedDoctorId,
+        doctorName: doctor.name,
+        clinicName: doctor.clinic,
+        date: bookingDate,
+        timeSlot: slot,
+        tokenNumber: tokenNum,
+        status: 'CONFIRMED',
+      });
     } catch (_err) {
       // Offline fallback
-      setUserToken((doctor.servingToken || 0) + (doctor.queueLength || 0) + 1);
+      const fallbackToken = (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
+      setUserToken(fallbackToken);
+      useAppStore.getState().addBookedAppointment({
+        appointmentId: `appt-offline-${Date.now()}`,
+        doctorId: selectedDoctorId,
+        doctorName: doctor.name,
+        clinicName: doctor.clinic,
+        date: bookingDate,
+        timeSlot: slot,
+        tokenNumber: fallbackToken,
+        status: 'CONFIRMED',
+      });
     } finally {
       setLoading(false);
       router.push('/(patient)/consult-doctor/booking-confirmed');

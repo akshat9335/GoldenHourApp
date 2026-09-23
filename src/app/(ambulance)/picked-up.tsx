@@ -114,8 +114,8 @@ export default function PickedUp() {
   const patientPhone = emergency?.patientPhone;
   const hospitalPhone = (emergency as any)?.assignedHospitalPhone || (emergency as any)?.hospitalPhone || '108';
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
-  const hLat = (emergency as any)?.assignedHospitalLocation?.latitude ?? (lastKnownLocation?.latitude ? lastKnownLocation.latitude + 0.012 : 12.9352);
-  const hLng = (emergency as any)?.assignedHospitalLocation?.longitude ?? (lastKnownLocation?.longitude ? lastKnownLocation.longitude + 0.009 : 77.6146);
+  const hLat = (emergency as any)?.assignedHospitalLocation?.latitude ?? (lastKnownLocation?.latitude ? lastKnownLocation.latitude + 0.012 : 25.4358);
+  const hLng = (emergency as any)?.assignedHospitalLocation?.longitude ?? (lastKnownLocation?.longitude ? lastKnownLocation.longitude + 0.009 : 81.8463);
 
   return (
     <Screen>

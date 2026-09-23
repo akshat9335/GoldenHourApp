@@ -1,6 +1,7 @@
 import { DoctorProfile, ClinicDetails } from "../types/doctor";
 import { Appointment, LiveQueueState } from "../types/appointment";
 import { StoredLocation, HospitalFacility, NearbyIncidentSummary } from "../types/location";
+import { CommunityPatient, CommunityVisit, CommunityReferral } from "./worker.model";
 
 /**
  * In-Memory persistent datastore for Anant's location, doctor, clinic, appointment, and queue services.
@@ -15,6 +16,9 @@ class InMemoryDataStore {
   public hospitals: Map<string, HospitalFacility> = new Map();
   public incidents: Map<string, NearbyIncidentSummary> = new Map();
   public users: Map<string, any> = new Map();
+  public communityPatients: Map<string, CommunityPatient> = new Map();
+  public communityVisits: Map<string, CommunityVisit> = new Map();
+  public communityReferrals: Map<string, CommunityReferral> = new Map();
 
   constructor() {
     this.seedInitialData();
@@ -187,10 +191,6 @@ class InMemoryDataStore {
     this.doctors.set(doc3.doctorId, doc3);
     this.doctors.set(doc4.doctorId, doc4);
 
-    // Aliases for any legacy test suites
-    this.doctors.set("doc-sharma-trauma", { ...doc3, doctorId: "doc-sharma-trauma" });
-    this.doctors.set("doc-verma-ortho", { ...doc4, doctorId: "doc-verma-ortho" });
-
     // Seed Queues (clean initial 0 state)
     const today = new Date().toISOString().split("T")[0];
     this.queues.set(`${doc1.doctorId}_${today}`, {
@@ -362,6 +362,136 @@ class InMemoryDataStore {
 
     this.incidents.set(inc1.incidentId, inc1);
     this.incidents.set(inc2.incidentId, inc2);
+
+    // Seed Community ASHA Patients (Prayagraj rural region)
+    const pat1: CommunityPatient = {
+      id: "pat-seed-01",
+      crisisId: "CR-PRAYAG-001",
+      workerUid: "asha-worker-prayagraj",
+      workerName: "Sunita Verma (ASHA Sangini)",
+      name: "Sunita Devi",
+      age: 26,
+      gender: "FEMALE",
+      phone: "9876543210",
+      villageOrArea: "Naini Rural Sub-Center",
+      bloodGroup: "B+",
+      knownConditions: ["Severe Anemia"],
+      isPregnant: true,
+      expectedDeliveryDate: "15/11/2026",
+      lastVisitDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+    };
+
+    const pat2: CommunityPatient = {
+      id: "pat-seed-02",
+      crisisId: "CR-PRAYAG-002",
+      workerUid: "asha-worker-prayagraj",
+      workerName: "Sunita Verma (ASHA Sangini)",
+      name: "Rameshwar Yadav",
+      age: 62,
+      gender: "MALE",
+      phone: "9812345678",
+      villageOrArea: "Shankargarh Village",
+      bloodGroup: "O+",
+      knownConditions: ["Hypertension", "Type 2 Diabetes"],
+      isPregnant: false,
+      lastVisitDate: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 15).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    };
+
+    const pat3: CommunityPatient = {
+      id: "pat-seed-03",
+      crisisId: "CR-PRAYAG-003",
+      workerUid: "asha-worker-prayagraj",
+      workerName: "Sunita Verma (ASHA Sangini)",
+      name: "Meera Devi",
+      age: 31,
+      gender: "FEMALE",
+      phone: "",
+      villageOrArea: "Phaphamau Basti",
+      bloodGroup: "A+",
+      knownConditions: ["Postpartum Hemorrhage History"],
+      isPregnant: false,
+      lastVisitDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(),
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 20).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(),
+    };
+
+    this.communityPatients.set(pat1.id, pat1);
+    this.communityPatients.set(pat2.id, pat2);
+    this.communityPatients.set(pat3.id, pat3);
+
+    // Seed Community Visits
+    const visit1: CommunityVisit = {
+      id: "visit-seed-01",
+      patientId: pat1.id,
+      patientName: pat1.name,
+      workerUid: "asha-worker-prayagraj",
+      vitals: {
+        bloodPressure: "110/70",
+        pulse: 78,
+        spO2: 98,
+        temperature: 36.8,
+        bloodSugar: 95,
+      },
+      symptoms: "Mild morning sickness, antenatal routine checkup",
+      aiTriageSeverity: "NORMAL",
+      aiGuidanceInHindi: "नियमित आयरन-फॉलिक एसिड सप्लीमेंट लें और पर्याप्त आराम करें।",
+      visitDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+      syncedFromOffline: false,
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+    };
+
+    const visit2: CommunityVisit = {
+      id: "visit-seed-02",
+      patientId: pat2.id,
+      patientName: pat2.name,
+      workerUid: "asha-worker-prayagraj",
+      vitals: {
+        bloodPressure: "165/105",
+        pulse: 94,
+        spO2: 94,
+        temperature: 37.1,
+        bloodSugar: 240,
+      },
+      symptoms: "Headache, dizziness, high blood sugar reading",
+      aiTriageSeverity: "MODERATE",
+      aiGuidanceInHindi: "रक्तचाप और शुगर अधिक है। तुरंत प्राथमिक स्वास्थ्य केंद्र (PHC) में डॉक्टर से परामर्श लें।",
+      visitDate: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+      syncedFromOffline: true,
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    };
+
+    this.communityVisits.set(visit1.id, visit1);
+    this.communityVisits.set(visit2.id, visit2);
+
+    // Seed Community Referral
+    const ref1: CommunityReferral = {
+      id: "ref-seed-01",
+      referralCode: "REF-ASHA-001",
+      patientId: pat2.id,
+      patientName: pat2.name,
+      patientAge: pat2.age,
+      patientGender: pat2.gender,
+      workerUid: "asha-worker-prayagraj",
+      workerName: "Sunita Verma (ASHA Sangini)",
+      destinationFacility: "Naini Primary Health Centre (PHC)",
+      priority: "HIGH",
+      reason: "Uncontrolled hypertension (165/105) with dizziness and hyperglycemia (240 mg/dL)",
+      vitalsSnapshot: {
+        bloodPressure: "165/105",
+        pulse: 94,
+        spO2: 94,
+        bloodSugar: 240,
+      },
+      status: "PENDING",
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+    };
+
+    this.communityReferrals.set(ref1.id, ref1);
   }
 
   public reset(): void {
@@ -372,6 +502,9 @@ class InMemoryDataStore {
     this.queues.clear();
     this.hospitals.clear();
     this.incidents.clear();
+    this.communityPatients.clear();
+    this.communityVisits.clear();
+    this.communityReferrals.clear();
     this.seedInitialData();
   }
 }

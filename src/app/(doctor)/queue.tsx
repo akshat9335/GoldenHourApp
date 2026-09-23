@@ -1,9 +1,18 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { colors } from '@/constants/theme';
-import { Screen, TopBar, Card, Pill, Button, LabelEyebrow, Divider, DoctorNav } from '@/components/ui';
+import { Screen, TopBar, Card, Pill, Button, LabelEyebrow, Divider, DoctorNav, Icon } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
-
 import { api } from '@/services/api';
 
 const statusColor: Record<string, 'success' | 'amber' | 'grey'> = {
@@ -13,6 +22,29 @@ const statusColor: Record<string, 'success' | 'amber' | 'grey'> = {
   closed: 'grey',
 };
 
+const QUICK_DIAGNOSES = [
+  'Acute Angina / Chest Pain',
+  'Hypertension Stage 2',
+  'Viral Fever & URI',
+  'Trauma / Suspected Fracture',
+  'Acute Bronchial Asthma',
+];
+
+const PRAYAGRAJ_HOSPITALS = [
+  { id: 'hosp-srn-prayagraj', name: 'Swaroop Rani Nehru (SRN) Hospital' },
+  { id: 'hosp-medanta-prayagraj', name: 'Medanta Super Specialty Hospital' },
+  { id: 'hosp-mln-prayagraj', name: 'Motilal Nehru (MLN) Medical College' },
+  { id: 'hosp-kamla-prayagraj', name: 'Kamla Nehru Memorial Hospital' },
+];
+
+interface PrescribedMed {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions: string;
+}
+
 export default function DoctorQueue() {
   const userProfile = useAppStore((s) => s.userProfile);
   const servingToken = useAppStore((s) => s.servingToken);
@@ -21,7 +53,27 @@ export default function DoctorQueue() {
   const setQueueStatus = useAppStore((s) => s.setQueueStatus);
 
   const doctorId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
-  const [appointments, setAppointments] = React.useState<any[]>([]);
+  const doctorName = userProfile?.name || 'Dr. Akshat Srivastava';
+  const doctorSpecialty = userProfile?.specialty || 'Cardiologist';
+
+  const [appointments, setAppointments] = useState<any[]>([]);
+
+  // Consultation Modal States
+  const [modalVisible, setModalVisible] = useState(false);
+  const [savingConsult, setSavingConsult] = useState(false);
+  const [diagnosis, setDiagnosis] = useState('');
+  const [notes, setNotes] = useState('');
+  const [bp, setBp] = useState('120/80');
+  const [heartRate, setHeartRate] = useState('76');
+  const [prescriptions, setPrescriptions] = useState<PrescribedMed[]>([
+    { name: 'Paracetamol 650mg', dosage: '1 tablet', frequency: '1-0-1', duration: '5 days', instructions: 'After meals' },
+  ]);
+
+  // Referral states
+  const [isReferralActive, setIsReferralActive] = useState(false);
+  const [selectedHospitalId, setSelectedHospitalId] = useState(PRAYAGRAJ_HOSPITALS[0].id);
+  const [referralPriority, setReferralPriority] = useState<'HIGH' | 'NORMAL'>('HIGH');
+  const [referralReason, setReferralReason] = useState('');
 
   const fetchQueueData = () => {
     api.queues
@@ -85,13 +137,81 @@ export default function DoctorQueue() {
     );
   };
 
-  const handleComplete = async () => {
-    if (currentAppt?.appointmentId) {
-      try {
-        await api.appointments.complete(currentAppt.appointmentId);
-      } catch {}
+  const handleOpenConsultModal = () => {
+    if (servingToken <= 0) {
+      Alert.alert('No Active Patient', 'Please advance queue or call next patient first.');
+      return;
     }
-    await handleNext();
+    // Pre-populate if empty
+    if (!diagnosis) setDiagnosis('Acute Angina / Chest Pain');
+    if (!referralReason) setReferralReason('Requires urgent tertiary cardiac evaluation and angiography');
+    setModalVisible(true);
+  };
+
+  const handleAddMedicine = () => {
+    setPrescriptions((prev) => [
+      ...prev,
+      { name: 'Aspirin 300mg', dosage: '1 tablet stat', frequency: 'Once daily', duration: '3 days', instructions: 'Chew or dissolve' },
+    ]);
+  };
+
+  const handleRemoveMedicine = (index: number) => {
+    setPrescriptions((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveConsultation = async () => {
+    if (!diagnosis.trim()) {
+      Alert.alert('Diagnosis Required', 'Please enter a diagnosis for the health record.');
+      return;
+    }
+
+    setSavingConsult(true);
+    try {
+      const selectedHosp = PRAYAGRAJ_HOSPITALS.find((h) => h.id === selectedHospitalId);
+
+      const payload = {
+        patientId: currentAppt?.patientId || `patient-token-${servingToken}`,
+        patientName: currentPatientName,
+        doctorId,
+        doctorName,
+        doctorSpecialty,
+        clinicName: userProfile?.clinicName || 'Civil Lines OPD Clinic, Prayagraj',
+        appointmentId: currentAppt?.appointmentId || currentAppt?.id,
+        tokenNumber: servingToken,
+        diagnosis,
+        notes,
+        vitals: {
+          bloodPressure: bp,
+          heartRate: parseInt(heartRate) || 72,
+          temperature: '98.6 F',
+          spO2: 98,
+        },
+        prescriptions,
+        referral: isReferralActive
+          ? {
+              hospitalId: selectedHospitalId,
+              hospitalName: selectedHosp?.name || 'Tertiary Care Hospital',
+              reason: referralReason || diagnosis,
+              priority: referralPriority,
+            }
+          : undefined,
+      };
+
+      await api.healthRecords.create(payload);
+
+      setModalVisible(false);
+      Alert.alert(
+        'Consultation Completed',
+        `Prescription and health record saved for ${currentPatientName}.${isReferralActive ? ' Referral sent to hospital.' : ''}`
+      );
+
+      // Advance to next patient
+      await handleNext();
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to save health record. Check backend connection.');
+    } finally {
+      setSavingConsult(false);
+    }
   };
 
   const handleSkip = async () => {
@@ -103,6 +223,16 @@ export default function DoctorQueue() {
     await handleNext();
   };
 
+  const handleResetQueue = async () => {
+    try {
+      await api.queues.resetQueue(doctorId);
+      useAppStore.setState({ servingToken: 0 });
+      fetchQueueData();
+    } catch {
+      useAppStore.setState({ servingToken: 0 });
+    }
+  };
+
   const waitingAppointments = appointments.filter(
     (a) => (a.tokenNumber || a.token) > servingToken && (a.status || '').toUpperCase() !== 'CANCELLED'
   );
@@ -110,7 +240,7 @@ export default function DoctorQueue() {
   const fallbackWaitingTokens = [servingToken + 1, servingToken + 2, servingToken + 3];
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Screen>
         <View style={styles.headerRow}>
           <TopBar title="Queue Management" back={false} />
@@ -133,17 +263,18 @@ export default function DoctorQueue() {
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
             <Button
               title={currentStatus === 'IN_PROGRESS' ? "In Consultation…" : "Start Consultation"}
-              disabled={currentStatus === 'IN_PROGRESS'}
+              disabled={currentStatus === 'IN_PROGRESS' || servingToken === 0}
               style={{ flex: 1 }}
               onPress={handleStart}
             />
             <Button title="Skip / No-Show" variant="secondary" style={{ flex: 1 }} onPress={handleSkip} />
           </View>
+
           <Button
-            title="Complete Consultation & Call Next"
+            title="Complete & Prescribe (Phases 2-5)"
             variant="blue"
             style={{ marginTop: 8 }}
-            onPress={handleComplete}
+            onPress={handleOpenConsultModal}
           />
         </Card>
 
@@ -153,6 +284,7 @@ export default function DoctorQueue() {
           ) : (
             <Button title="Pause Queue" variant="secondary" style={{ flex: 1 }} onPress={() => setQueueStatus('paused')} />
           )}
+          <Button title="Reset Queue" variant="ghost" style={{ flex: 1 }} onPress={handleResetQueue} />
         </View>
 
         <LabelEyebrow>WAITING PATIENTS ({waitingAppointments.length})</LabelEyebrow>
@@ -187,6 +319,200 @@ export default function DoctorQueue() {
         </Card>
       </Screen>
       <DoctorNav active="/(doctor)/queue" />
+
+      {/* Complete Consultation & Prescription Modal */}
+      <Modal visible={modalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Consultation & Prescription</Text>
+                <Text style={styles.modalSub}>Token #{servingToken} · {currentPatientName}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
+                <Text style={{ fontSize: 18, color: colors.ink }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
+              {/* Diagnosis */}
+              <Text style={styles.inputLabel}>PRIMARY DIAGNOSIS *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Acute Angina, Hypertension"
+                value={diagnosis}
+                onChangeText={setDiagnosis}
+              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
+                {QUICK_DIAGNOSES.map((d) => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.chip, diagnosis === d && styles.chipActive]}
+                    onPress={() => setDiagnosis(d)}
+                  >
+                    <Text style={[styles.chipText, diagnosis === d && styles.chipTextActive]}>{d}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {/* Vitals */}
+              <Text style={styles.inputLabel}>PATIENT VITALS</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.miniLabel}>BP (mmHg)</Text>
+                  <TextInput style={styles.miniInput} value={bp} onChangeText={setBp} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.miniLabel}>Heart Rate (bpm)</Text>
+                  <TextInput style={styles.miniInput} value={heartRate} onChangeText={setHeartRate} keyboardType="numeric" />
+                </View>
+              </View>
+
+              {/* Digital Prescription (Phase 5) */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
+                <Text style={styles.inputLabel}>DIGITAL PRESCRIPTION (Rx)</Text>
+                <TouchableOpacity onPress={handleAddMedicine} style={styles.addMedBtn}>
+                  <Text style={styles.addMedText}>+ Add Medicine</Text>
+                </TouchableOpacity>
+              </View>
+
+              {prescriptions.map((med, idx) => (
+                <View key={idx} style={styles.medCard}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={styles.medTitle}>Medicine #{idx + 1}</Text>
+                    {prescriptions.length > 1 && (
+                      <TouchableOpacity onPress={() => handleRemoveMedicine(idx)}>
+                        <Text style={{ color: colors.red, fontSize: 12 }}>Remove</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <TextInput
+                    style={[styles.textInput, { marginTop: 4 }]}
+                    placeholder="Medicine Name (e.g. Paracetamol 650mg)"
+                    value={med.name}
+                    onChangeText={(txt) => {
+                      const updated = [...prescriptions];
+                      updated[idx].name = txt;
+                      setPrescriptions(updated);
+                    }}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                    <TextInput
+                      style={[styles.miniInput, { flex: 1 }]}
+                      placeholder="Dosage"
+                      value={med.dosage}
+                      onChangeText={(txt) => {
+                        const updated = [...prescriptions];
+                        updated[idx].dosage = txt;
+                        setPrescriptions(updated);
+                      }}
+                    />
+                    <TextInput
+                      style={[styles.miniInput, { flex: 1 }]}
+                      placeholder="Frequency"
+                      value={med.frequency}
+                      onChangeText={(txt) => {
+                        const updated = [...prescriptions];
+                        updated[idx].frequency = txt;
+                        setPrescriptions(updated);
+                      }}
+                    />
+                    <TextInput
+                      style={[styles.miniInput, { flex: 1 }]}
+                      placeholder="Duration"
+                      value={med.duration}
+                      onChangeText={(txt) => {
+                        const updated = [...prescriptions];
+                        updated[idx].duration = txt;
+                        setPrescriptions(updated);
+                      }}
+                    />
+                  </View>
+                </View>
+              ))}
+
+              {/* Referral (Phase 4) */}
+              <View style={styles.referralSection}>
+                <TouchableOpacity
+                  style={styles.toggleRow}
+                  onPress={() => setIsReferralActive(!isReferralActive)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Icon name="hospital" size={16} color={isReferralActive ? colors.red : colors.inkFaint} />
+                    <Text style={[styles.referralToggleTitle, isReferralActive && { color: colors.red }]}>
+                      Refer Patient to Hospital
+                    </Text>
+                  </View>
+                  <Pill color={isReferralActive ? 'red' : 'grey'}>
+                    {isReferralActive ? 'REFERRAL ACTIVE' : 'NO REFERRAL'}
+                  </Pill>
+                </TouchableOpacity>
+
+                {isReferralActive && (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={styles.miniLabel}>SELECT TERTIARY HOSPITAL</Text>
+                    {PRAYAGRAJ_HOSPITALS.map((h) => (
+                      <TouchableOpacity
+                        key={h.id}
+                        style={[styles.hospChoice, selectedHospitalId === h.id && styles.hospChoiceActive]}
+                        onPress={() => setSelectedHospitalId(h.id)}
+                      >
+                        <Text style={[styles.hospChoiceText, selectedHospitalId === h.id && styles.hospChoiceTextActive]}>
+                          {h.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                      <TouchableOpacity
+                        style={[styles.priorityBtn, referralPriority === 'HIGH' && styles.priorityBtnHigh]}
+                        onPress={() => setReferralPriority('HIGH')}
+                      >
+                        <Text style={[styles.priorityText, referralPriority === 'HIGH' && { color: '#fff' }]}>
+                          HIGH PRIORITY
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.priorityBtn, referralPriority === 'NORMAL' && styles.priorityBtnNormal]}
+                        onPress={() => setReferralPriority('NORMAL')}
+                      >
+                        <Text style={[styles.priorityText, referralPriority === 'NORMAL' && { color: '#fff' }]}>
+                          NORMAL
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TextInput
+                      style={[styles.textInput, { marginTop: 8 }]}
+                      placeholder="Reason for referral (e.g. ICU / Cath Lab needed)"
+                      value={referralReason}
+                      onChangeText={setReferralReason}
+                    />
+                  </View>
+                )}
+              </View>
+
+              {/* Clinical Notes */}
+              <Text style={[styles.inputLabel, { marginTop: 12 }]}>CLINICAL ADVICE & NOTES</Text>
+              <TextInput
+                style={[styles.textInput, { height: 60 }]}
+                placeholder="General patient instructions, dietary restrictions..."
+                multiline
+                value={notes}
+                onChangeText={setNotes}
+              />
+            </ScrollView>
+
+            <View style={{ marginTop: 14 }}>
+              <Button
+                title={savingConsult ? 'Saving & Generating Records...' : 'Save Record, Prescribe & Call Next'}
+                onPress={handleSaveConsultation}
+                disabled={savingConsult}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -201,4 +527,103 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 },
   rowToken: { fontWeight: '700', fontSize: 13, color: colors.ink },
   rowSub: { fontSize: 10.5, color: colors.inkFaint, marginTop: 2 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 18,
+    maxHeight: '88%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+    paddingBottom: 8,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: colors.ink },
+  modalSub: { fontSize: 12, color: colors.inkSoft, marginTop: 2 },
+  closeBtn: { padding: 6 },
+  inputLabel: { fontSize: 11, fontWeight: '700', color: colors.inkSoft, marginBottom: 4 },
+  textInput: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: colors.ink,
+    backgroundColor: '#FAFAFA',
+  },
+  chip: {
+    backgroundColor: '#F0F0F0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    marginRight: 6,
+  },
+  chipActive: { backgroundColor: colors.blue },
+  chipText: { fontSize: 11, color: colors.ink },
+  chipTextActive: { color: '#fff', fontWeight: '700' },
+  miniLabel: { fontSize: 10, color: colors.inkFaint, marginBottom: 2 },
+  miniInput: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 12,
+    color: colors.ink,
+    backgroundColor: '#FAFAFA',
+  },
+  addMedBtn: { backgroundColor: '#EBF3FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  addMedText: { color: colors.blue, fontSize: 11, fontWeight: '700' },
+  medCard: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 6,
+  },
+  medTitle: { fontSize: 11, fontWeight: '700', color: colors.inkSoft },
+  referralSection: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 14,
+    backgroundColor: '#FFFDFD',
+  },
+  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  referralToggleTitle: { fontSize: 13, fontWeight: '700', color: colors.ink },
+  hospChoice: {
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.line,
+    marginTop: 4,
+    backgroundColor: '#fff',
+  },
+  hospChoiceActive: { borderColor: colors.red, backgroundColor: '#FFF5F5' },
+  hospChoiceText: { fontSize: 11.5, color: colors.inkSoft },
+  hospChoiceTextActive: { color: colors.red, fontWeight: '700' },
+  priorityBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+  },
+  priorityBtnHigh: { backgroundColor: colors.red, borderColor: colors.red },
+  priorityBtnNormal: { backgroundColor: colors.ink, borderColor: colors.ink },
+  priorityText: { fontSize: 11, fontWeight: '700', color: colors.ink },
 });

@@ -5,12 +5,15 @@ import { colors } from '@/constants/theme';
 import { Card, Icon, IconName, HTitle } from '@/components/ui';
 import { useAppStore, Role } from '@/store/useAppStore';
 
-const ROLES: Array<{ role: Role; label: string; sub: string; icon: IconName; href: string }> = [
+import '@/services/i18n';
+
+const ROLES: Array<{ role: Role; label: string; sub: string; icon: IconName; href: string; accent?: string }> = [
   { role: 'user', label: 'Patient / Public', sub: 'Request emergency help', icon: 'profile', href: '/login' },
   { role: 'hospital', label: 'Hospital Staff', sub: 'Coordinate incoming patients', icon: 'hospital', href: '/hospital-login' },
   { role: 'ambulance', label: 'Ambulance Crew', sub: 'Respond to dispatches', icon: 'ambulance', href: '/driver-login' },
   { role: 'doctor', label: 'Doctor', sub: 'Manage consultations & queue', icon: 'doctor', href: '/doctor-login' },
-  { role: 'ADMIN', label: 'Administrator Console', sub: 'Verify credentials, doctors & fleet', icon: 'idCard', href: '/admin-dashboard' },
+  { role: 'FRONTLINE_WORKER', label: 'ASHA / ANM Frontline Worker', sub: 'Register & refer rural patients', icon: 'profile', href: '/(worker)/dashboard', accent: '#15803D' },
+  { role: 'ADMIN', label: 'Administrator Console', sub: 'Verify credentials, doctors & fleet', icon: 'idCard', href: '/admin-dashboard', accent: '#DC2626' },
 ];
 
 export default function RoleSelection() {
@@ -20,27 +23,38 @@ export default function RoleSelection() {
       <HTitle size={21}>Continue as</HTitle>
       <Text style={styles.sub}>Select how you'll be using Golden Hour</Text>
       <View style={{ gap: 12, marginTop: 24 }}>
-        {ROLES.map((r) => (
-          <Card key={r.role} style={styles.card}>
-            <TouchableOpacity
-              style={styles.rowTouchable}
-              onPress={() => {
-                setRole(r.role);
-                router.push(r.href as any);
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.iconWrap, r.role === 'ADMIN' && { backgroundColor: '#FEF2F2' }]}>
-                <Icon name={r.icon} size={22} color={r.role === 'ADMIN' ? '#DC2626' : colors.red} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.roleLabel}>{r.label}</Text>
-                <Text style={styles.roleSub}>{r.sub}</Text>
-              </View>
-              <Icon name="chevR" color={colors.inkFaint} />
-            </TouchableOpacity>
-          </Card>
-        ))}
+        {ROLES.map((r) => {
+          const isASHA = r.role === 'FRONTLINE_WORKER';
+          const isAdmin = r.role === 'ADMIN';
+          const iconColor = r.accent ?? colors.red;
+          const iconBg = isASHA ? '#F0FDF4' : isAdmin ? '#FEF2F2' : colors.redGlow;
+          return (
+            <Card key={r.role} style={[styles.card, isASHA && styles.ashaCard]}>
+              <TouchableOpacity
+                style={styles.rowTouchable}
+                onPress={() => {
+                  setRole(r.role);
+                  router.push(r.href as any);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
+                  <Icon name={r.icon} size={22} color={iconColor} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.roleLabel}>{r.label}</Text>
+                  <Text style={styles.roleSub}>{r.sub}</Text>
+                  {isASHA && (
+                    <View style={styles.ashaBadge}>
+                      <Text style={styles.ashaBadgeText}>🌾 Works Offline • Hindi/English</Text>
+                    </View>
+                  )}
+                </View>
+                <Icon name="chevR" color={colors.inkFaint} />
+              </TouchableOpacity>
+            </Card>
+          );
+        })}
       </View>
     </ScrollView>
   );
@@ -54,4 +68,16 @@ const styles = StyleSheet.create({
   iconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.redGlow, alignItems: 'center', justifyContent: 'center' },
   roleLabel: { fontWeight: '700', fontSize: 14, color: colors.ink },
   roleSub: { fontSize: 11.5, color: colors.inkFaint, marginTop: 2 },
+  ashaCard: { borderWidth: 1.5, borderColor: '#86EFAC' },
+  ashaBadge: {
+    marginTop: 5,
+    alignSelf: 'flex-start',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  ashaBadgeText: { fontSize: 10, color: '#15803D', fontWeight: '700' },
 });

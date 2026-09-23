@@ -37,9 +37,53 @@ export default function DoctorProfileScreen() {
     };
   }, [selectedDoctorId]);
 
-  function takeToken() {
-    setUserToken(doctor.currentToken + 1);
-    router.push('/(patient)/consult-doctor/live-queue');
+  const userProfile = useAppStore((s) => s.userProfile);
+  const [takingToken, setTakingToken] = React.useState(false);
+
+  async function takeToken() {
+    setTakingToken(true);
+    const patientName = userProfile?.name || 'Walk-in Patient';
+    const patientId = userProfile?.uid || (userProfile as any)?.id || 'patient-1';
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    try {
+      const res: any = await api.appointments.book({
+        doctorId: selectedDoctorId,
+        date: todayStr,
+        timeSlot: 'Walk-in',
+        patientName,
+        patientId,
+      });
+
+      const tokenNum = res?.tokenNumber || (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
+      setUserToken(tokenNum);
+      useAppStore.getState().addBookedAppointment({
+        appointmentId: res?.appointmentId || `appt-${Date.now()}`,
+        doctorId: selectedDoctorId,
+        doctorName: doctor.name,
+        clinicName: doctor.clinic,
+        date: 'Today',
+        timeSlot: 'Walk-in',
+        tokenNumber: tokenNum,
+        status: 'CONFIRMED',
+      });
+    } catch {
+      const fallbackToken = (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
+      setUserToken(fallbackToken);
+      useAppStore.getState().addBookedAppointment({
+        appointmentId: `appt-${Date.now()}`,
+        doctorId: selectedDoctorId,
+        doctorName: doctor.name,
+        clinicName: doctor.clinic,
+        date: 'Today',
+        timeSlot: 'Walk-in',
+        tokenNumber: fallbackToken,
+        status: 'CONFIRMED',
+      });
+    } finally {
+      setTakingToken(false);
+      router.push('/(patient)/consult-doctor/live-queue');
+    }
   }
 
   return (
@@ -84,7 +128,13 @@ export default function DoctorProfileScreen() {
 
       <View style={{ gap: 10 }}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button title="Take Token" style={{ flex: 1 }} disabled={doctor.status === 'closed'} onPress={takeToken} />
+          <Button
+            title={takingToken ? "Generating..." : "Take Token"}
+            loading={takingToken}
+            style={{ flex: 1 }}
+            disabled={doctor.status === 'closed' || takingToken}
+            onPress={takeToken}
+          />
           <Button title="Book Appointment" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/booking')} />
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>

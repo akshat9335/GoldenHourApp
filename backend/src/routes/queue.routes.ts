@@ -15,4 +15,7 @@ router.post("/:doctorId/next", (req, res, next) => {
   return queueController.advanceQueue(req, res, next);
 });
 
+// POST /api/queues/:doctorId/reset
+router.post("/:doctorId/reset", (req, res, next) => queueController.resetQueue(req, res, next));
+
 export default router;

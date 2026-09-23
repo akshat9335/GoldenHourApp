@@ -64,6 +64,9 @@ interface AppState {
 
   userToken: number | null; // token the patient has taken, null if none
   setUserToken: (n: number | null) => void;
+  bookedAppointments: any[];
+  addBookedAppointment: (apt: any) => void;
+  setBookedAppointments: (apts: any[]) => void;
 
   // --- Doctor role (shared demo queue, mocked) ---
   servingToken: number; // token currently being served at the demo clinic
@@ -204,6 +207,18 @@ export const useAppStore = create<AppState>((set) => ({
 
   userToken: null,
   setUserToken: (n) => set({ userToken: n }),
+
+  bookedAppointments: [],
+  addBookedAppointment: (apt) =>
+    set((state) => ({
+      bookedAppointments: [
+        apt,
+        ...state.bookedAppointments.filter(
+          (a) => (a.appointmentId || a.id) !== (apt.appointmentId || apt.id)
+        ),
+      ],
+    })),
+  setBookedAppointments: (apts) => set({ bookedAppointments: apts }),
 
   servingToken: 0,
   advanceServingToken: () => set((state) => ({ servingToken: state.servingToken + 1 })),

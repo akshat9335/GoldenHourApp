@@ -89,6 +89,15 @@ export default function DoctorDashboard() {
     }
   };
 
+  const handleResetQueue = async () => {
+    try {
+      await api.queues.resetQueue(doctorId);
+      useAppStore.setState({ servingToken: 0 });
+    } catch {
+      useAppStore.setState({ servingToken: 0 });
+    }
+  };
+
   const todaysAppointments = appointments;
   const completedToday = todaysAppointments.filter((a) => a.status === 'completed' || (servingToken > 0 && a.token <= servingToken)).length;
   const waitingToday = todaysAppointments.filter((a) => a.status !== 'cancelled' && a.status !== 'completed' && (servingToken === 0 || a.token > servingToken)).length;
@@ -135,7 +144,7 @@ export default function DoctorDashboard() {
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
             <Button title="Start Consultation" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(doctor)/queue')} />
-            <Button title="Pause Queue" variant="ghost" style={{ flex: 1 }} onPress={() => router.push('/(doctor)/queue')} />
+            <Button title="Reset Queue" variant="ghost" style={{ flex: 1 }} onPress={handleResetQueue} />
           </View>
         </Card>
 

@@ -1,26 +1,49 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Stepper, LabelEyebrow } from '@/components/ui';
 import { AMB_STEPS } from '@/constants/data';
+import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/services/api';
 
 export default function HistoryDetail() {
+  const { emergencyId } = useLocalSearchParams<{ emergencyId?: string }>();
+  const storeId = useAppStore((s) => s.emergencyId);
+  const activeId = emergencyId || storeId;
+
+  const [emergency, setEmergency] = useState<any>(null);
+
+  useEffect(() => {
+    if (activeId) {
+      api.emergencies.getById(activeId).then((data) => {
+        if (data) setEmergency(data);
+      }).catch(() => {});
+    }
+  }, [activeId]);
+
+  const incidentType = emergency?.incidentType || 'Emergency Trauma';
+  const hospitalName = emergency?.assignedHospitalName || emergency?.alertedHospitalName || 'Swaroop Rani Nehru Hospital (SRN)';
+  const ambulanceUnit = emergency?.assignedAmbulanceId || emergency?.assignedDriverName || 'Unit UP-70-AMB';
+  const severity = (emergency?.severity || 'HIGH').toUpperCase();
+  const triageDesc = emergency?.description || (emergency?.notes) || 'Emergency medical response dispatched with clinical telemetry.';
+
   return (
     <Screen>
-      <TopBar title="Accident — Sep 2, 2026" />
+      <TopBar title={`${incidentType} — Details`} />
       <Card style={styles.card}>
         <Stepper steps={AMB_STEPS} currentIndex={AMB_STEPS.length} />
       </Card>
       <LabelEyebrow>AI ASSESSMENT</LabelEyebrow>
       <Card style={styles.assessCard}>
-        <Pill color="orange">HIGH</Pill>
-        <Text style={styles.assessText}>Suspected fracture, moderate blood loss.</Text>
+        <Pill color={severity === 'CRITICAL' ? 'red' : 'orange'}>{severity}</Pill>
+        <Text style={styles.assessText}>{triageDesc}</Text>
       </Card>
       <LabelEyebrow>HOSPITAL & AMBULANCE</LabelEyebrow>
       <Card style={{ padding: 14 }}>
-        <StatRow label="Hospital" value="St. Martha's" />
-        <StatRow label="Ambulance" value="KA-05-AB" />
-        <StatRow label="Total Time" value="21 min" />
+        <StatRow label="Hospital" value={hospitalName} />
+        <StatRow label="Ambulance" value={ambulanceUnit} />
+        <StatRow label="Status" value={emergency?.status || 'COMPLETED'} />
       </Card>
     </Screen>
   );

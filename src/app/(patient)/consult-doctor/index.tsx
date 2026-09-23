@@ -18,6 +18,8 @@ export default function ConsultDoctor() {
   const [myAppointments, setMyAppointments] = useState<any[]>([]);
   const userProfile = useAppStore((s) => s.userProfile);
   const setUserToken = useAppStore((s) => s.setUserToken);
+  const storeAppointments = useAppStore((s) => s.bookedAppointments || []);
+  const setStoreAppointments = useAppStore((s) => s.setBookedAppointments);
 
   React.useEffect(() => {
     let mounted = true;
@@ -69,13 +71,15 @@ export default function ConsultDoctor() {
         // Offline demo fallback preserves DOCTORS
       });
 
-    // Fetch user's booked appointments
+    // Fetch user's booked appointments with patientId
+    const pid = userProfile?.uid || (userProfile as any)?.id || 'patient-1';
     api.appointments
-      .getMyAppointments()
+      .getMyAppointments(pid)
       .then((res: any) => {
         const appts = Array.isArray(res) ? res : res?.data;
-        if (mounted && Array.isArray(appts)) {
+        if (mounted && Array.isArray(appts) && appts.length > 0) {
           setMyAppointments(appts);
+          setStoreAppointments(appts);
         }
       })
       .catch(() => {});
@@ -84,6 +88,8 @@ export default function ConsultDoctor() {
       mounted = false;
     };
   }, [selectedSpecialty, lastKnownLocation?.latitude, lastKnownLocation?.longitude, userProfile?.uid]);
+
+  const combinedAppointments = myAppointments.length > 0 ? myAppointments : storeAppointments;
 
   const doctors = allDoctors.filter((d) => {
     const matchesSpecialty = selectedSpecialty === 'All' || d.specialization.toLowerCase().includes(selectedSpecialty.toLowerCase());
@@ -129,13 +135,13 @@ export default function ConsultDoctor() {
         <View style={{ height: 14 }} />
 
         {/* My Booked Appointments Section */}
-        {myAppointments.length > 0 && (
+        {combinedAppointments.length > 0 && (
           <View style={{ marginBottom: 18 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <Text style={styles.eyebrow}>MY BOOKED APPOINTMENTS</Text>
-              <Pill color="blue">{myAppointments.length} Active</Pill>
+              <Pill color="blue">{combinedAppointments.length} Active</Pill>
             </View>
-            {myAppointments.map((apt: any) => {
+            {combinedAppointments.map((apt: any) => {
               const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
               const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
               const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';

@@ -370,8 +370,15 @@ export class DoctorService {
     }
 
     const results: DoctorCardItem[] = [];
+    const seenDoctors = new Set<string>();
 
     for (const doc of dataStore.doctors.values()) {
+      const dedupKey = `${doc.name.toLowerCase()}_${doc.specialty.toLowerCase()}`;
+      if (seenDoctors.has(dedupKey) || seenDoctors.has(doc.doctorId)) {
+        continue;
+      }
+      seenDoctors.add(dedupKey);
+      seenDoctors.add(doc.doctorId);
       // Filter verified: default to true for patient consultations unless explicitly asked
       const verifiedOnly = filters.verifiedOnly !== false;
       if (verifiedOnly && doc.verificationStatus !== "VERIFIED" && process.env.NODE_ENV === "production") {

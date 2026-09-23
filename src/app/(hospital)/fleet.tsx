@@ -434,7 +434,7 @@ export default function HospitalFleet() {
                   <Text style={styles.inputLabel}>Ambulance Vehicle Plate *</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="e.g. KA-01-EA-1234"
+                    placeholder="e.g. UP-70-EA-1234"
                     placeholderTextColor={colors.inkFaint}
                     autoCapitalize="characters"
                     value={vehiclePlateNumber}

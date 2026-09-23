@@ -64,7 +64,35 @@ export default function History() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Screen>
-        <TopBar title="Emergency History" back={false} />
+        <TopBar title="Incident & Health History" back={false} />
+
+        <View style={{ flexDirection: 'row', gap: 8, marginVertical: 10 }}>
+          <View
+            style={{
+              flex: 1,
+              paddingVertical: 8,
+              alignItems: 'center',
+              borderRadius: 8,
+              backgroundColor: colors.red,
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>🚨 Emergency Logs</Text>
+          </View>
+          <Pressable
+            style={{
+              flex: 1,
+              paddingVertical: 8,
+              alignItems: 'center',
+              borderRadius: 8,
+              backgroundColor: '#EEF2FF',
+              borderWidth: 1,
+              borderColor: colors.blue,
+            }}
+            onPress={() => router.push('/(patient)/health-records' as any)}
+          >
+            <Text style={{ color: colors.blue, fontWeight: '700', fontSize: 12 }}>📋 Health Records & Rx</Text>
+          </Pressable>
+        </View>
 
         {loading ? (
           <View style={{ padding: 40, alignItems: 'center' }}>

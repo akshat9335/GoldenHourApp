@@ -292,8 +292,8 @@ export default function HospitalDashboard() {
                     <TouchableOpacity
                       style={styles.actionBtnNav}
                       onPress={() => {
-                        const targetLat = item.ambulanceLocation?.latitude || item.location?.latitude || 12.9352;
-                        const targetLng = item.ambulanceLocation?.longitude || item.location?.longitude || 77.6146;
+                        const targetLat = item.ambulanceLocation?.latitude || item.location?.latitude || 25.4358;
+                        const targetLng = item.ambulanceLocation?.longitude || item.location?.longitude || 81.8463;
                         openExternalNavigation({
                           destLat: targetLat,
                           destLng: targetLng,
