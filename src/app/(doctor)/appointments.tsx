@@ -4,6 +4,9 @@ import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Chip, DoctorNav } from '@/components/ui';
 import { APPOINTMENTS } from '@/constants/doctorData';
 
+import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/services/api';
+
 const TABS = ['Today', 'Upcoming', 'Completed', 'Cancelled'] as const;
 
 const tabColor: Record<string, 'blue' | 'success' | 'grey'> = {
@@ -14,8 +17,47 @@ const tabColor: Record<string, 'blue' | 'success' | 'grey'> = {
 
 export default function DoctorAppointments() {
   const [tab, setTab] = useState<(typeof TABS)[number]>('Today');
+  const userProfile = useAppStore((s) => s.userProfile);
+  const doctorId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
+  const [appointmentsList, setAppointmentsList] = useState(APPOINTMENTS);
 
-  const list = APPOINTMENTS.filter((a) => {
+  React.useEffect(() => {
+    let mounted = true;
+    api.appointments
+      .getDoctorAppointments({ doctorId })
+      .then((data: any) => {
+        if (mounted && Array.isArray(data) && data.length > 0) {
+          const todayIso = new Date().toISOString().split('T')[0];
+          const mapped = data.map((a: any) => {
+            const rawStatus = (a.status || 'CONFIRMED').toUpperCase();
+            const normalizedStatus: 'upcoming' | 'completed' | 'cancelled' =
+              rawStatus === 'COMPLETED'
+                ? 'completed'
+                : rawStatus === 'CANCELLED' || rawStatus === 'NO_SHOW'
+                ? 'cancelled'
+                : 'upcoming';
+
+            return {
+              id: a.appointmentId || a.id,
+              doctorId: a.doctorId,
+              patientName: a.patientName || 'Patient',
+              date: a.date === todayIso ? 'Today' : a.date,
+              time: a.timeSlot || '10:00 AM',
+              token: a.tokenNumber || 1,
+              status: normalizedStatus,
+            };
+          });
+          setAppointmentsList(mapped);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, [doctorId]);
+
+  const list = appointmentsList.filter((a) => {
     if (tab === 'Today') return a.date === 'Today';
     if (tab === 'Upcoming') return a.status === 'upcoming';
     if (tab === 'Completed') return a.status === 'completed';

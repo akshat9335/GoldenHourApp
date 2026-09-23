@@ -24,32 +24,59 @@ export default function DoctorDashboard() {
   useEffect(() => {
     let mounted = true;
 
-    // Load authenticated doctor profile from backend
-    api.doctors.getMyProfile().then((res: any) => {
-      const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
-      if (mounted && doc && (doc.doctorId || doc.name)) {
-        setDoctorDetails(doc);
-        const resolvedId = doc.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
-        api.queues.getLiveQueue(resolvedId).then((qRes: any) => {
+    const loadDoctorData = (resolvedId: string) => {
+      // Fetch live queue
+      api.queues
+        .getLiveQueue(resolvedId)
+        .then((qRes: any) => {
           const q = (qRes && typeof qRes === 'object' && 'servingToken' in qRes) ? qRes : (qRes?.data || qRes);
           if (mounted && q && typeof q.servingToken === 'number') {
             useAppStore.setState({ servingToken: q.servingToken });
           }
-        }).catch(() => {});
-      }
-    }).catch(() => {
-      api.queues.getLiveQueue(doctorId).then((res: any) => {
-        const q = (res && typeof res === 'object' && 'servingToken' in res) ? res : (res?.data || res);
-        if (mounted && q && typeof q.servingToken === 'number') {
-          useAppStore.setState({ servingToken: q.servingToken });
+        })
+        .catch(() => {});
+
+      // Fetch real appointments
+      api.appointments
+        .getDoctorAppointments({ doctorId: resolvedId })
+        .then((apptData: any) => {
+          if (mounted && Array.isArray(apptData) && apptData.length > 0) {
+            const mapped = apptData.map((a: any) => ({
+              id: a.appointmentId || a.id,
+              doctorId: a.doctorId,
+              patientName: a.patientName || 'Patient',
+              date: a.date === new Date().toISOString().split('T')[0] ? 'Today' : a.date,
+              time: a.timeSlot || '10:00 AM',
+              token: a.tokenNumber || 1,
+              status: (a.status?.toLowerCase() === 'completed' ? 'completed' : a.status?.toLowerCase() === 'cancelled' ? 'cancelled' : 'upcoming') as 'upcoming' | 'completed' | 'cancelled',
+            }));
+            setAppointments(mapped);
+          }
+        })
+        .catch(() => {});
+    };
+
+    // Load authenticated doctor profile from backend
+    api.doctors
+      .getMyProfile()
+      .then((res: any) => {
+        const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
+        if (mounted && doc && (doc.doctorId || doc.name)) {
+          setDoctorDetails(doc);
+          const resolvedId = doc.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
+          loadDoctorData(resolvedId);
+        } else {
+          loadDoctorData(doctorId);
         }
-      }).catch(() => {});
-    });
+      })
+      .catch(() => {
+        loadDoctorData(doctorId);
+      });
 
     return () => {
       mounted = false;
     };
-  }, [userProfile?.uid]);
+  }, [userProfile?.uid, doctorId]);
 
   const handleCallNext = async () => {
     try {
@@ -65,6 +92,10 @@ export default function DoctorDashboard() {
   };
 
   const todaysAppointments = appointments;
+  const totalToday = Math.max(todaysAppointments.length, servingToken > 0 ? servingToken + 2 : 5);
+  const completedToday = todaysAppointments.filter((a) => a.status === 'completed' || a.token <= servingToken).length;
+  const waitingToday = todaysAppointments.filter((a) => a.token > servingToken && a.status !== 'cancelled').length;
+  const remainingToday = Math.max(totalToday - completedToday, 0);
 
   return (
     <View style={{ flex: 1 }}>
@@ -81,10 +112,10 @@ export default function DoctorDashboard() {
 
         <LabelEyebrow>TODAY'S SUMMARY</LabelEyebrow>
         <View style={styles.statsGrid}>
-          <Card style={styles.stat}><Text style={styles.statNum}>24</Text><Text style={styles.statLabel}>PATIENTS TODAY</Text></Card>
-          <Card style={styles.stat}><Text style={[styles.statNum, { color: colors.success }]}>11</Text><Text style={styles.statLabel}>COMPLETED</Text></Card>
-          <Card style={styles.stat}><Text style={[styles.statNum, { color: colors.amber }]}>7</Text><Text style={styles.statLabel}>WAITING</Text></Card>
-          <Card style={styles.stat}><Text style={styles.statNum}>13</Text><Text style={styles.statLabel}>REMAINING</Text></Card>
+          <Card style={styles.stat}><Text style={styles.statNum}>{totalToday}</Text><Text style={styles.statLabel}>PATIENTS TODAY</Text></Card>
+          <Card style={styles.stat}><Text style={[styles.statNum, { color: colors.success }]}>{completedToday}</Text><Text style={styles.statLabel}>COMPLETED</Text></Card>
+          <Card style={styles.stat}><Text style={[styles.statNum, { color: colors.amber }]}>{waitingToday}</Text><Text style={styles.statLabel}>WAITING</Text></Card>
+          <Card style={styles.stat}><Text style={styles.statNum}>{remainingToday}</Text><Text style={styles.statLabel}>REMAINING</Text></Card>
         </View>
 
         <Card style={styles.tokenCard}>

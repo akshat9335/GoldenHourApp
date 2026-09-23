@@ -11,37 +11,54 @@ export default function ConsultDoctor() {
   const selectedSpecialty = useAppStore((s) => s.selectedSpecialty);
   const setSelectedSpecialty = useAppStore((s) => s.setSelectedSpecialty);
   const setSelectedDoctorId = useAppStore((s) => s.setSelectedDoctorId);
+  const setSelectedDoctor = useAppStore((s) => s.setSelectedDoctor);
+  const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
   const [query, setQuery] = useState('');
   const [allDoctors, setAllDoctors] = useState(DOCTORS);
 
   React.useEffect(() => {
     let mounted = true;
+    const userLat = lastKnownLocation?.latitude || 25.4538;
+    const userLng = lastKnownLocation?.longitude || 81.8540;
+
     api.doctors
-      .search({ specialty: selectedSpecialty !== 'All' ? selectedSpecialty : undefined })
+      .search({
+        specialty: selectedSpecialty !== 'All' ? selectedSpecialty : undefined,
+        userLat,
+        userLng,
+      })
       .then((data: any) => {
         if (mounted && Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((d: any, idx: number) => ({
-            id: d.id || `doc-be-${idx}`,
-            name: d.name || `Dr. ${d.specialization || 'Consultant'}`,
-            specialization: d.specialization || 'General Physician',
-            qualification: d.qualification || 'MBBS, MD',
-            experience: d.experience || '8+ yrs exp',
-            clinic: d.clinicName || 'City Clinic',
-            address: d.address || 'Koramangala, Bengaluru',
-            latitude: d.latitude ?? 12.9352,
-            longitude: d.longitude ?? 77.6245,
-            distanceKm: d.distanceKm ?? 2.5,
-            etaMin: d.etaMin ?? Math.round((d.distanceKm ?? 2.5) * 3),
-            fee: d.consultationFee ?? 500,
-            workingHours: d.workingHours || '10:00 AM - 7:00 PM',
-            status: (d.isAvailable ? 'open' : 'busy') as 'open' | 'busy' | 'closed',
-            availableToday: d.isAvailable ?? true,
-            servingToken: d.servingToken ?? 12,
-            currentToken: d.currentToken ?? 16,
-            queueLength: d.queueLength ?? 4,
-            estimatedWaitMin: d.estimatedWaitMin ?? 25,
-            verified: true,
-          }));
+          const mapped = data.map((d: any, idx: number) => {
+            const rawDist = typeof d.distanceKm === 'number' ? d.distanceKm : 1.8;
+            const distKm = Number(rawDist.toFixed(1));
+            const serving = typeof d.servingToken === 'number' ? d.servingToken : 0;
+            const queueLen = typeof d.queueLength === 'number' ? d.queueLength : 0;
+            const currentTok = serving + queueLen;
+
+            return {
+              id: d.doctorId || d.id || `doc-be-${idx}`,
+              name: d.name || `Dr. ${d.specialty || 'Practitioner'}`,
+              specialization: d.specialty || d.specialization || 'General Physician',
+              qualification: d.qualification || 'MBBS, MD',
+              experience: d.experienceYears ? `${d.experienceYears} years experience` : (d.experience || '8+ yrs exp'),
+              clinic: d.clinic?.clinicName || d.clinicName || 'Prayagraj Health Center',
+              address: d.clinic?.address || d.clinicAddress || d.address || 'Civil Lines, Prayagraj',
+              latitude: d.clinic?.lat ?? d.latitude ?? 25.4538,
+              longitude: d.clinic?.lng ?? d.longitude ?? 81.8540,
+              distanceKm: distKm,
+              etaMin: Math.max(Math.round(distKm * 3), 3),
+              fee: d.consultationFee ?? 500,
+              workingHours: d.clinic?.workingHours || d.workingHours || '09:00 AM – 8:00 PM',
+              status: (d.availability === 'AVAILABLE' ? 'open' : d.availability === 'BUSY' ? 'busy' : 'closed') as 'open' | 'busy' | 'closed',
+              availableToday: d.availability !== 'OFFLINE',
+              servingToken: serving,
+              currentToken: currentTok,
+              queueLength: queueLen,
+              estimatedWaitMin: d.estimatedWaitMinutes ?? (queueLen * 8),
+              verified: d.verificationStatus === 'VERIFIED' || d.verified === true,
+            };
+          });
           setAllDoctors(mapped);
         }
       })
@@ -52,19 +69,21 @@ export default function ConsultDoctor() {
     return () => {
       mounted = false;
     };
-  }, [selectedSpecialty]);
+  }, [selectedSpecialty, lastKnownLocation?.latitude, lastKnownLocation?.longitude]);
 
   const doctors = allDoctors.filter((d) => {
-    const matchesSpecialty = selectedSpecialty === 'All' || d.specialization === selectedSpecialty;
+    const matchesSpecialty = selectedSpecialty === 'All' || d.specialization.toLowerCase().includes(selectedSpecialty.toLowerCase());
     const matchesQuery =
       !query.trim() ||
       d.name.toLowerCase().includes(query.toLowerCase()) ||
-      d.specialization.toLowerCase().includes(query.toLowerCase());
+      d.specialization.toLowerCase().includes(query.toLowerCase()) ||
+      d.clinic.toLowerCase().includes(query.toLowerCase());
     return matchesSpecialty && matchesQuery;
   });
 
-  function openDoctor(id: string) {
-    setSelectedDoctorId(id);
+  function openDoctor(d: any) {
+    setSelectedDoctorId(d.id);
+    setSelectedDoctor(d);
     router.push('/(patient)/consult-doctor/doctor-profile');
   }
 
@@ -100,7 +119,7 @@ export default function ConsultDoctor() {
           <Text style={styles.empty}>No doctors found for this search.</Text>
         ) : (
           doctors.map((d) => (
-            <Pressable key={d.id} onPress={() => openDoctor(d.id)}>
+            <Pressable key={d.id} onPress={() => openDoctor(d)}>
               <Card style={styles.card}>
                 <View style={styles.rowTop}>
                   <View style={{ flex: 1 }}>
@@ -133,7 +152,7 @@ export default function ConsultDoctor() {
                   </View>
                 )}
 
-                <Button title="View Doctor" variant="secondary" style={{ marginTop: 10 }} onPress={() => openDoctor(d.id)} />
+                <Button title="View Doctor" variant="secondary" style={{ marginTop: 10 }} onPress={() => openDoctor(d)} />
               </Card>
             </Pressable>
           ))

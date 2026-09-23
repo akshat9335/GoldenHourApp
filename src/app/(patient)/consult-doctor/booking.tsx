@@ -13,29 +13,43 @@ const SLOTS = ['10:30 AM', '11:00 AM', '2:00 PM', '4:30 PM', '6:00 PM'];
 
 export default function Booking() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const selectedDoctor = useAppStore((s) => s.selectedDoctor);
+  const userProfile = useAppStore((s) => s.userProfile);
   const setUserToken = useAppStore((s) => s.setUserToken);
-  const doctor = getDoctorById(selectedDoctorId);
+  const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
   const [date, setDate] = useState('Today');
   const [slot, setSlot] = useState(SLOTS[0]);
   const [loading, setLoading] = useState(false);
 
+  const patientName = userProfile?.name || 'Patient';
+  const patientId = userProfile?.uid || (userProfile as any)?.id || 'patient-1';
+
   async function confirm() {
     setLoading(true);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const bookingDate =
+      date === 'Today'
+        ? todayStr
+        : date === 'Tomorrow'
+        ? new Date(Date.now() + 86400000).toISOString().split('T')[0]
+        : new Date(Date.now() + 172800000).toISOString().split('T')[0];
+
     try {
-      const res = await api.appointments.book({
+      const res: any = await api.appointments.book({
         doctorId: selectedDoctorId,
-        date: new Date().toISOString().split('T')[0],
+        date: bookingDate,
         timeSlot: slot,
-        patientName: 'Akshat Srivastava',
+        patientName,
+        patientId,
       });
       if (res && res.tokenNumber) {
         setUserToken(res.tokenNumber);
       } else {
-        setUserToken(doctor.currentToken + 3);
+        setUserToken((doctor.servingToken || 0) + (doctor.queueLength || 0) + 1);
       }
     } catch (_err) {
       // Offline fallback
-      setUserToken(doctor.currentToken + 3);
+      setUserToken((doctor.servingToken || 0) + (doctor.queueLength || 0) + 1);
     } finally {
       setLoading(false);
       router.push('/(patient)/consult-doctor/booking-confirmed');

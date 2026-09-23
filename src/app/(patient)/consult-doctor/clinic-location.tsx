@@ -21,14 +21,15 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): 
 export default function ClinicLocation() {
   const insets = useSafeAreaInsets();
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const selectedDoctor = useAppStore((s) => s.selectedDoctor);
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
   const locationAddress = useAppStore((s) => s.locationAddress);
-  const doctor = getDoctorById(selectedDoctorId);
+  const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
   const [navigating, setNavigating] = useState(false);
 
-  // User coordinates: fallback to safe Delhi coordinates if device GPS not yet locked
-  const userLat = lastKnownLocation?.latitude ?? 28.6139;
-  const userLng = lastKnownLocation?.longitude ?? 77.2090;
+  // User coordinates: fallback to Prayagraj coordinates if device GPS not yet locked
+  const userLat = lastKnownLocation?.latitude ?? 25.4358;
+  const userLng = lastKnownLocation?.longitude ?? 81.8463;
 
   // Check if doctor's static dataset coordinates are in a distant state (>60 km away from user)
   const rawDist = getDistanceKm(userLat, userLng, doctor.latitude, doctor.longitude);

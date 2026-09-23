@@ -331,6 +331,33 @@ export async function registerUserProfile(
   // Create professional domain records
   if (requestedRole === "DOCTOR") {
     const doctorId = `doc-${uid}`;
+    const clinicId = profile.clinicId || `clinic-${uid}`;
+    const rawLoc = (input as any).location;
+    const clinicLat = typeof (input as any).latitude === 'number'
+      ? (input as any).latitude
+      : (typeof rawLoc?.latitude === 'number' ? rawLoc.latitude : 25.4538);
+    const clinicLng = typeof (input as any).longitude === 'number'
+      ? (input as any).longitude
+      : (typeof rawLoc?.longitude === 'number' ? rawLoc.longitude : 81.8540);
+
+    const clinicRecord = {
+      clinicId,
+      clinicName: profile.clinicName || (profile.name ? `${profile.name}'s Clinic` : "Medical Clinic"),
+      address: profile.clinicAddress || "Civil Lines, Prayagraj",
+      lat: clinicLat,
+      lng: clinicLng,
+      phone: profile.phone || "+91-532-2400000",
+      workingHours: "09:00 - 20:00",
+      facilities: ["General OPD", "Consultation", "Emergency Dressing"],
+    };
+
+    dataStore.clinics.set(clinicId, clinicRecord);
+    if (firestore) {
+      try {
+        await firestore.collection("clinics").doc(clinicId).set(clinicRecord, { merge: true });
+      } catch {}
+    }
+
     const doctorRecord = {
       doctorId,
       userId: uid,
@@ -339,9 +366,9 @@ export async function registerUserProfile(
       qualification: profile.qualification || "MBBS",
       experienceYears: Number(input.experienceYears) || 5,
       licenseNumber: profile.licenseNumber || "",
-      clinicId: profile.clinicId || `clinic-${uid}`,
-      clinicName: profile.clinicName || null,
-      clinicAddress: profile.clinicAddress || null,
+      clinicId,
+      clinicName: clinicRecord.clinicName,
+      clinicAddress: clinicRecord.address,
       consultationFee: profile.consultationFee || 500,
       verificationStatus: "PENDING" as const,
       availability: "OFFLINE" as const,
@@ -358,6 +385,20 @@ export async function registerUserProfile(
       try {
         await firestore.collection("doctors").doc(doctorId).set(doctorRecord, { merge: true });
       } catch {}
+    }
+
+    // Initialize doctor's live queue for today
+    const today = now.split("T")[0];
+    const queueKey = `${doctorId}_${today}`;
+    if (!dataStore.queues.has(queueKey)) {
+      dataStore.queues.set(queueKey, {
+        doctorId,
+        date: today,
+        servingToken: 0,
+        totalTokensIssued: 0,
+        avgConsultationMinutes: 10,
+        waitingCount: 0,
+      });
     }
   } else if (requestedRole === "HOSPITAL") {
     const rawLoc = (input as any).location;

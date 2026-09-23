@@ -47,138 +47,149 @@ class InMemoryDataStore {
     this.clinics.set(clinic1.clinicId, clinic1);
     this.clinics.set(clinic2.clinicId, clinic2);
 
-    const clinicBlr1: ClinicDetails = {
-      clinicId: "clinic-sharma-blr",
-      clinicName: "Sharma Heart Clinic",
-      address: "4th Cross, Koramangala, Bengaluru",
-      lat: 12.9352,
-      lng: 77.6146,
-      phone: "+91-80-25551234",
-      workingHours: "10:00 - 18:00",
-      facilities: ["ECG", "2D Echo", "Cardiac Triage", "Pharmacy"],
+    // Seed Prayagraj Regional Clinics
+    const clinicMedanta: ClinicDetails = {
+      clinicId: "clinic-medanta-prayagraj",
+      clinicName: "Medanta OPD & Diagnostic Center",
+      address: "Civil Lines, Prayagraj",
+      lat: 25.4538,
+      lng: 81.8540,
+      phone: "+91-532-2407777",
+      workingHours: "09:00 - 20:00",
+      facilities: ["Cardiology OPD", "2D Echo", "ECG", "Pathology Lab", "Triage Room"],
     };
 
-    const clinicBlr2: ClinicDetails = {
-      clinicId: "clinic-verma-blr",
-      clinicName: "Verma Family Clinic",
-      address: "80 Feet Road, Indiranagar, Bengaluru",
-      lat: 12.9719,
-      lng: 77.6412,
-      phone: "+91-80-25555678",
-      workingHours: "09:00 - 21:00",
-      facilities: ["General OPD", "Digital X-Ray", "Vaccination", "Minor Trauma"],
+    const clinicSRN: ClinicDetails = {
+      clinicId: "clinic-srn-prayagraj",
+      clinicName: "SRN Medical Campus OPD",
+      address: "MG Marg, Prayagraj",
+      lat: 25.4484,
+      lng: 81.8460,
+      phone: "+91-532-2500011",
+      workingHours: "08:30 - 18:30",
+      facilities: ["General OPD", "Internal Medicine", "Digital X-Ray", "Vaccination"],
     };
 
-    this.clinics.set(clinicBlr1.clinicId, clinicBlr1);
-    this.clinics.set(clinicBlr2.clinicId, clinicBlr2);
+    const clinicLifeline: ClinicDetails = {
+      clinicId: "clinic-lifeline-katra",
+      clinicName: "LifeLine Multispecialty Clinic",
+      address: "University Road, Katra, Prayagraj",
+      lat: 25.4610,
+      lng: 81.8570,
+      phone: "+91-532-2601234",
+      workingHours: "10:00 - 21:00",
+      facilities: ["Emergency Triage", "Minor OT", "Trauma Dressing", "Pharmacy"],
+    };
+
+    const clinicCityCare: ClinicDetails = {
+      clinicId: "clinic-city-georgetown",
+      clinicName: "City Heart & Orthopedic Care",
+      address: "George Town, Prayagraj",
+      lat: 25.4420,
+      lng: 81.8620,
+      phone: "+91-532-2708899",
+      workingHours: "09:30 - 19:30",
+      facilities: ["Orthopedic OPD", "Plaster Room", "Physiotherapy", "Digital X-Ray"],
+    };
+
+    this.clinics.set(clinicMedanta.clinicId, clinicMedanta);
+    this.clinics.set(clinicSRN.clinicId, clinicSRN);
+    this.clinics.set(clinicLifeline.clinicId, clinicLifeline);
+    this.clinics.set(clinicCityCare.clinicId, clinicCityCare);
+
+    // Legacy clinic aliases for backward compatibility
+    this.clinics.set("clinic-sharma-blr", clinicMedanta);
+    this.clinics.set("clinic-verma-blr", clinicSRN);
 
     // Seed Doctors
     const doc1: DoctorProfile = {
-      doctorId: "doc-sharma-trauma",
-      userId: "user-dr-sharma",
-      name: "Dr. Rajesh Sharma",
-      specialty: "Trauma & Emergency Care",
-      qualification: "MBBS, MS (General Surgery), Fellowship in Trauma",
+      doctorId: "doc-1",
+      userId: "user-dr-alok",
+      name: "Dr. Alok Tripathi",
+      specialty: "Cardiologist",
+      qualification: "MBBS, MD, DM (Cardiology)",
       experienceYears: 14,
-      licenseNumber: "MCI-DL-2009-45812",
+      licenseNumber: "UPMC-2010-45812",
       verificationStatus: "VERIFIED",
-      clinicId: clinic1.clinicId,
-      consultationFee: 700,
+      clinicId: clinicMedanta.clinicId,
+      consultationFee: 600,
       availability: "AVAILABLE",
       rating: 4.9,
       servingToken: 3,
-      queueLength: 7,
-      estimatedWaitMinutes: 40,
+      queueLength: 6,
+      estimatedWaitMinutes: 25,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     const doc2: DoctorProfile = {
-      doctorId: "doc-verma-ortho",
-      userId: "user-dr-verma",
-      name: "Dr. Anjali Verma",
-      specialty: "Orthopedic Surgery & Fractures",
-      qualification: "MBBS, MS (Orthopedics), DNB",
+      doctorId: "doc-2",
+      userId: "user-dr-anita",
+      name: "Dr. Anita Verma",
+      specialty: "General Physician",
+      qualification: "MBBS, MD (General Medicine)",
       experienceYears: 10,
-      licenseNumber: "MCI-DL-2014-99214",
+      licenseNumber: "UPMC-2014-99214",
       verificationStatus: "VERIFIED",
-      clinicId: clinic2.clinicId,
-      consultationFee: 800,
+      clinicId: clinicSRN.clinicId,
+      consultationFee: 350,
       availability: "AVAILABLE",
       rating: 4.8,
-      servingToken: 1,
-      queueLength: 4,
+      servingToken: 5,
+      queueLength: 8,
+      estimatedWaitMinutes: 20,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const doc3: DoctorProfile = {
+      doctorId: "doc-3",
+      userId: "user-dr-rajesh",
+      name: "Dr. Rajesh Sharma",
+      specialty: "Emergency Medicine",
+      qualification: "MBBS, MS (General Surgery), Fellowship in Trauma",
+      experienceYears: 12,
+      licenseNumber: "UPMC-2012-77412",
+      verificationStatus: "VERIFIED",
+      clinicId: clinicLifeline.clinicId,
+      consultationFee: 500,
+      availability: "AVAILABLE",
+      rating: 4.9,
+      servingToken: 2,
+      queueLength: 5,
       estimatedWaitMinutes: 30,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    const doc3Pending: DoctorProfile = {
-      doctorId: "doc-kumar-general",
-      userId: "user-dr-kumar",
-      name: "Dr. Vikram Kumar",
-      specialty: "General Medicine",
-      qualification: "MBBS",
-      experienceYears: 3,
-      licenseNumber: "MCI-DL-2021-12345",
-      verificationStatus: "PENDING",
-      clinicId: clinic1.clinicId,
-      consultationFee: 400,
-      availability: "OFFLINE",
-      rating: 4.2,
-      servingToken: 0,
-      queueLength: 0,
-      estimatedWaitMinutes: 0,
+    const doc4: DoctorProfile = {
+      doctorId: "doc-4",
+      userId: "user-dr-anjali",
+      name: "Dr. Anjali Verma",
+      specialty: "Orthopedic",
+      qualification: "MBBS, MS (Orthopedics), DNB",
+      experienceYears: 11,
+      licenseNumber: "UPMC-2013-33901",
+      verificationStatus: "VERIFIED",
+      clinicId: clinicCityCare.clinicId,
+      consultationFee: 500,
+      availability: "AVAILABLE",
+      rating: 4.8,
+      servingToken: 4,
+      queueLength: 7,
+      estimatedWaitMinutes: 25,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     this.doctors.set(doc1.doctorId, doc1);
     this.doctors.set(doc2.doctorId, doc2);
-    this.doctors.set(doc3Pending.doctorId, doc3Pending);
+    this.doctors.set(doc3.doctorId, doc3);
+    this.doctors.set(doc4.doctorId, doc4);
 
-    const docBlr1: DoctorProfile = {
-      doctorId: "doc-1",
-      userId: "user-dr-rahul",
-      name: "Dr. Rahul Sharma",
-      specialty: "Cardiologist",
-      qualification: "MBBS, MD (Cardiology)",
-      experienceYears: 12,
-      licenseNumber: "KMC-BLR-2012-1142",
-      verificationStatus: "VERIFIED",
-      clinicId: clinicBlr1.clinicId,
-      consultationFee: 500,
-      availability: "AVAILABLE",
-      rating: 4.9,
-      servingToken: 14,
-      queueLength: 18,
-      estimatedWaitMinutes: 25,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const docBlr2: DoctorProfile = {
-      doctorId: "doc-2",
-      userId: "user-dr-anita",
-      name: "Dr. Anita Verma",
-      specialty: "General Physician",
-      qualification: "MBBS, MD (General Medicine)",
-      experienceYears: 9,
-      licenseNumber: "KMC-BLR-2015-8831",
-      verificationStatus: "VERIFIED",
-      clinicId: clinicBlr2.clinicId,
-      consultationFee: 300,
-      availability: "AVAILABLE",
-      rating: 4.8,
-      servingToken: 29,
-      queueLength: 32,
-      estimatedWaitMinutes: 15,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.doctors.set(docBlr1.doctorId, docBlr1);
-    this.doctors.set(docBlr2.doctorId, docBlr2);
+    // Aliases for any legacy test suites
+    this.doctors.set("doc-sharma-trauma", { ...doc3, doctorId: "doc-sharma-trauma" });
+    this.doctors.set("doc-verma-ortho", { ...doc4, doctorId: "doc-verma-ortho" });
 
     // Seed Queues
     const today = new Date().toISOString().split("T")[0];
@@ -186,36 +197,36 @@ class InMemoryDataStore {
       doctorId: doc1.doctorId,
       date: today,
       servingToken: 3,
-      totalTokensIssued: 7,
+      totalTokensIssued: 9,
       avgConsultationMinutes: 10,
-      waitingCount: 4,
+      waitingCount: 6,
     });
 
     this.queues.set(`${doc2.doctorId}_${today}`, {
       doctorId: doc2.doctorId,
       date: today,
-      servingToken: 1,
-      totalTokensIssued: 4,
-      avgConsultationMinutes: 12,
-      waitingCount: 3,
-    });
-
-    this.queues.set(`${docBlr1.doctorId}_${today}`, {
-      doctorId: docBlr1.doctorId,
-      date: today,
-      servingToken: 14,
-      totalTokensIssued: 18,
-      avgConsultationMinutes: 10,
-      waitingCount: 4,
-    });
-
-    this.queues.set(`${docBlr2.doctorId}_${today}`, {
-      doctorId: docBlr2.doctorId,
-      date: today,
-      servingToken: 29,
-      totalTokensIssued: 32,
+      servingToken: 5,
+      totalTokensIssued: 13,
       avgConsultationMinutes: 8,
-      waitingCount: 3,
+      waitingCount: 8,
+    });
+
+    this.queues.set(`${doc3.doctorId}_${today}`, {
+      doctorId: doc3.doctorId,
+      date: today,
+      servingToken: 2,
+      totalTokensIssued: 7,
+      avgConsultationMinutes: 10,
+      waitingCount: 5,
+    });
+
+    this.queues.set(`${doc4.doctorId}_${today}`, {
+      doctorId: doc4.doctorId,
+      date: today,
+      servingToken: 4,
+      totalTokensIssued: 11,
+      avgConsultationMinutes: 10,
+      waitingCount: 7,
     });
 
     // Seed Hospitals (Coordinate with Aastha's hospital network)

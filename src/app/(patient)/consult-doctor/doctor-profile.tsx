@@ -6,10 +6,36 @@ import { Screen, TopBar, Card, Pill, Button, Divider, LabelEyebrow, Icon } from 
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById } from '@/constants/doctorData';
 
+import { api } from '@/services/api';
+
 export default function DoctorProfileScreen() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const selectedDoctor = useAppStore((s) => s.selectedDoctor);
   const setUserToken = useAppStore((s) => s.setUserToken);
-  const doctor = getDoctorById(selectedDoctorId);
+  const [liveDoctor, setLiveDoctor] = React.useState<any>(selectedDoctor || getDoctorById(selectedDoctorId));
+
+  const doctor = liveDoctor;
+
+  React.useEffect(() => {
+    let mounted = true;
+    api.queues
+      .getLiveQueue(selectedDoctorId)
+      .then((q: any) => {
+        if (mounted && q && typeof q.servingToken === 'number') {
+          setLiveDoctor((prev: any) => ({
+            ...prev,
+            servingToken: q.servingToken,
+            currentToken: Math.max(prev.currentToken, q.servingToken + (q.queueAhead || 0)),
+            estimatedWaitMin: q.estimatedWaitMinutes ?? prev.estimatedWaitMin,
+          }));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedDoctorId]);
 
   function takeToken() {
     setUserToken(doctor.currentToken + 1);

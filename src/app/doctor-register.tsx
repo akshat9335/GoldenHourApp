@@ -43,6 +43,7 @@ export default function DoctorRegister() {
   };
 
   const executeRegistration = async (targetEmail: string) => {
+    const coords = useAppStore.getState().lastKnownLocation;
     await authService.register({
       role: 'DOCTOR',
       name: name.trim(),
@@ -56,6 +57,8 @@ export default function DoctorRegister() {
       clinicName: clinicName.trim() || undefined,
       clinicAddress: clinicAddress.trim() || undefined,
       consultationFee: parseInt(fee, 10) || 500,
+      latitude: coords?.latitude || 25.4538,
+      longitude: coords?.longitude || 81.8540,
     });
 
     Alert.alert(

@@ -9,29 +9,36 @@ import { api } from '@/services/api';
 
 export default function LiveQueue() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const selectedDoctor = useAppStore((s) => s.selectedDoctor);
   const userToken = useAppStore((s) => s.userToken);
   const servingToken = useAppStore((s) => s.servingToken);
   const advanceServingToken = useAppStore((s) => s.advanceServingToken);
-  const doctor = getDoctorById(selectedDoctorId);
+  const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
 
-  const myToken = userToken ?? doctor.currentToken + 1;
+  const myToken = userToken ?? (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
   const patientsAhead = Math.max(myToken - servingToken - 1, 0);
   const isMyTurn = servingToken >= myToken;
 
   useEffect(() => {
     let mounted = true;
-    api.queues
-      .getLiveQueue(selectedDoctorId, myToken)
-      .then((data: any) => {
-        if (mounted && data && typeof data.servingToken === 'number') {
-          useAppStore.setState({ servingToken: data.servingToken });
-        }
-      })
-      .catch(() => {
-        // Retain local state
-      });
+
+    const fetchQueue = () => {
+      api.queues
+        .getLiveQueue(selectedDoctorId, myToken)
+        .then((data: any) => {
+          if (mounted && data && typeof data.servingToken === 'number') {
+            useAppStore.setState({ servingToken: data.servingToken });
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchQueue();
+    const timer = setInterval(fetchQueue, 4000);
+
     return () => {
       mounted = false;
+      clearInterval(timer);
     };
   }, [selectedDoctorId, myToken]);
 

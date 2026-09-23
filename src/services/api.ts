@@ -239,6 +239,13 @@ export const api = {
       notes?: string;
     }) => request('/appointments', { method: 'POST', body: JSON.stringify(data) }),
     getMyAppointments: () => request('/appointments/my'),
+    getDoctorAppointments: (params?: { doctorId?: string; date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.doctorId) q.append('doctorId', params.doctorId);
+      if (params?.date) q.append('date', params.date);
+      const qs = q.toString();
+      return request(`/appointments/doctor${qs ? `?${qs}` : ''}`);
+    },
     getById: (id: string) => request(`/appointments/${id}`),
     start: (id: string) => request(`/appointments/${id}/start`, { method: 'POST' }),
     complete: (id: string) => request(`/appointments/${id}/complete`, { method: 'POST' }),

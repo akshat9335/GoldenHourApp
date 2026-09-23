@@ -59,6 +59,8 @@ interface AppState {
 
   selectedDoctorId: string;
   setSelectedDoctorId: (id: string) => void;
+  selectedDoctor: any | null;
+  setSelectedDoctor: (d: any) => void;
 
   userToken: number | null; // token the patient has taken, null if none
   setUserToken: (n: number | null) => void;
@@ -197,6 +199,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   selectedDoctorId: 'doc-1',
   setSelectedDoctorId: (id) => set({ selectedDoctorId: id }),
+  selectedDoctor: null,
+  setSelectedDoctor: (d) => set({ selectedDoctor: d }),
 
   userToken: null,
   setUserToken: (n) => set({ userToken: n }),

@@ -22,12 +22,31 @@ export default function DoctorQueue() {
 
   const doctorId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
 
+  React.useEffect(() => {
+    let mounted = true;
+    api.queues
+      .getLiveQueue(doctorId)
+      .then((q: any) => {
+        if (mounted && q && typeof q.servingToken === 'number') {
+          useAppStore.setState({ servingToken: q.servingToken });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [doctorId]);
+
   const handleNext = async () => {
-    advanceServingToken();
     try {
-      await api.queues.advanceQueue(doctorId);
+      const res: any = await api.queues.advanceQueue(doctorId);
+      if (res && typeof res.servingToken === 'number') {
+        useAppStore.setState({ servingToken: res.servingToken });
+      } else {
+        advanceServingToken();
+      }
     } catch (_err) {
-      // Offline fallback
+      advanceServingToken();
     }
   };
 

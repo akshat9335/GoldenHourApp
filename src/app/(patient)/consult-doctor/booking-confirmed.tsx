@@ -8,8 +8,9 @@ import { getDoctorById } from '@/constants/doctorData';
 
 export default function BookingConfirmed() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const selectedDoctor = useAppStore((s) => s.selectedDoctor);
   const userToken = useAppStore((s) => s.userToken);
-  const doctor = getDoctorById(selectedDoctorId);
+  const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
   const appointmentId = `GH-DOC-${String(userToken ?? doctor.currentToken).padStart(4, '0')}`;
 
   return (
@@ -31,9 +32,12 @@ export default function BookingConfirmed() {
         <Row label="Clinic" value={doctor.clinic} />
       </Card>
 
-      <View style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
-        <Button title="View Appointment" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/appointment')} />
-        <Button title="Get Directions" variant="blue" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/clinic-location')} />
+      <View style={{ flexDirection: 'column', gap: 8, width: '100%' }}>
+        <Button title="Join Live Queue" onPress={() => router.push('/(patient)/consult-doctor/live-queue')} />
+        <View style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
+          <Button title="View Appointment" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/appointment')} />
+          <Button title="Get Directions" variant="blue" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/clinic-location')} />
+        </View>
       </View>
     </Screen>
   );
