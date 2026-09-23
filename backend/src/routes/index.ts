@@ -16,6 +16,7 @@ import queueRoutes from "./queue.routes";
 import confirmationRoutes from "./confirmation.routes";
 import mediaRoutes from "./media.routes";
 import adminRoutes from "./admin.routes";
+import workerRoutes from "./worker.routes";
 
 /**
  * Centralized API routing.
@@ -37,6 +38,7 @@ import adminRoutes from "./admin.routes";
  *   /appointments    → Anant (Slot booking, Lifecycle state machine, Departure sync)
  *   /queues          → Anant (Live queue management, Token issuance, Next caller)
  *   /confirmations   → Adish (Incident confirmations, Multi-user verification, Concurrency lock)
+ *   /worker          → Member 4 (ASHA / ANM Frontline offline-sync patients, visits & referrals)
  */
 
 const router = Router();
@@ -57,6 +59,7 @@ router.use("/queues", queueRoutes);
 router.use("/confirmations", confirmationRoutes);
 router.use("/media", mediaRoutes);
 router.use("/admin", adminRoutes);
+router.use("/worker", workerRoutes);
 
 export default router;
 

@@ -2,6 +2,8 @@ import { DoctorProfile, ClinicDetails } from "../types/doctor";
 import { Appointment, LiveQueueState } from "../types/appointment";
 import { StoredLocation, HospitalFacility, NearbyIncidentSummary } from "../types/location";
 
+import { CommunityPatient, CommunityVisit, CommunityReferral } from "./worker.model";
+
 /**
  * In-Memory persistent datastore for Anant's location, doctor, clinic, appointment, and queue services.
  * Seamlessly backs the system in local/demo/test environments, and provides seeding for realistic demonstrations.
@@ -15,6 +17,9 @@ class InMemoryDataStore {
   public hospitals: Map<string, HospitalFacility> = new Map();
   public incidents: Map<string, NearbyIncidentSummary> = new Map();
   public users: Map<string, any> = new Map();
+  public communityPatients: Map<string, CommunityPatient> = new Map();
+  public communityVisits: Map<string, CommunityVisit> = new Map();
+  public communityReferrals: Map<string, CommunityReferral> = new Map();
 
   constructor() {
     this.seedInitialData();
