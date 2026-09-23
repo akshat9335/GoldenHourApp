@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
-import { Screen, TopBar, Button, Card, Pill, Divider, Icon, LabelEyebrow } from '@/components/ui';
+import { Screen, TopBar, Button, Card, Pill, Divider, Icon, LabelEyebrow, openExternalMapPreview } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
 
@@ -267,6 +267,7 @@ export default function HospitalRequestDetail() {
         ) : null}
 
         {/* 3-Way Direct Contact Buttons */}
+        {/* 3-Way Direct Contact & Live Route Buttons */}
         <View style={styles.ambActionRow}>
           {detail?.assignedDriverPhone ? (
             <TouchableOpacity
@@ -285,6 +286,28 @@ export default function HospitalRequestDetail() {
               activeOpacity={0.8}
             >
               <Text style={styles.actionBtnTextGreen}>📞 Call Patient</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {detail?.ambulanceLocation?.latitude && detail?.ambulanceLocation?.longitude ? (
+            <TouchableOpacity
+              style={[styles.actionBtnBlue, { backgroundColor: '#1E293B', borderColor: '#334155' }]}
+              onPress={() => {
+                const ambLat = detail.ambulanceLocation.latitude;
+                const ambLng = detail.ambulanceLocation.longitude;
+                const destLat = detail.assignedHospitalLocation?.latitude || detail.location?.latitude;
+                const destLng = detail.assignedHospitalLocation?.longitude || detail.location?.longitude;
+                openExternalMapPreview({
+                  lat: ambLat,
+                  lng: ambLng,
+                  title: detail.assignedAmbulanceId ? `Ambulance ${detail.assignedAmbulanceId}` : 'Rescue Ambulance',
+                  originLat: destLat,
+                  originLng: destLng,
+                });
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.actionBtnTextBlue, { color: '#38BDF8' }]}>🗺️ Track Unit</Text>
             </TouchableOpacity>
           ) : null}
         </View>

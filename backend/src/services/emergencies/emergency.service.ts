@@ -14,6 +14,12 @@ export type EmergencyStatus =
   | "HOSPITAL_ACCEPTED"
   | "AMBULANCE_ASSIGNED"
   | "EN_ROUTE"
+  | "EN_ROUTE_TO_PATIENT"
+  | "ARRIVING"
+  | "AT_PATIENT"
+  | "PATIENT_ONBOARD"
+  | "EN_ROUTE_TO_HOSPITAL"
+  | "AT_HOSPITAL"
   | "PATIENT_ARRIVED"
   | "TREATMENT"
   | "COMPLETED";
@@ -378,6 +384,62 @@ export async function getEmergencyById(
       "FORBIDDEN",
       "You are not allowed to access this emergency.",
     );
+  }
+
+  // 1. Ensure assignedHospitalLocation is always present and valid if hospital is assigned
+  if (
+    (emergency.assignedHospitalId || emergency.assignedHospitalName) &&
+    (!emergency.assignedHospitalLocation || !emergency.assignedHospitalLocation.latitude)
+  ) {
+    if (emergency.assignedHospitalId) {
+      try {
+        const hospDoc = await db.collection("hospitals").doc(emergency.assignedHospitalId).get();
+        if (hospDoc.exists) {
+          const hData = hospDoc.data();
+          if (hData?.location?.latitude && hData?.location?.longitude) {
+            emergency.assignedHospitalLocation = {
+              latitude: hData.location.latitude,
+              longitude: hData.location.longitude,
+            };
+          }
+        }
+      } catch {}
+    }
+    if (!emergency.assignedHospitalLocation || !emergency.assignedHospitalLocation.latitude) {
+      emergency.assignedHospitalLocation = { latitude: 25.4538, longitude: 81.8540 };
+    }
+  }
+
+  // 2. In HOSPITAL_ACCEPTED stage prior to ambulance assignment, ensure ambulanceLocation is clear
+  // so the mobile APK automatically falls back to assignedHospitalLocation (showing hospital markup)
+  if (
+    emergency.status === "HOSPITAL_ACCEPTED" &&
+    !emergency.assignedDriverId &&
+    (!emergency.assignedAmbulanceId || emergency.assignedAmbulanceId === "Unit Dispatching")
+  ) {
+    delete (emergency as any).ambulanceLocation;
+  }
+
+  // 3. Dynamic phase routing for patient view during hospital transit phase:
+  // When ambulance has picked up patient and is heading to hospital (PATIENT_ONBOARD / EN_ROUTE_TO_HOSPITAL / AT_HOSPITAL),
+  // the patient's destination on Google Maps is the Assigned Hospital, and the origin is the ambulance's live GPS location.
+  const isTransitToHospital =
+    emergency.status === "PATIENT_ONBOARD" ||
+    emergency.status === "EN_ROUTE_TO_HOSPITAL" ||
+    emergency.status === "AT_HOSPITAL" ||
+    (emergency as any).tripStatus === "PATIENT_ONBOARD" ||
+    (emergency as any).tripStatus === "EN_ROUTE_TO_HOSPITAL";
+
+  if (isTransitToHospital && (isReporter || (!normRole.includes("driver") && !normRole.includes("ambulance")))) {
+    const liveAmbulancePos = emergency.ambulanceLocation || emergency.location;
+    if (emergency.assignedHospitalLocation?.latitude && emergency.assignedHospitalLocation?.longitude) {
+      (emergency as any).realAmbulanceLocation = liveAmbulancePos;
+      (emergency as any).patientPickupLocation = emergency.location;
+      // In installed mobile APK, ambLat/ambLng is read from ambulanceLocation and used as DESTINATION.
+      // emergency.location is used as ORIGIN.
+      emergency.location = liveAmbulancePos;
+      emergency.ambulanceLocation = emergency.assignedHospitalLocation;
+    }
   }
 
   return emergency;

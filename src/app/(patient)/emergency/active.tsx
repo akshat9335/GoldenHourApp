@@ -203,15 +203,34 @@ export default function Active() {
           <Text style={styles.pairSub} numberOfLines={1}>
             {hospitalSub}
           </Text>
-          {hospitalPhone ? (
-            <TouchableOpacity
-              style={styles.pairCallBtn}
-              onPress={() => Linking.openURL(`tel:${hospitalPhone}`)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.pairCallText}>📞 Call Hospital</Text>
-            </TouchableOpacity>
-          ) : null}
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+            {hospitalPhone ? (
+              <TouchableOpacity
+                style={[styles.pairCallBtn, { flex: 1 }]}
+                onPress={() => Linking.openURL(`tel:${hospitalPhone}`)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.pairCallText}>📞 Call</Text>
+              </TouchableOpacity>
+            ) : null}
+            {emergency?.assignedHospitalLocation?.latitude && emergency?.assignedHospitalLocation?.longitude ? (
+              <TouchableOpacity
+                style={[styles.pairCallBtn, { flex: 1, backgroundColor: '#EFF6FF', borderColor: colors.blue }]}
+                onPress={() => {
+                  openExternalMapPreview({
+                    lat: emergency.assignedHospitalLocation.latitude,
+                    lng: emergency.assignedHospitalLocation.longitude,
+                    title: hospitalName,
+                    originLat: pickupLat,
+                    originLng: pickupLng,
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.pairCallText, { color: colors.blue }]}>📍 Pin</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </Card>
       </View>
 
@@ -236,31 +255,68 @@ export default function Active() {
 
       <View style={{ height: 14 }} />
 
-      {/* View Ambulance & Route in Maps (Preview Mode, No Auto-Voice) */}
-      <TouchableOpacity
-        style={styles.gMapsBtn}
-        onPress={() => {
-          const ambLat = emergency?.ambulanceLocation?.latitude ?? (emergency as any)?.assignedHospitalLocation?.latitude;
-          const ambLng = emergency?.ambulanceLocation?.longitude ?? (emergency as any)?.assignedHospitalLocation?.longitude;
-          const pLat = emergency?.location?.latitude ?? lastKnownLocation?.latitude;
-          const pLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude;
+      {/* View Ambulance & Route in Maps (Dynamic Phase Routing) */}
+      {(() => {
+        const isHeadingToHospital =
+          ambStatus >= 5 ||
+          emergency?.status === 'PATIENT_ONBOARD' ||
+          emergency?.status === 'EN_ROUTE_TO_HOSPITAL' ||
+          emergency?.status === 'TRANSPORTING' ||
+          emergency?.tripStatus === 'PATIENT_ONBOARD' ||
+          emergency?.tripStatus === 'EN_ROUTE_TO_HOSPITAL';
 
-          if (ambLat && ambLng && pLat && pLng) {
-            openExternalMapPreview({
-              lat: ambLat,
-              lng: ambLng,
-              title: emergency?.assignedAmbulanceId ? `Ambulance ${emergency.assignedAmbulanceId}` : 'Rescue Ambulance',
-              originLat: pLat,
-              originLng: pLng,
-            });
-          } else {
-            router.push(emergencyId ? `/(patient)/live-map?emergencyId=${emergencyId}` : '/(patient)/live-map');
-          }
-        }}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.gMapsBtnText}>🗺️ View Ambulance on Google Maps</Text>
-      </TouchableOpacity>
+        const hospLoc = emergency?.assignedHospitalLocation;
+        const ambLoc = emergency?.ambulanceLocation;
+        const pLat = emergency?.location?.latitude ?? lastKnownLocation?.latitude;
+        const pLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude;
+
+        if (isHeadingToHospital && hospLoc?.latitude && hospLoc?.longitude) {
+          const originLat = ambLoc?.latitude ?? pLat;
+          const originLng = ambLoc?.longitude ?? pLng;
+          return (
+            <TouchableOpacity
+              style={[styles.gMapsBtn, { backgroundColor: '#DC2626' }]}
+              onPress={() => {
+                openExternalMapPreview({
+                  lat: hospLoc.latitude,
+                  lng: hospLoc.longitude,
+                  title: emergency?.assignedHospitalName || 'Assigned Hospital ER',
+                  originLat,
+                  originLng,
+                });
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.gMapsBtnText}>🗺️ Track Route to Hospital in Google Maps</Text>
+            </TouchableOpacity>
+          );
+        }
+
+        const ambLat = ambLoc?.latitude ?? hospLoc?.latitude;
+        const ambLng = ambLoc?.longitude ?? hospLoc?.longitude;
+
+        return (
+          <TouchableOpacity
+            style={styles.gMapsBtn}
+            onPress={() => {
+              if (ambLat && ambLng && pLat && pLng) {
+                openExternalMapPreview({
+                  lat: ambLat,
+                  lng: ambLng,
+                  title: emergency?.assignedAmbulanceId ? `Ambulance ${emergency.assignedAmbulanceId}` : 'Rescue Ambulance',
+                  originLat: pLat,
+                  originLng: pLng,
+                });
+              } else {
+                router.push(emergencyId ? `/(patient)/live-map?emergencyId=${emergencyId}` : '/(patient)/live-map');
+              }
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.gMapsBtnText}>🗺️ Track Responding Ambulance in Google Maps</Text>
+          </TouchableOpacity>
+        );
+      })()}
 
       <View style={{ height: 10 }} />
       <View style={{ flexDirection: 'row', gap: 8 }}>

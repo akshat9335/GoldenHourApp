@@ -90,15 +90,15 @@ async function run() {
         console.log("[reclaim_tunnel] Heartbeat 200 OK — tunnel healthy.");
       } else {
         consecutiveFailures++;
-        console.warn(`[reclaim_tunnel] Heartbeat status ${res.status} (failure count: ${consecutiveFailures}/8)`);
+        console.warn(`[reclaim_tunnel] Heartbeat status ${res.status} (failure count: ${consecutiveFailures}/3)`);
       }
     } catch (pingErr) {
       consecutiveFailures++;
-      console.warn(`[reclaim_tunnel] Heartbeat timeout/error: ${pingErr.message} (failure count: ${consecutiveFailures}/8)`);
+      console.warn(`[reclaim_tunnel] Heartbeat timeout/error: ${pingErr.message} (failure count: ${consecutiveFailures}/3)`);
     }
 
-    if (consecutiveFailures >= 8) {
-      console.warn("[reclaim_tunnel] 8 consecutive failures. Recycling tunnel connection...");
+    if (consecutiveFailures >= 3) {
+      console.warn("[reclaim_tunnel] 3 consecutive failures. Recycling tunnel connection...");
       await closeActiveTunnel();
       consecutiveFailures = 0;
       await sleep(5000);

@@ -116,12 +116,36 @@ export default function LiveMap() {
     ? emergency.status.replace(/_/g, ' ')
     : AMB_STEPS[ambStatus] || 'ALERT ACTIVE';
 
+  const isEnRouteToHospital =
+    ambStatus >= 5 ||
+    emergency?.status === 'PATIENT_ONBOARD' ||
+    emergency?.status === 'EN_ROUTE_TO_HOSPITAL' ||
+    emergency?.status === 'TRANSPORTING' ||
+    emergency?.tripStatus === 'PATIENT_ONBOARD' ||
+    emergency?.tripStatus === 'EN_ROUTE_TO_HOSPITAL';
+
   const handleOpenGoogleMaps = () => {
-    if (ambLat && ambLng) {
+    if (isEnRouteToHospital && hospCoord?.latitude && hospCoord?.longitude) {
+      openExternalMapPreview({
+        lat: hospCoord.latitude,
+        lng: hospCoord.longitude,
+        title: emergency?.assignedHospitalName || 'Assigned Hospital ER',
+        originLat: ambCoord?.latitude || pLat,
+        originLng: ambCoord?.longitude || pLng,
+      });
+    } else if (ambLat && ambLng) {
       openExternalMapPreview({
         lat: ambLat,
         lng: ambLng,
         title: emergency?.assignedAmbulanceId ? `Ambulance Unit ${emergency.assignedAmbulanceId}` : 'Rescue Ambulance',
+        originLat: pLat,
+        originLng: pLng,
+      });
+    } else if (hospCoord?.latitude && hospCoord?.longitude) {
+      openExternalMapPreview({
+        lat: hospCoord.latitude,
+        lng: hospCoord.longitude,
+        title: emergency?.assignedHospitalName || 'Assigned Hospital ER',
         originLat: pLat,
         originLng: pLng,
       });
@@ -211,15 +235,23 @@ export default function LiveMap() {
 
             {/* High-Impact Native Google Maps Action Button */}
             <TouchableOpacity
-              style={styles.gMapsActionBtn}
+              style={[styles.gMapsActionBtn, isEnRouteToHospital && { backgroundColor: '#DC2626' }]}
               onPress={handleOpenGoogleMaps}
               activeOpacity={0.85}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Text style={{ fontSize: 20 }}>🗺️</Text>
                 <View>
-                  <Text style={styles.gMapsActionTitle}>Track Live Route in Google Maps</Text>
-                  <Text style={styles.gMapsActionSub}>Opens native map with live satellite & real-time traffic</Text>
+                  <Text style={styles.gMapsActionTitle}>
+                    {isEnRouteToHospital
+                      ? 'Track Route to Hospital in Google Maps'
+                      : 'Track Responding Ambulance in Google Maps'}
+                  </Text>
+                  <Text style={styles.gMapsActionSub}>
+                    {isEnRouteToHospital
+                      ? `En route to ${emergency?.assignedHospitalName || 'Hospital ER'}`
+                      : 'Opens native map with live satellite & real-time traffic'}
+                  </Text>
                 </View>
               </View>
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>➔</Text>
@@ -265,15 +297,34 @@ export default function LiveMap() {
                   </Text>
                   <Text style={styles.entitySub}>Trauma Desk standing by with critical care team</Text>
                 </View>
-                {emergency?.assignedHospitalPhone ? (
-                  <TouchableOpacity
-                    style={styles.callBtn}
-                    onPress={() => Linking.openURL(`tel:${emergency.assignedHospitalPhone}`)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.callBtnText}>📞 Call</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {hospCoord?.latitude && hospCoord?.longitude ? (
+                    <TouchableOpacity
+                      style={[styles.callBtn, { backgroundColor: '#EFF6FF', borderColor: colors.blue }]}
+                      onPress={() => {
+                        openExternalMapPreview({
+                          lat: hospCoord.latitude,
+                          lng: hospCoord.longitude,
+                          title: emergency?.assignedHospitalName || 'Hospital ER',
+                          originLat: pLat,
+                          originLng: pLng,
+                        });
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.callBtnText, { color: colors.blue }]}>📍 Pin</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {emergency?.assignedHospitalPhone ? (
+                    <TouchableOpacity
+                      style={styles.callBtn}
+                      onPress={() => Linking.openURL(`tel:${emergency.assignedHospitalPhone}`)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.callBtnText}>📞 Call</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
             </Card>
 
