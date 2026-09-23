@@ -72,7 +72,7 @@ export default function RegisterPatient() {
       // Save locally first (offline-first)
       const raw = await AsyncStorage.getItem(PATIENTS_KEY);
       const existing = raw ? JSON.parse(raw) : [];
-      await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify([...existing, patient]));
+      await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify([patient, ...existing]));
 
       // Try to sync to backend, else queue it
       const netState = await NetInfo.fetch();

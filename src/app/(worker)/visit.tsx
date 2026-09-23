@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Switch,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -43,8 +44,8 @@ function evaluateSeverity(params: {
 }
 
 const SEVERITY_CONFIG: Record<TriageSeverity, { color: string; hiLabel: string; enLabel: string }> = {
-  CRITICAL: { color: '#DC2626', hiLabel: 'गंभीर (CRITICAL) — तत्काल अस्पताल भेजें', enLabel: 'CRITICAL — Immediate Hospital Transfer' },
-  MODERATE: { color: '#EA580C', hiLabel: 'मध्यम (MODERATE) — जिला अस्पताल', enLabel: 'MODERATE — District Hospital' },
+  CRITICAL: { color: '#DC2626', hiLabel: 'अति गंभीर (CRITICAL) — तत्काल अस्पताल रेफरल', enLabel: 'CRITICAL — Immediate Tertiary Transfer' },
+  MODERATE: { color: '#EA580C', hiLabel: 'मध्यम (MODERATE) — जिला अस्पताल / PHC', enLabel: 'MODERATE — District Hospital / PHC' },
   NORMAL: { color: '#16A34A', hiLabel: 'सामान्य (NORMAL) — घर पर देखभाल', enLabel: 'NORMAL — Home Care & Monitor' },
 };
 
@@ -66,11 +67,16 @@ export default function VisitScreen() {
   const [bleedingActive, setBleedingActive] = useState(false);
   const [fractureSuspected, setFractureSuspected] = useState(false);
   const [symptoms, setSymptoms] = useState('');
+  
+  // Follow-up
+  const [followUpRequired, setFollowUpRequired] = useState(false);
+  const [followUpDate, setFollowUpDate] = useState('');
+
   const [isSaving, setIsSaving] = useState(false);
 
   const severity = evaluateSeverity({
-    spo2: parseInt(spo2 || '96'),
-    pulse: parseInt(pulse || '78'),
+    spo2: parseInt(spo2 || '96', 10),
+    pulse: parseInt(pulse || '78', 10),
     consciousness,
     bleedingActive,
     fractureSuspected,
@@ -78,7 +84,13 @@ export default function VisitScreen() {
 
   useEffect(() => {
     AsyncStorage.getItem(PATIENTS_KEY).then((raw) => {
-      if (raw) setPatients(JSON.parse(raw));
+      if (raw) {
+        const list = JSON.parse(raw);
+        setPatients(list);
+        if (!selectedPatientId && list.length > 0) {
+          setSelectedPatientId(list[0].id);
+        }
+      }
     });
   }, []);
 
@@ -99,25 +111,41 @@ export default function VisitScreen() {
       vitals: {
         bloodPressure: bp,
         bloodSugar: bloodSugar ? parseFloat(bloodSugar) : undefined,
-        spO2: parseInt(spo2),
+        spO2: parseInt(spo2, 10),
         temperature: parseFloat(temp),
-        pulse: parseInt(pulse),
+        pulse: parseInt(pulse, 10),
       },
       symptoms: symptoms.trim(),
       aiTriageSeverity: severity,
       aiGuidanceInHindi: SEVERITY_CONFIG[severity].hiLabel,
+      followUpRequired,
+      followUpDate: followUpRequired ? followUpDate.trim() : undefined,
       visitDate: new Date().toISOString(),
       syncedFromOffline: false,
       createdAt: new Date().toISOString(),
     };
 
     try {
-      // Persist locally
+      // Persist visit locally
       const raw = await AsyncStorage.getItem(VISITS_KEY);
       const existing = raw ? JSON.parse(raw) : [];
-      await AsyncStorage.setItem(VISITS_KEY, JSON.stringify([...existing, visit]));
+      await AsyncStorage.setItem(VISITS_KEY, JSON.stringify([visit, ...existing]));
 
-      // Try live sync, else queue
+      // Update patient's lastVisitDate and followUpDate locally
+      const updatedPatients = patients.map((p) => {
+        if (p.id === selectedPatientId) {
+          return {
+            ...p,
+            lastVisitDate: new Date().toISOString(),
+            followUpRequired,
+            followUpDate: followUpRequired ? followUpDate.trim() : p.followUpDate,
+          };
+        }
+        return p;
+      });
+      await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(updatedPatients));
+
+      // Try live sync, else enqueue
       const netState = await NetInfo.fetch();
       if (netState.isConnected) {
         try {
@@ -135,7 +163,23 @@ export default function VisitScreen() {
       }
 
       Alert.alert(t('asha.visitRecorded'), t('asha.visitSaved'), [
-        { text: 'OK', onPress: () => router.back() },
+        {
+          text: severity === 'CRITICAL' || severity === 'MODERATE' ? t('asha.createPHCReferral') : 'OK',
+          onPress: () => {
+            if (severity === 'CRITICAL' || severity === 'MODERATE') {
+              router.replace({
+                pathname: '/(worker)/referral',
+                params: {
+                  patientId: selectedPatientId,
+                  priority: severity === 'CRITICAL' ? 'CRITICAL' : 'MODERATE',
+                  reason: symptoms.trim() || `Triage assessment: ${severity}`,
+                },
+              });
+            } else {
+              router.back();
+            }
+          },
+        },
       ]);
     } catch {
       Alert.alert(t('common.error'), 'Could not save visit. Please try again.');
@@ -261,16 +305,38 @@ export default function VisitScreen() {
           ))}
         </View>
 
-        {/* Symptoms */}
+        {/* Symptoms & Clinical Notes */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('asha.symptoms')}</Text>
           <TextInput
-            style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
+            style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
             multiline
-            placeholder={lang === 'hi' ? 'लक्षण यहाँ लिखें…' : 'Describe symptoms here…'}
+            placeholder={lang === 'hi' ? 'लक्षण यहाँ लिखें…' : 'Describe symptoms and observations here…'}
             value={symptoms}
             onChangeText={setSymptoms}
           />
+
+          {/* Follow-up Required */}
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>{t('asha.followUpRequired')}</Text>
+            <Switch
+              value={followUpRequired}
+              onValueChange={setFollowUpRequired}
+              trackColor={{ true: colors.red }}
+              thumbColor={followUpRequired ? '#fff' : '#f4f3f4'}
+            />
+          </View>
+          {followUpRequired && (
+            <View style={{ marginTop: 10 }}>
+              <Text style={styles.label}>{t('asha.followUpDate')}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="DD/MM/YYYY"
+                value={followUpDate}
+                onChangeText={setFollowUpDate}
+              />
+            </View>
+          )}
         </View>
 
         {/* AI Triage Result */}
@@ -283,7 +349,7 @@ export default function VisitScreen() {
           </View>
         </View>
 
-        {/* Submit */}
+        {/* Action Button */}
         <TouchableOpacity
           style={[styles.submitBtn, isSaving && { opacity: 0.6 }]}
           onPress={handleRecordVisit}
@@ -291,7 +357,7 @@ export default function VisitScreen() {
           activeOpacity={0.85}
         >
           <Text style={styles.submitBtnText}>
-            {isSaving ? 'Saving…' : t('asha.recordVisit') + ' — Works Offline ✓'}
+            {isSaving ? 'Saving…' : `${t('asha.recordVisit')} — Works Offline ✓`}
           </Text>
         </TouchableOpacity>
 
@@ -367,6 +433,14 @@ const styles = StyleSheet.create({
   patientPillActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
   patientPillText: { fontSize: 13, fontWeight: '700', color: colors.ink },
   patientPillSub: { fontSize: 10.5, color: colors.inkFaint, marginTop: 1 },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  toggleLabel: { fontSize: 13.5, fontWeight: '600', color: colors.ink },
   triageBadge: {
     padding: 12,
     borderRadius: 10,
