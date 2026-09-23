@@ -21,21 +21,40 @@ export default function DoctorQueue() {
   const setQueueStatus = useAppStore((s) => s.setQueueStatus);
 
   const doctorId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
+  const [appointments, setAppointments] = React.useState<any[]>([]);
 
-  React.useEffect(() => {
-    let mounted = true;
+  const fetchQueueData = () => {
     api.queues
       .getLiveQueue(doctorId)
       .then((q: any) => {
-        if (mounted && q && typeof q.servingToken === 'number') {
+        if (q && typeof q.servingToken === 'number') {
           useAppStore.setState({ servingToken: q.servingToken });
         }
       })
       .catch(() => {});
-    return () => {
-      mounted = false;
-    };
+
+    api.appointments
+      .getDoctorAppointments({ doctorId })
+      .then((data: any) => {
+        if (Array.isArray(data)) {
+          setAppointments(data);
+        }
+      })
+      .catch(() => {});
+  };
+
+  React.useEffect(() => {
+    fetchQueueData();
   }, [doctorId]);
+
+  const currentAppt = appointments.find(
+    (a) => (a.tokenNumber || a.token) === servingToken
+  );
+  const currentPatientName =
+    currentAppt?.patientName ||
+    (servingToken > 0 ? `Walk-in Patient (Token #${servingToken})` : 'No Active Patient');
+  const currentStatus =
+    (currentAppt?.status || (servingToken > 0 ? 'WAITING' : 'IDLE')).toUpperCase();
 
   const handleNext = async () => {
     try {
@@ -48,9 +67,47 @@ export default function DoctorQueue() {
     } catch (_err) {
       advanceServingToken();
     }
+    fetchQueueData();
   };
 
-  const waiting = [servingToken + 1, servingToken + 2, servingToken + 3, servingToken + 4];
+  const handleStart = async () => {
+    if (currentAppt?.appointmentId) {
+      try {
+        await api.appointments.start(currentAppt.appointmentId);
+      } catch {}
+    }
+    setAppointments((prev) =>
+      prev.map((a) =>
+        (a.appointmentId || a.id) === (currentAppt?.appointmentId || currentAppt?.id)
+          ? { ...a, status: 'IN_PROGRESS' }
+          : a
+      )
+    );
+  };
+
+  const handleComplete = async () => {
+    if (currentAppt?.appointmentId) {
+      try {
+        await api.appointments.complete(currentAppt.appointmentId);
+      } catch {}
+    }
+    await handleNext();
+  };
+
+  const handleSkip = async () => {
+    if (currentAppt?.appointmentId) {
+      try {
+        await api.appointments.skip(currentAppt.appointmentId);
+      } catch {}
+    }
+    await handleNext();
+  };
+
+  const waitingAppointments = appointments.filter(
+    (a) => (a.tokenNumber || a.token) > servingToken && (a.status || '').toUpperCase() !== 'CANCELLED'
+  );
+
+  const fallbackWaitingTokens = [servingToken + 1, servingToken + 2, servingToken + 3];
 
   return (
     <View style={{ flex: 1 }}>
@@ -61,14 +118,33 @@ export default function DoctorQueue() {
         </View>
 
         <Card style={styles.currentCard}>
-          <LabelEyebrow>CURRENT PATIENT</LabelEyebrow>
-          <Text style={styles.tokenBig}>Token #{servingToken}</Text>
-          <Text style={styles.patientName}>Patient Name — Walk-in</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-            <Button title="Start Consultation" style={{ flex: 1 }} />
-            <Button title="Skip" variant="secondary" style={{ flex: 1 }} onPress={handleNext} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: 8 }}>
+            <LabelEyebrow>CURRENT CONSULTATION</LabelEyebrow>
+            <Pill color={currentStatus === 'IN_PROGRESS' ? 'success' : currentStatus === 'COMPLETED' ? 'blue' : 'amber'}>
+              {currentStatus}
+            </Pill>
           </View>
-          <Button title="Complete Consultation" variant="blue" style={{ marginTop: 8 }} onPress={handleNext} />
+          <Text style={styles.tokenBig}>Token #{servingToken}</Text>
+          <Text style={styles.patientName}>{currentPatientName}</Text>
+          {currentAppt?.timeSlot && (
+            <Text style={styles.slotText}>Slot: {currentAppt.timeSlot} · {currentAppt.notes || 'General OPD'}</Text>
+          )}
+
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+            <Button
+              title={currentStatus === 'IN_PROGRESS' ? "In Consultation…" : "Start Consultation"}
+              disabled={currentStatus === 'IN_PROGRESS'}
+              style={{ flex: 1 }}
+              onPress={handleStart}
+            />
+            <Button title="Skip / No-Show" variant="secondary" style={{ flex: 1 }} onPress={handleSkip} />
+          </View>
+          <Button
+            title="Complete Consultation & Call Next"
+            variant="blue"
+            style={{ marginTop: 8 }}
+            onPress={handleComplete}
+          />
         </Card>
 
         <View style={styles.controlsRow}>
@@ -79,17 +155,35 @@ export default function DoctorQueue() {
           )}
         </View>
 
-        <LabelEyebrow>WAITING PATIENTS</LabelEyebrow>
+        <LabelEyebrow>WAITING PATIENTS ({waitingAppointments.length})</LabelEyebrow>
         <Card style={{ padding: 4 }}>
-          {waiting.map((t, i) => (
-            <React.Fragment key={t}>
-              <View style={styles.row}>
-                <Text style={styles.rowToken}>Token #{t}</Text>
-                <Pill color={i === 0 ? 'amber' : 'grey'}>{i === 0 ? 'NEXT' : 'WAITING'}</Pill>
-              </View>
-              {i < waiting.length - 1 && <Divider />}
-            </React.Fragment>
-          ))}
+          {waitingAppointments.length > 0 ? (
+            waitingAppointments.map((a, i) => {
+              const tok = a.tokenNumber || a.token;
+              return (
+                <React.Fragment key={a.appointmentId || a.id || `tok-${tok}`}>
+                  <View style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowToken}>Token #{tok} · {a.patientName}</Text>
+                      <Text style={styles.rowSub}>{a.timeSlot || 'Scheduled'} {a.notes ? `· ${a.notes}` : ''}</Text>
+                    </View>
+                    <Pill color={i === 0 ? 'amber' : 'grey'}>{i === 0 ? 'NEXT' : 'WAITING'}</Pill>
+                  </View>
+                  {i < waitingAppointments.length - 1 && <Divider />}
+                </React.Fragment>
+              );
+            })
+          ) : (
+            fallbackWaitingTokens.map((t, i) => (
+              <React.Fragment key={t}>
+                <View style={styles.row}>
+                  <Text style={styles.rowToken}>Token #{t} (Upcoming)</Text>
+                  <Pill color={i === 0 ? 'amber' : 'grey'}>{i === 0 ? 'NEXT' : 'WAITING'}</Pill>
+                </View>
+                {i < fallbackWaitingTokens.length - 1 && <Divider />}
+              </React.Fragment>
+            ))
+          )}
         </Card>
       </Screen>
       <DoctorNav active="/(doctor)/queue" />
@@ -101,8 +195,10 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   currentCard: { padding: 16, marginTop: 4, marginBottom: 14, alignItems: 'center' },
   tokenBig: { fontSize: 30, fontWeight: '800', color: colors.red, marginTop: 4 },
-  patientName: { fontSize: 12, color: colors.inkFaint, marginTop: 4 },
+  patientName: { fontSize: 14, fontWeight: '700', color: colors.ink, marginTop: 4 },
+  slotText: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
   controlsRow: { marginBottom: 18 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 },
   rowToken: { fontWeight: '700', fontSize: 13, color: colors.ink },
+  rowSub: { fontSize: 10.5, color: colors.inkFaint, marginTop: 2 },
 });

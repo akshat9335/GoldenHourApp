@@ -22,20 +22,25 @@ export default function DoctorLogin() {
       const isDoctor = userRoles.includes('DOCTOR');
 
       if (!session.profileExists || !isDoctor) {
-        try {
-          await authService.register({
-            name: session.name || 'Dr. Medical Specialist',
-            email: session.email || 'doctor@goldenhour.org',
-            role: 'DOCTOR',
-            verificationStatus: 'APPROVED',
-            specialization: 'Emergency Medicine & Critical Care',
-            hospitalName: 'Swaroop Rani Nehru Hospital',
-          });
-        } catch {}
+        Alert.alert(
+          'Doctor Registration Required',
+          `No Doctor profile is registered for ${session.email || 'this Google account'}. Please complete your doctor registration first with your medical registration number and clinic details.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Register Now',
+              onPress: () => router.push('/doctor-register'),
+            },
+          ]
+        );
+        return;
       }
 
+      const status = session.profile?.roleVerificationStatus?.DOCTOR || session.profile?.verificationStatus || 'PENDING';
+      const isApproved = status === 'APPROVED' || status === 'VERIFIED';
+
       useAppStore.getState().setRole('DOCTOR');
-      useAppStore.getState().setVerificationStatus('APPROVED');
+      useAppStore.getState().setVerificationStatus(isApproved ? 'APPROVED' : 'PENDING');
       router.replace('/(doctor)/dashboard');
       return;
     } catch (err: any) {
