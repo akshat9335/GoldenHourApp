@@ -1,7 +1,16 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "allowSyntheticDefaultImports": true,
+    "jsx": "react-native",
+    "lib": [
+      "dom",
+      "esnext"
+    ],
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "target": "esnext",
     "paths": {
       "@/*": [
         "./src/*"
@@ -12,9 +21,15 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-  ]
+  ],
+  "exclude": [
+    "node_modules",
+    "backend",
+    "dist"
+  ],
+  "extends": "expo/tsconfig.base"
 }

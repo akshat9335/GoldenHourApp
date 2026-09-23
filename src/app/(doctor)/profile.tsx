@@ -1,12 +1,34 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Divider, Icon, DoctorNav, HTitle, LabelEyebrow } from '@/components/ui';
 import { getDoctorById } from '@/constants/doctorData';
+import { authService } from '@/services/auth';
+import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/services/api';
 
 export default function DoctorProfile() {
-  const doctor = getDoctorById('doc-1');
+  const userProfile = useAppStore((s) => s.userProfile);
+  const verificationStatus = useAppStore((s) => s.verificationStatus);
+  const fallback = getDoctorById('doc-1');
+  const [profile, setProfile] = useState<any>(null);
+
+  useEffect(() => {
+    api.doctors.getMyProfile().then((res: any) => {
+      const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
+      if (doc && (doc.doctorId || doc.name)) setProfile(doc);
+    }).catch(() => {});
+  }, []);
+
+  const name = profile?.name || userProfile?.doctorName || userProfile?.name || fallback.name;
+  const spec = profile?.specialty || (userProfile as any)?.specialization || fallback.specialization;
+  const qual = profile?.qualification || userProfile?.qualification || fallback.qualification;
+  const fee = profile?.consultationFee || userProfile?.consultationFee || fallback.fee;
+  const clinic = profile?.clinic?.clinicName || userProfile?.clinicName || fallback.clinic;
+  const address = profile?.clinic?.address || userProfile?.clinicAddress || fallback.address;
+  const isVerified = verificationStatus === 'APPROVED' || profile?.verificationStatus === 'VERIFIED';
+
   return (
     <View style={{ flex: 1 }}>
       <Screen>
@@ -14,23 +36,23 @@ export default function DoctorProfile() {
           <View style={styles.avatar}><Icon name="doctor" size={26} color={colors.red} /></View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <HTitle size={16}>{doctor.name}</HTitle>
-              {doctor.verified && <Pill color="success">✓ VERIFIED</Pill>}
+              <HTitle size={16}>{name}</HTitle>
+              {isVerified && <Pill color="success">✓ VERIFIED</Pill>}
             </View>
-            <Text style={styles.spec}>{doctor.specialization} · {doctor.experience}</Text>
+            <Text style={styles.spec}>{spec} · {profile?.experienceYears ? `${profile.experienceYears} yrs exp` : fallback.experience}</Text>
           </View>
         </View>
 
         <Card style={{ padding: 16, marginBottom: 14 }}>
           <View style={styles.grid}>
-            <Stat label="QUALIFICATION" value={doctor.qualification} />
-            <Stat label="CONSULTATION FEE" value={`₹${doctor.fee}`} />
-            <Stat label="CLINIC" value={doctor.clinic} />
-            <Stat label="WORKING HOURS" value={doctor.workingHours} />
+            <Stat label="QUALIFICATION" value={qual} />
+            <Stat label="CONSULTATION FEE" value={`₹${fee}`} />
+            <Stat label="CLINIC" value={clinic} />
+            <Stat label="WORKING HOURS" value={profile?.clinic?.workingHours || fallback.workingHours} />
           </View>
           <View style={{ marginVertical: 12 }}><Divider /></View>
           <LabelEyebrow>CLINIC ADDRESS</LabelEyebrow>
-          <Text style={styles.address}>{doctor.address}</Text>
+          <Text style={styles.address}>{address}</Text>
         </Card>
 
         <Card style={{ padding: 4 }}>
@@ -46,7 +68,30 @@ export default function DoctorProfile() {
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
           <Divider />
-          <Pressable style={styles.row} onPress={() => router.replace('/role-selection')}>
+          <Pressable
+            style={styles.row}
+            onPress={() => {
+              Alert.alert('Log Out', 'Are you sure you want to log out of Golden Hour?', [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Log Out',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await authService.logout();
+                    } finally {
+                      try {
+                        if (router.canDismiss()) {
+                          router.dismissAll();
+                        }
+                      } catch {}
+                      router.replace('/');
+                    }
+                  },
+                },
+              ]);
+            }}
+          >
             <Icon name="close" color={colors.red} />
             <Text style={[styles.rowLabel, { color: colors.red }]}>Log Out</Text>
           </Pressable>

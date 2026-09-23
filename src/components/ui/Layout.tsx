@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radii } from '@/constants/theme';
 import { Icon } from './Icon';
 import { HTitle } from './Atoms';
@@ -10,17 +11,29 @@ export function Screen({
   center,
   padBottom = 24,
   style,
+  refreshControl,
 }: {
   children: React.ReactNode;
   center?: boolean;
   padBottom?: number;
   style?: StyleProp<ViewStyle>;
+  refreshControl?: React.ReactElement<any>;
 }) {
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets.top, 24);
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
+      refreshControl={refreshControl}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={[
-        { padding: 18, paddingBottom: padBottom + 72, flexGrow: 1 },
+        {
+          paddingHorizontal: 18,
+          paddingTop: topInset + 8,
+          paddingBottom: padBottom + insets.bottom + 72,
+          flexGrow: 1,
+        },
         center && { justifyContent: 'center' },
         style,
       ]}
@@ -30,12 +43,12 @@ export function Screen({
   );
 }
 
-export function TopBar({ title, back = true }: { title: string; back?: boolean }) {
+export function TopBar({ title, back = true, onPressBack }: { title: string; back?: boolean; onPressBack?: () => void }) {
   const router = useRouter();
   return (
     <View style={styles.topbar}>
       {back ? (
-        <Pressable style={styles.backbtn} onPress={() => router.back()}>
+        <Pressable style={styles.backbtn} onPress={onPressBack || (() => router.back())}>
           <Icon name="chevL" size={14} />
         </Pressable>
       ) : null}

@@ -7,7 +7,7 @@ import "./config/firebase";
 
 const app = createApp();
 
-app.listen(env.port, () => {
+app.listen(env.port, "0.0.0.0", () => {
   // eslint-disable-next-line no-console
   console.log(`[server] Golden Hour backend listening on port ${env.port} (${env.nodeEnv})`);
   // eslint-disable-next-line no-console

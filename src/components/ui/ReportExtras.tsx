@@ -12,7 +12,7 @@ export function PhotoInput({
   onChange,
 }: {
   uri: string | null;
-  onChange: (uri: string | null) => void;
+  onChange: (uri: string | null, base64?: string | null) => void;
 }) {
   const pick = async (fromCamera: boolean) => {
     const perm = fromCamera
@@ -20,9 +20,11 @@ export function PhotoInput({
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
-    if (!result.canceled && result.assets?.[0]?.uri) onChange(result.assets[0].uri);
+      ? await ImagePicker.launchCameraAsync({ quality: 0.6, base64: true })
+      : await ImagePicker.launchImageLibraryAsync({ quality: 0.6, base64: true });
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      onChange(result.assets[0].uri, result.assets[0].base64 || null);
+    }
   };
 
   if (uri) {
@@ -33,7 +35,7 @@ export function PhotoInput({
           <Pressable style={styles.smallBtn} onPress={() => pick(false)}>
             <Text style={styles.smallBtnText}>Replace</Text>
           </Pressable>
-          <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => onChange(null)}>
+          <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => onChange(null, null)}>
             <Text style={[styles.smallBtnText, { color: colors.red }]}>Remove</Text>
           </Pressable>
         </View>

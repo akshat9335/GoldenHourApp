@@ -1,16 +1,70 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, DoctorNav, HTitle, LabelEyebrow, Button } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById, APPOINTMENTS } from '@/constants/doctorData';
+import { api } from '@/services/api';
 
 export default function DoctorDashboard() {
+  const userProfile = useAppStore((s) => s.userProfile);
   const servingToken = useAppStore((s) => s.servingToken);
   const advanceServingToken = useAppStore((s) => s.advanceServingToken);
-  const doctor = getDoctorById('doc-1');
-  const todaysAppointments = APPOINTMENTS.filter((a) => a.doctorId === doctor.id && a.date === 'Today');
+
+  const [doctorDetails, setDoctorDetails] = useState<any>(null);
+  const doctorName = doctorDetails?.name || userProfile?.doctorName || userProfile?.name || 'Dr. Medical Practitioner';
+  const doctorId = doctorDetails?.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
+
+  const defaultDoctor = getDoctorById('doc-1');
+  const [appointments, setAppointments] = useState(
+    APPOINTMENTS.filter((a) => a.doctorId === defaultDoctor.id && a.date === 'Today')
+  );
+
+  useEffect(() => {
+    let mounted = true;
+
+    // Load authenticated doctor profile from backend
+    api.doctors.getMyProfile().then((res: any) => {
+      const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
+      if (mounted && doc && (doc.doctorId || doc.name)) {
+        setDoctorDetails(doc);
+        const resolvedId = doc.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
+        api.queues.getLiveQueue(resolvedId).then((qRes: any) => {
+          const q = (qRes && typeof qRes === 'object' && 'servingToken' in qRes) ? qRes : (qRes?.data || qRes);
+          if (mounted && q && typeof q.servingToken === 'number') {
+            useAppStore.setState({ servingToken: q.servingToken });
+          }
+        }).catch(() => {});
+      }
+    }).catch(() => {
+      api.queues.getLiveQueue(doctorId).then((res: any) => {
+        const q = (res && typeof res === 'object' && 'servingToken' in res) ? res : (res?.data || res);
+        if (mounted && q && typeof q.servingToken === 'number') {
+          useAppStore.setState({ servingToken: q.servingToken });
+        }
+      }).catch(() => {});
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [userProfile?.uid]);
+
+  const handleCallNext = async () => {
+    try {
+      const res: any = await api.queues.advanceQueue(doctorId);
+      if (res && typeof res.servingToken === 'number') {
+        useAppStore.setState({ servingToken: res.servingToken });
+      } else {
+        advanceServingToken();
+      }
+    } catch {
+      advanceServingToken();
+    }
+  };
+
+  const todaysAppointments = appointments;
 
   return (
     <View style={{ flex: 1 }}>
@@ -18,7 +72,7 @@ export default function DoctorDashboard() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Good Morning,</Text>
-            <HTitle size={17}>{doctor.name}</HTitle>
+            <HTitle size={17}>{doctorName}</HTitle>
           </View>
           <Pressable style={styles.bellBtn} onPress={() => router.push('/(doctor)/notifications')}>
             <Icon name="bell" />
@@ -48,7 +102,7 @@ export default function DoctorDashboard() {
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-            <Button title="Call Next Patient" onPress={advanceServingToken} style={{ flex: 1 }} />
+            <Button title="Call Next Patient" onPress={handleCallNext} style={{ flex: 1 }} />
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
             <Button title="Start Consultation" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(doctor)/queue')} />

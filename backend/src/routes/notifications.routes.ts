@@ -3,6 +3,7 @@ import {
   getNotificationsController,
   markNotificationAsReadController,
   saveDeviceTokenController,
+  clearAllNotificationsController,
 } from "../controllers/notification.controller";
 import { requireAuth } from "../middleware/auth";
 
@@ -24,6 +25,18 @@ router.patch(
   "/:id/read",
   requireAuth,
   markNotificationAsReadController,
+);
+
+router.post(
+  "/clear-all",
+  requireAuth,
+  clearAllNotificationsController,
+);
+
+router.delete(
+  "/",
+  requireAuth,
+  clearAllNotificationsController,
 );
 
 export default router;

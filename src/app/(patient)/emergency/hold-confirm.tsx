@@ -3,8 +3,16 @@ import { Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Button, SosHold, HTitle } from '@/components/ui';
+import { useAppStore } from '@/store/useAppStore';
+import { triggerCanonicalEmergencySOS } from '@/services/emergency';
 
 export default function HoldConfirm() {
+  const handleConfirm = () => {
+    // Immediate zero-latency transition on 3.0s completion
+    router.replace('/(patient)/emergency/activated');
+    triggerCanonicalEmergencySOS().catch(() => {});
+  };
+
   return (
     <Screen center style={{ alignItems: 'center' }}>
       <HTitle size={17}>Hold to Confirm</HTitle>
@@ -12,7 +20,7 @@ export default function HoldConfirm() {
       <SosHold
         label="HOLD"
         sublabel="TO DISPATCH"
-        onConfirm={() => router.replace('/(patient)/emergency/activated')}
+        onConfirm={handleConfirm}
       />
       <Button title="Cancel" variant="ghost" onPress={() => router.back()} style={{ marginTop: 22, width: 'auto' }} />
     </Screen>

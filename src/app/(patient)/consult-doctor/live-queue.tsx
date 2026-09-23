@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Button, LabelEyebrow, Stepper } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById } from '@/constants/doctorData';
+import { api } from '@/services/api';
 
 export default function LiveQueue() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
@@ -16,6 +17,36 @@ export default function LiveQueue() {
   const myToken = userToken ?? doctor.currentToken + 1;
   const patientsAhead = Math.max(myToken - servingToken - 1, 0);
   const isMyTurn = servingToken >= myToken;
+
+  useEffect(() => {
+    let mounted = true;
+    api.queues
+      .getLiveQueue(selectedDoctorId, myToken)
+      .then((data: any) => {
+        if (mounted && data && typeof data.servingToken === 'number') {
+          useAppStore.setState({ servingToken: data.servingToken });
+        }
+      })
+      .catch(() => {
+        // Retain local state
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [selectedDoctorId, myToken]);
+
+  const handleAdvance = async () => {
+    try {
+      const res: any = await api.queues.advanceQueue(selectedDoctorId);
+      if (res && typeof res.servingToken === 'number') {
+        useAppStore.setState({ servingToken: res.servingToken });
+      } else {
+        advanceServingToken();
+      }
+    } catch (_e) {
+      advanceServingToken();
+    }
+  };
 
   const steps = [
     `Token ${servingToken - 1} → Completed`,
@@ -64,7 +95,7 @@ export default function LiveQueue() {
             title="Simulate Queue Moving (Demo)"
             variant="secondary"
             style={{ marginTop: 16 }}
-            onPress={advanceServingToken}
+            onPress={handleAdvance}
           />
         )}
       </Screen>

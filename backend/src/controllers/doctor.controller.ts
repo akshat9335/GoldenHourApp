@@ -11,10 +11,10 @@ export class DoctorController {
   public async registerDoctor(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { name, specialty, qualification, experienceYears, licenseNumber, clinicId, consultationFee } = req.body;
-      const userId = req.body.userId || req.user?.uid;
+      const userId = req.user?.uid || req.body.userId;
 
       if (!userId) {
-        throw new AppError(400, "MISSING_USER_ID", "User ID is required for doctor registration.");
+        throw new AppError(401, "UNAUTHORIZED", "Authentication is required for doctor registration.");
       }
 
       const doctor = await doctorService.registerDoctor({

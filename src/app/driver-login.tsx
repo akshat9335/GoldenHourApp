@@ -1,25 +1,167 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Alert, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/constants/theme';
-import { Screen, Button, Input, InputGroup, Icon, HTitle } from '@/components/ui';
+import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
+import { authService } from '@/services/auth';
+import { useAppStore } from '@/store/useAppStore';
 
 export default function DriverLogin() {
+  const insets = useSafeAreaInsets();
+  const [loading, setLoading] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setPendingStatus(null);
+    try {
+      const session = await authService.promptGoogleSignIn();
+
+      if (!session.profileExists) {
+        Alert.alert(
+          'Profile Not Found',
+          'No ambulance driver profile exists for this account. Please register your details.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Register Now', onPress: () => router.push('/driver-register') },
+          ]
+        );
+        return;
+      }
+
+      const userRoles = (session.profile?.roles || [session.role || 'PATIENT']).map((r: string) => r.toUpperCase());
+      const isDriver = userRoles.includes('AMBULANCE_DRIVER') || userRoles.includes('AMBULANCE');
+      if (!isDriver) {
+        Alert.alert(
+          'Driver Registration Required',
+          'This Google account does not have a registered Ambulance Driver profile. Please register your details to proceed.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Register as Driver', onPress: () => router.push('/driver-register') },
+          ]
+        );
+        return;
+      }
+
+      // Activate AMBULANCE_DRIVER role in app store for this session
+      useAppStore.getState().setRole('AMBULANCE_DRIVER');
+
+      const driverStatus = session.profile?.roleVerificationStatus?.AMBULANCE_DRIVER || session.verificationStatus;
+      if (driverStatus === 'APPROVED' || driverStatus === 'VERIFIED') {
+        router.replace('/(ambulance)/dashboard');
+        return;
+      }
+
+      if (driverStatus === 'REJECTED') {
+        Alert.alert(
+          'Application Rejected',
+          'Your ambulance driver application was not approved. Please contact support@goldenhour.app.'
+        );
+        return;
+      }
+
+      // verificationStatus is PENDING
+      setPendingStatus(
+        'Your driver credentials and vehicle assignment are under review by Golden Hour dispatch administrators. You will be activated upon approval.'
+      );
+    } catch (err: any) {
+      console.warn('[DriverLogin] Google Sign-In error:', err);
+      const msg = err?.message || 'Failed to sign in. Please try again.';
+      if (!msg.includes('cancelled') && !msg.includes('dismissed')) {
+        Alert.alert('Sign In Error', msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Screen center>
-      <View style={{ alignItems: 'center', marginBottom: 26 }}>
-        <Icon name="ambulance" size={36} color={colors.red} />
-        <HTitle size={19}>Ambulance Crew App</HTitle>
-        <Text style={styles.sub}>Unit KA-05-AB</Text>
+      <View style={{ width: '100%', alignItems: 'flex-start', marginBottom: 12 }}>
+        <Pressable
+          onPress={() => router.replace('/role-selection')}
+          style={{ paddingVertical: 8, paddingHorizontal: 4 }}
+        >
+          <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
+        </Pressable>
       </View>
-      <InputGroup label="Email"><Input defaultValue="driver.amb014@goldenhour.app" keyboardType="email-address" /></InputGroup>
-      <InputGroup label="Password"><Input defaultValue="••••••••" secureTextEntry /></InputGroup>
-      <Button title="Login" onPress={() => router.replace('/(ambulance)/dashboard')} />
-      <Button title="Register as Driver" variant="secondary" style={{ marginTop: 10 }} onPress={() => router.push('/driver-register')} />
+
+      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 10 }}>
+        <View style={styles.iconCircle}>
+          <Icon name="ambulance" size={36} color={colors.red} />
+        </View>
+        <HTitle size={20}>Ambulance Crew Console</HTitle>
+        <Text style={styles.sub}>Emergency Fleet & Dispatch Network</Text>
+      </View>
+
+      {pendingStatus && (
+        <View style={{ width: '100%', marginBottom: 16 }}>
+          <Banner color="amber" icon={<Icon name="bell" size={14} color={colors.amber} />}>
+            Application Submitted — Verification Pending
+          </Banner>
+          <Text style={styles.pendingDesc}>{pendingStatus}</Text>
+        </View>
+      )}
+
+      <Button
+        title={loading ? "Verifying Driver Credentials…" : "Sign In with Google"}
+        onPress={handleGoogleSignIn}
+        disabled={loading}
+      />
+
+      <Button
+        title="🚀 Quick Ambulance Demo Login"
+        variant="blue"
+        style={{ marginTop: 12 }}
+        onPress={() => {
+          const store = useAppStore.getState();
+          store.setIsAuthenticated(true);
+          store.setRole('AMBULANCE_DRIVER');
+          store.setRoles(['AMBULANCE_DRIVER']);
+          store.setVerificationStatus('APPROVED');
+          store.setUserProfile({
+            uid: 'demo-driver-001',
+            name: 'Ramesh Driver',
+            role: 'AMBULANCE_DRIVER',
+            roles: ['AMBULANCE_DRIVER'],
+            verificationStatus: 'APPROVED',
+          });
+          router.replace('/(ambulance)/dashboard');
+        }}
+      />
+
+      <Button
+        title="Register as Ambulance Driver"
+        variant="secondary"
+        style={{ marginTop: 12 }}
+        onPress={() => router.push('/driver-register')}
+      />
+
+      <Pressable onPress={() => router.replace('/role-selection')} style={{ marginTop: 24 }}>
+        <Text style={styles.backLink}>← Return to Role Selection</Text>
+      </Pressable>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  sub: { color: colors.inkSoft, fontSize: 12, marginTop: 6 },
+  iconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: colors.redGlow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  sub: { color: colors.inkSoft, fontSize: 12.5, marginTop: 4, textAlign: 'center' },
+  pendingDesc: {
+    fontSize: 12,
+    color: colors.inkSoft,
+    marginTop: 8,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  backLink: { color: colors.blue, fontSize: 12.5, fontWeight: '600', textAlign: 'center' },
 });

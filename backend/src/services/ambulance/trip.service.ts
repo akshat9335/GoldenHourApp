@@ -25,15 +25,62 @@ export interface AmbulanceTrip {
 
 const allowedTransitions: Record<AmbulanceStatus, AmbulanceStatus[]> = {
   AVAILABLE: ["ASSIGNED"],
-  ASSIGNED: ["EN_ROUTE_TO_PATIENT"],
-  EN_ROUTE_TO_PATIENT: ["AT_PATIENT"],
-  AT_PATIENT: ["PATIENT_ONBOARD"],
-  PATIENT_ONBOARD: ["EN_ROUTE_TO_HOSPITAL"],
-  EN_ROUTE_TO_HOSPITAL: ["AT_HOSPITAL"],
+  ASSIGNED: ["EN_ROUTE_TO_PATIENT", "COMPLETED"],
+  EN_ROUTE_TO_PATIENT: ["AT_PATIENT", "COMPLETED"],
+  AT_PATIENT: ["PATIENT_ONBOARD", "COMPLETED"],
+  PATIENT_ONBOARD: ["EN_ROUTE_TO_HOSPITAL", "COMPLETED"],
+  EN_ROUTE_TO_HOSPITAL: ["AT_HOSPITAL", "COMPLETED"],
   AT_HOSPITAL: ["COMPLETED"],
   COMPLETED: ["AVAILABLE"],
   OFFLINE: [],
 };
+
+async function syncEmergencyFromTrip(
+  emergencyId: string,
+  updates: Record<string, unknown>,
+  hospitalStatus?: string | null,
+) {
+  try {
+    if (!firestore) return;
+    const now = new Date().toISOString();
+    const emergenciesCol = firestore.collection("emergencies");
+    if (emergenciesCol && typeof (emergenciesCol as any).doc === "function") {
+      const emergencyRef = (emergenciesCol as any).doc(emergencyId);
+      if (emergencyRef && typeof emergencyRef.set === "function") {
+        await emergencyRef.set(
+          {
+            ...updates,
+            updatedAt: now,
+          },
+          { merge: true },
+        );
+      } else if (emergencyRef && typeof emergencyRef.update === "function") {
+        await emergencyRef.update({
+          ...updates,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // Bridge update to hospitalEmergencyRequests
+    const hospReqCol = firestore.collection("hospitalEmergencyRequests");
+    if (hospReqCol && typeof (hospReqCol as any).where === "function") {
+      const hSnap = await hospReqCol.where("emergencyId", "==", emergencyId).get();
+      for (const hDoc of hSnap.docs) {
+        const hData: Record<string, unknown> = {
+          ...updates,
+          updatedAt: now,
+        };
+        if (hospitalStatus) {
+          hData.status = hospitalStatus;
+        }
+        await hDoc.ref.set(hData, { merge: true });
+      }
+    }
+  } catch (_e) {
+    // Non-blocking sync for test/partial-mock environments
+  }
+}
 
 export async function getTrip(
   tripId: string,
@@ -119,6 +166,49 @@ export async function createTripFromAssignment(
     status: "ASSIGNED",
     updatedAt: now,
   });
+
+  let driverName = "Ambulance Pilot";
+  let driverPhone = "";
+  let ambulanceType = ambulance.type || "Basic Life Support (BLS)";
+  let driverHospitalName = ambulance.hospitalName || null;
+  let driverHospitalId = ambulance.hospitalId || null;
+
+  if (assignment.driverId) {
+    try {
+      const drvSnap = await firestore!.collection("drivers").doc(assignment.driverId).get();
+      if (drvSnap.exists) {
+        const d = drvSnap.data();
+        if (d?.name) driverName = d.name;
+        if (d?.phone) driverPhone = d.phone;
+        if (d?.ambulanceType) ambulanceType = d.ambulanceType;
+        if (d?.hospitalName) driverHospitalName = d.hospitalName;
+        if (d?.hospitalId) driverHospitalId = d.hospitalId;
+      } else {
+        const uSnap = await firestore!.collection("users").doc(assignment.driverId).get();
+        if (uSnap.exists) {
+          const u = uSnap.data();
+          if (u?.name) driverName = u.name;
+          if (u?.phone) driverPhone = u.phone;
+        }
+      }
+    } catch {}
+  }
+
+  await syncEmergencyFromTrip(
+    assignment.emergencyId,
+    {
+      status: "AMBULANCE_ASSIGNED",
+      tripStatus: "ASSIGNED",
+      assignedAmbulanceId: assignment.ambulanceId,
+      assignedDriverId: assignment.driverId,
+      assignedDriverName: driverName,
+      assignedDriverPhone: driverPhone,
+      ambulanceType: ambulanceType,
+      ...(driverHospitalId ? { assignedHospitalId: driverHospitalId } : {}),
+      ...(driverHospitalName ? { assignedHospitalName: driverHospitalName } : {}),
+    },
+    "AMBULANCE EN ROUTE",
+  );
 
   return tripRef.id;
 }
@@ -208,6 +298,49 @@ export async function transitionTrip(
     status: assignmentStatus,
     updatedAt: now,
   });
+
+  if (nextStatus === "COMPLETED" && current.driverId) {
+    try {
+      await firestore!.collection("drivers").doc(current.driverId).update({
+        availability: "AVAILABLE",
+        updatedAt: now,
+      });
+    } catch {}
+  }
+
+  let canonicalEmergencyStatus: string | null = null;
+  let hospitalStatus: string | null = null;
+
+  if (nextStatus === "EN_ROUTE_TO_PATIENT") {
+    canonicalEmergencyStatus = "EN_ROUTE_TO_PATIENT";
+    hospitalStatus = "AMBULANCE EN ROUTE";
+  } else if (nextStatus === "AT_PATIENT") {
+    canonicalEmergencyStatus = "ARRIVING";
+    hospitalStatus = "AMBULANCE EN ROUTE";
+  } else if (nextStatus === "PATIENT_ONBOARD") {
+    canonicalEmergencyStatus = "PATIENT_ONBOARD";
+    hospitalStatus = "AMBULANCE EN ROUTE";
+  } else if (nextStatus === "EN_ROUTE_TO_HOSPITAL") {
+    canonicalEmergencyStatus = "EN_ROUTE_TO_HOSPITAL";
+    hospitalStatus = "AMBULANCE EN ROUTE";
+  } else if (nextStatus === "AT_HOSPITAL") {
+    canonicalEmergencyStatus = "PATIENT_ARRIVED";
+    hospitalStatus = "PATIENT ARRIVED";
+  } else if (nextStatus === "COMPLETED") {
+    canonicalEmergencyStatus = "COMPLETED";
+    hospitalStatus = "COMPLETED";
+  }
+
+  if (canonicalEmergencyStatus && current.emergencyId) {
+    await syncEmergencyFromTrip(
+      current.emergencyId,
+      {
+        status: canonicalEmergencyStatus,
+        tripStatus: nextStatus,
+      },
+      hospitalStatus,
+    );
+  }
 
   return {
     id: tripId,

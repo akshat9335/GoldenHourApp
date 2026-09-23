@@ -20,6 +20,7 @@ export interface HospitalFacility {
   hospitalId: string;
   name: string;
   address: string;
+  phone?: string;
   lat: number;
   lng: number;
   distanceKm: number;
@@ -31,6 +32,10 @@ export interface HospitalFacility {
   specialistsAvailable: string[];
   diagnosticAvailability: string[];
   verified: boolean;
+  totalBeds?: number;
+  availableBeds?: number;
+  icuBeds?: number;
+  availableIcuBeds?: number;
 }
 
 export interface NearbyIncidentSummary {

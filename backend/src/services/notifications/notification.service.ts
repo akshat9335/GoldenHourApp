@@ -132,3 +132,22 @@ export async function markNotificationAsRead(
     { merge: true },
   );
 }
+
+export async function clearAllNotifications(userId: string): Promise<void> {
+  const db = getFirestore();
+
+  const snapshot = await db
+    .collection(NOTIFICATIONS_COLLECTION)
+    .where("userId", "==", userId)
+    .get();
+
+  if (snapshot.empty) {
+    return;
+  }
+
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.delete(doc.ref);
+  });
+  await batch.commit();
+}

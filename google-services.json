@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "10031778201",
+    "project_id": "crisissenseai",
+    "storage_bucket": "crisissenseai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:10031778201:android:cb5fcdabc5168002076b08",
+        "android_client_info": {
+          "package_name": "com.goldenhourapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "10031778201-8qtosq1gj5tlfin325u4so6uo3t9n8n8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.goldenhourapp",
+            "certificate_hash": "25a82a15ceaea715b469a1ccdd8b0abc71e801f5"
+          }
+        },
+        {
+          "client_id": "10031778201-uml9ug4d9mvtmvpfaqdkugcs52rdmiig.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDyQwKJmdS_nLhoHhk0t4h-MOtbOEEHzA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "10031778201-uml9ug4d9mvtmvpfaqdkugcs52rdmiig.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

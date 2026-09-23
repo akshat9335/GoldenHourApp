@@ -148,4 +148,20 @@ describe("AI routes", () => {
     expect(response.body.success).toBe(false);
     expect(response.body.error.code).toBe("INVALID_AI_INPUT");
   });
+
+  it("validates emergency input via POST /api/ai/validate", async () => {
+    const valid = await request(app)
+      .post("/api/ai/validate")
+      .send({ symptoms: ["chest pain", "shortness of breath"] });
+    expect(valid.status).toBe(200);
+    expect(valid.body.success).toBe(true);
+    expect(valid.body.data.symptoms).toEqual(["chest pain", "shortness of breath"]);
+
+    const invalid = await request(app)
+      .post("/api/ai/validate")
+      .send({ symptoms: "not-an-array" });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.success).toBe(false);
+    expect(invalid.body.error.code).toBe("INVALID_AI_INPUT");
+  });
 });

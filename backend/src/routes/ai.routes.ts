@@ -3,6 +3,7 @@ import {
   firstAid,
   imageAnalysis,
   triage,
+  validateInput,
 } from "../controllers/ai.controller";
 
 const router = Router();
@@ -12,5 +13,6 @@ router.post("/triage", triage);
 router.post("/analyze", triage);
 router.post("/image-analysis", imageAnalysis);
 router.post("/first-aid", firstAid);
+router.post("/validate", validateInput);
 
 export default router;

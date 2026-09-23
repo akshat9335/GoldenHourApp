@@ -5,14 +5,56 @@ import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Chip, Button, Icon, Input, Banner, PatientNav } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { DOCTORS, SPECIALTIES } from '@/constants/doctorData';
+import { api } from '@/services/api';
 
 export default function ConsultDoctor() {
   const selectedSpecialty = useAppStore((s) => s.selectedSpecialty);
   const setSelectedSpecialty = useAppStore((s) => s.setSelectedSpecialty);
   const setSelectedDoctorId = useAppStore((s) => s.setSelectedDoctorId);
   const [query, setQuery] = useState('');
+  const [allDoctors, setAllDoctors] = useState(DOCTORS);
 
-  const doctors = DOCTORS.filter((d) => {
+  React.useEffect(() => {
+    let mounted = true;
+    api.doctors
+      .search({ specialty: selectedSpecialty !== 'All' ? selectedSpecialty : undefined })
+      .then((data: any) => {
+        if (mounted && Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((d: any, idx: number) => ({
+            id: d.id || `doc-be-${idx}`,
+            name: d.name || `Dr. ${d.specialization || 'Consultant'}`,
+            specialization: d.specialization || 'General Physician',
+            qualification: d.qualification || 'MBBS, MD',
+            experience: d.experience || '8+ yrs exp',
+            clinic: d.clinicName || 'City Clinic',
+            address: d.address || 'Koramangala, Bengaluru',
+            latitude: d.latitude ?? 12.9352,
+            longitude: d.longitude ?? 77.6245,
+            distanceKm: d.distanceKm ?? 2.5,
+            etaMin: d.etaMin ?? Math.round((d.distanceKm ?? 2.5) * 3),
+            fee: d.consultationFee ?? 500,
+            workingHours: d.workingHours || '10:00 AM - 7:00 PM',
+            status: (d.isAvailable ? 'open' : 'busy') as 'open' | 'busy' | 'closed',
+            availableToday: d.isAvailable ?? true,
+            servingToken: d.servingToken ?? 12,
+            currentToken: d.currentToken ?? 16,
+            queueLength: d.queueLength ?? 4,
+            estimatedWaitMin: d.estimatedWaitMin ?? 25,
+            verified: true,
+          }));
+          setAllDoctors(mapped);
+        }
+      })
+      .catch(() => {
+        // Offline demo fallback preserves DOCTORS
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedSpecialty]);
+
+  const doctors = allDoctors.filter((d) => {
     const matchesSpecialty = selectedSpecialty === 'All' || d.specialization === selectedSpecialty;
     const matchesQuery =
       !query.trim() ||

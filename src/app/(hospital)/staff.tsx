@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Divider, Icon, HospitalNav, HTitle } from '@/components/ui';
+import { authService } from '@/services/auth';
 
 export default function Staff() {
   return (
@@ -22,13 +23,28 @@ export default function Staff() {
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
           <Divider />
+          <Pressable style={styles.row} onPress={() => router.push('/(hospital)/fleet')}>
+            <Icon name="ambulance" color={colors.ink} />
+            <Text style={styles.rowLabel}>Ambulance Fleet & Drivers</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
           <Pressable style={styles.row} onPress={() => router.push('/notifications')}>
             <Icon name="bell" color={colors.ink} />
             <Text style={styles.rowLabel}>Notifications</Text>
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
           <Divider />
-          <Pressable style={styles.row} onPress={() => router.replace('/hospital-login')}>
+          <Pressable
+            style={styles.row}
+            onPress={async () => {
+              try {
+                await authService.logout();
+              } finally {
+                router.replace('/login');
+              }
+            }}
+          >
             <Text style={[styles.rowLabel, { color: colors.red }]}>Log Out</Text>
           </Pressable>
         </Card>

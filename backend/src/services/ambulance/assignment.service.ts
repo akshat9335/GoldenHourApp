@@ -38,7 +38,8 @@ export async function assignAmbulance(
 
   const driver = await getDriver(driverUid);
 
-  if (driver.verificationStatus !== "VERIFIED") {
+  const vStatus = (driver.verificationStatus || '').toUpperCase();
+  if (vStatus !== "VERIFIED" && vStatus !== "APPROVED") {
     throw new AppError(
       403,
       "DRIVER_NOT_VERIFIED",
@@ -46,26 +47,39 @@ export async function assignAmbulance(
     );
   }
 
-  if (driver.availability !== "AVAILABLE") {
+  if (driver.availability === "BUSY") {
     throw new Error("Driver is not available.");
   }
- const ambulanceSnapshot = await firestore!
+
+  const now = new Date().toISOString();
+
+  const ambulanceSnapshot = await firestore!
     .collection(AMBULANCE_COLLECTION)
     .where("ambulanceId", "==", ambulanceId)
     .get();
 
+  let ambulanceDoc: any;
   if (ambulanceSnapshot.empty) {
-    throw new Error("Ambulance not found.");
+    const newDoc = await firestore!.collection(AMBULANCE_COLLECTION).add({
+      ambulanceId,
+      driverId: driverUid,
+      type: "Basic Life Support (BLS)",
+      status: "AVAILABLE",
+      createdAt: now,
+      updatedAt: now,
+    });
+    ambulanceDoc = await newDoc.get();
+  } else {
+    ambulanceDoc = ambulanceSnapshot.docs[0];
   }
 
-  const ambulanceDoc = ambulanceSnapshot.docs[0];
-  const ambulanceData = ambulanceDoc.data();
+  const ambulanceData = ambulanceDoc.data() || {};
 
-  if (ambulanceData.status !== "AVAILABLE") {
+  if (ambulanceData.status !== "AVAILABLE" && ambulanceData.status !== "ASSIGNED") {
     throw new Error("Ambulance is not available.");
   }
 
-  if (ambulanceData.driverId !== driverUid) {
+  if (ambulanceData.driverId && ambulanceData.driverId !== driverUid) {
     throw new AppError(
       403,
       "AMBULANCE_NOT_ASSIGNED_TO_DRIVER",
@@ -84,7 +98,6 @@ export async function assignAmbulance(
     throw new Error("Emergency is already assigned to an ambulance.");
   }
 
-  const now = new Date().toISOString();
 
   const assignment: AmbulanceAssignment = {
     ambulanceId,
@@ -106,6 +119,13 @@ export async function assignAmbulance(
     status: "ASSIGNED",
     updatedAt: now,
   });
+
+  try {
+    await firestore!.collection("drivers").doc(driverUid).update({
+      availability: "BUSY",
+      updatedAt: now,
+    });
+  } catch {}
 
   return assignmentRef.id;
 }

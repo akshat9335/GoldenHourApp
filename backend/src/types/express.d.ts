@@ -1,14 +1,22 @@
 import "express";
 
+export type CanonicalRole =
+  | "PATIENT"
+  | "DOCTOR"
+  | "HOSPITAL"
+  | "AMBULANCE_DRIVER"
+  | "FRONTLINE_WORKER"
+  | "ADMIN";
+
+export type VerificationStatus = "APPROVED" | "PENDING" | "REJECTED";
+
 export interface AuthenticatedUser {
   uid: string;
   email?: string;
-  /**
-   * Role is not enforced yet (see middleware/auth.ts). It is read from
-   * Firebase custom claims once role-based auth is implemented by the
-   * respective feature owners (user / hospital / ambulance / doctor).
-   */
   role?: string;
+  roles?: CanonicalRole[];
+  verificationStatus?: VerificationStatus;
+  roleVerificationStatus?: Partial<Record<CanonicalRole, VerificationStatus>>;
 }
 
 declare global {

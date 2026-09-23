@@ -3,20 +3,31 @@ import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Pill } from '@/components/ui';
+import { useAppStore } from '@/store/useAppStore';
 
 export default function AiHospitalRec() {
+  const aiTriageResult = useAppStore((s) => s.aiTriageResult);
+  const selectedType = useAppStore((s) => s.selectedType);
+
+  const hospitalName =
+    aiTriageResult?.recommendedHospital ||
+    'Nearest Verified Trauma Center & ER';
+
+  const specialty =
+    aiTriageResult?.emergencyType || selectedType || 'Emergency Trauma Unit';
+
   return (
     <Screen>
       <TopBar title="Hospital Recommendation" />
       <Card style={styles.card}>
         <View style={styles.row}>
-          <Text style={styles.title}>St. Martha's Hospital</Text>
-          <Pill color="success">MATCH</Pill>
+          <Text style={styles.title}>{hospitalName}</Text>
+          <Pill color="success">AI MATCH</Pill>
         </View>
-        <Text style={styles.sub}>Cardiac Care Unit · Level 1 Trauma · 3.4 km</Text>
+        <Text style={styles.sub}>{specialty} · Emergency ER Ready</Text>
         <View style={{ flexDirection: 'row', gap: 6 }}>
-          <Pill color="blue">ICU: 4 beds</Pill>
-          <Pill color="grey">ETA 11 min</Pill>
+          <Pill color="blue">ICU Ready</Pill>
+          <Pill color="grey">Priority ER Desk</Pill>
         </View>
       </Card>
       <Button title="Continue to Confirmation" onPress={() => router.push('/(patient)/emergency/review')} />

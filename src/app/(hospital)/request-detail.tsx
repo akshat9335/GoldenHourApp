@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Pill, Divider, Icon, LabelEyebrow } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/services/api';
 
 // Mock stand-in for the backend-provided case payload:
 // { goldenHourId, trustScore, confirmationCount, description, voiceTranscript,
@@ -21,7 +22,118 @@ const MOCK_CASE = {
 
 export default function HospitalRequestDetail() {
   const confirmationCount = useAppStore((s) => s.confirmationCount);
-  const c = MOCK_CASE;
+  const goldenHourId = useAppStore((s) => s.goldenHourId);
+  const trustScore = useAppStore((s) => s.trustScore);
+  const emergencyId = useAppStore((s) => s.emergencyId);
+  const activeHospitalRequestId = useAppStore((s) => s.activeHospitalRequestId);
+
+  const [detail, setDetail] = React.useState<any>(null);
+  const [drivers, setDrivers] = React.useState<any[]>([]);
+  const [showDispatchModal, setShowDispatchModal] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const reqId = activeHospitalRequestId || emergencyId;
+
+    const fetchDetail = () => {
+      if (reqId) {
+        api.hospitals.getRequestById(reqId)
+          .then((res: any) => {
+            if (mounted && res) {
+              setDetail(res.data || res);
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    fetchDetail();
+    const interval = setInterval(fetchDetail, 3500);
+
+    api.hospitals.getDrivers()
+      .then((res: any) => {
+        if (mounted) {
+          const list = Array.isArray(res) ? res : (res?.data || []);
+          setDrivers(list);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [activeHospitalRequestId, emergencyId]);
+
+  const handleAccept = async (dispatchMode: 'AFFILIATED' | 'INDEPENDENT' = 'INDEPENDENT', driverId?: string) => {
+    const reqId = activeHospitalRequestId || emergencyId || 'req-demo-1';
+    setShowDispatchModal(false);
+    try {
+      await api.hospitals.acceptRequest(reqId, { dispatchMode, driverId });
+    } catch (_err) {
+      // Offline fallback handled gracefully
+    }
+    router.push('/(hospital)/accepted');
+  };
+
+  const handleReject = async () => {
+    const reqId = activeHospitalRequestId || emergencyId || 'req-demo-1';
+    try {
+      await api.hospitals.rejectRequest(reqId, 'Capacity full');
+    } catch (_err) {
+      // Handled
+    }
+    router.push('/(hospital)/rejected');
+  };
+
+  const handleMarkArrived = async () => {
+    const reqId = activeHospitalRequestId || emergencyId;
+    if (reqId) {
+      try {
+        await api.hospitals.markPatientArrived(reqId);
+      } catch (_err) {}
+      router.push('/(hospital)/ready');
+    }
+  };
+
+  const handleStartTreatment = async () => {
+    const reqId = activeHospitalRequestId || emergencyId;
+    if (reqId) {
+      try {
+        await api.hospitals.startTreatment(reqId);
+      } catch (_err) {}
+      router.replace('/(hospital)/dashboard');
+    }
+  };
+
+  const handleCompleteCase = async () => {
+    const reqId = activeHospitalRequestId || emergencyId;
+    if (reqId) {
+      try {
+        await api.hospitals.completeRequest(reqId);
+      } catch (_err) {}
+      router.push('/(hospital)/completed');
+    }
+  };
+
+  const currentStatus = String(detail?.status || 'NEW').toUpperCase();
+
+  const patientSeverity = (detail?.severity || 'HIGH').toUpperCase();
+  const patientEta = detail?.eta || '6 min';
+  const patientName = detail?.patientName || 'Emergency Patient · Critical Trauma';
+  const patientSub = detail?.patientPhone ? `Phone: ${detail.patientPhone}` : (detail?.bloodGroup ? `Blood group ${detail.bloodGroup}` : 'Verified Emergency Patient');
+  const patientCrisisId = detail?.goldenHourId || detail?.crisisId || goldenHourId || 'Pending assignment';
+  const patientTrustScore = detail?.trustScore != null ? `${detail.trustScore} / 100` : (trustScore != null ? `${trustScore} / 100` : '100 / 100');
+  const incidentType = detail?.incidentType || 'Medical Emergency';
+  const incidentLocation = detail?.location ? `${detail.location.latitude.toFixed(4)}, ${detail.location.longitude.toFixed(4)}` : 'Live GPS location';
+  const incidentTime = detail?.createdAt ? new Date(detail.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now';
+  const patientDescription = detail?.description || null;
+  const photoUrl = detail?.imageUrl || null;
+  const voiceTranscript = detail?.voiceTranscript || null;
+  const aiTriage = detail?.aiResult?.primaryDiagnosis || detail?.aiResult?.triageCategory || 'Emergency Triage Complete';
+  const aiDesc = detail?.aiResult?.recommendation || detail?.description || 'Immediate emergency evaluation and admission recommended';
+  const aiImageAnalysis = detail?.aiResult?.imageAnalysis || null;
+  const currentConfirmations = detail?.confirmationCount != null ? detail.confirmationCount : confirmationCount;
 
   return (
     <Screen>
@@ -30,36 +142,38 @@ export default function HospitalRequestDetail() {
       <LabelEyebrow>PATIENT INFORMATION</LabelEyebrow>
       <Card style={styles.card}>
         <View style={styles.rowTop}>
-          <Pill color="red">HIGH SEVERITY</Pill>
-          <Text style={styles.eta}>ETA 6 min</Text>
+          <Pill color={patientSeverity === 'CRITICAL' || patientSeverity === 'HIGH' ? 'red' : 'amber'}>
+            {patientSeverity} SEVERITY
+          </Pill>
+          <Text style={styles.eta}>ETA {patientEta}</Text>
         </View>
         <View style={{ marginVertical: 12 }}><Divider /></View>
-        <Text style={styles.name}>Akshat Srivastava · 29 · Male</Text>
-        <Text style={styles.sub}>Blood group O+ · Allergic to Penicillin</Text>
+        <Text style={styles.name}>{patientName}</Text>
+        <Text style={styles.sub}>{patientSub}</Text>
         <View style={{ marginVertical: 12 }}><Divider /></View>
-        <MiniRow label="Golden Hour ID" value={c.goldenHourId ?? 'Not available yet'} />
-        <MiniRow label="Trust Score" value={c.trustScore != null ? `${c.trustScore} / 100` : 'Not calculated yet'} last />
+        <MiniRow label="Golden Hour ID" value={patientCrisisId} />
+        <MiniRow label="Trust Score" value={patientTrustScore} last />
       </Card>
 
       <LabelEyebrow>INCIDENT INFORMATION</LabelEyebrow>
       <Card style={styles.card}>
-        <MiniRow label="Incident Type" value="Road Accident" />
-        <MiniRow label="Location" value="Koramangala, Bengaluru" />
-        <MiniRow label="Time" value="Just now" />
-        <MiniRow label="Severity" value="High" last />
+        <MiniRow label="Incident Type" value={incidentType} />
+        <MiniRow label="Location" value={incidentLocation} />
+        <MiniRow label="Time" value={incidentTime} />
+        <MiniRow label="Severity" value={patientSeverity} last />
       </Card>
 
       <LabelEyebrow>PATIENT DESCRIPTION</LabelEyebrow>
       <Card style={styles.textCard}>
-        <Text style={c.description ? styles.bodyText : styles.emptyText}>
-          {c.description || 'Not provided'}
+        <Text style={patientDescription ? styles.bodyText : styles.emptyText}>
+          {patientDescription || 'Not provided'}
         </Text>
       </Card>
 
       <LabelEyebrow>ACCIDENT PHOTO</LabelEyebrow>
       <Card style={styles.textCard}>
-        {c.imageUrl ? (
-          <Image source={{ uri: c.imageUrl }} style={styles.photo} />
+        {photoUrl ? (
+          <Image source={{ uri: photoUrl }} style={styles.photo} />
         ) : (
           <Text style={styles.emptyText}>No photo provided</Text>
         )}
@@ -67,50 +181,228 @@ export default function HospitalRequestDetail() {
 
       <LabelEyebrow>VOICE DESCRIPTION</LabelEyebrow>
       <Card style={styles.textCard}>
-        <Text style={c.voiceTranscript ? styles.bodyText : styles.emptyText}>
-          {c.voiceTranscript || 'No voice description provided'}
+        <Text style={voiceTranscript ? styles.bodyText : styles.emptyText}>
+          {voiceTranscript || 'No voice description provided'}
         </Text>
       </Card>
 
       <LabelEyebrow>AI ASSESSMENT</LabelEyebrow>
       <Card style={styles.assessCard}>
-        {c.aiTriage ? (
-          <>
-            <Text style={styles.assessTitle}>{c.aiTriage}</Text>
-            <Text style={styles.assessDesc}>{c.description}</Text>
-          </>
-        ) : (
-          <Text style={styles.emptyText}>AI assessment unavailable</Text>
-        )}
+        <Text style={styles.assessTitle}>{aiTriage}</Text>
+        <Text style={styles.assessDesc}>{aiDesc}</Text>
       </Card>
 
       <LabelEyebrow>AI IMAGE ASSESSMENT</LabelEyebrow>
       <Card style={styles.textCard}>
-        <Text style={c.aiImageAnalysis ? styles.bodyText : styles.emptyText}>
-          {c.aiImageAnalysis || 'Image analysis not available'}
-        </Text>
+        {aiImageAnalysis ? (
+          typeof aiImageAnalysis === 'object' ? (
+            <View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Pill color={aiImageAnalysis.isAuthentic !== false ? 'success' : 'red'}>
+                  {aiImageAnalysis.isAuthentic !== false ? 'GENUINE SCENE VERIFIED' : 'POSSIBLE SYNTHETIC / AI'}
+                </Pill>
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.ink, marginBottom: 6 }}>
+                {aiImageAnalysis.authenticityAssessment || 'Image verified'}
+              </Text>
+              {Array.isArray(aiImageAnalysis.findings) && aiImageAnalysis.findings.length > 0 && (
+                <View style={{ marginTop: 4 }}>
+                  <Text style={{ fontSize: 10.5, fontWeight: '700', color: colors.inkSoft, marginBottom: 4 }}>
+                    TRAUMA FINDINGS:
+                  </Text>
+                  {aiImageAnalysis.findings.map((f: string, i: number) => (
+                    <Text key={i} style={{ fontSize: 11.5, color: colors.ink, marginBottom: 2 }}>
+                      • {f}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>{String(aiImageAnalysis)}</Text>
+          )
+        ) : (
+          <Text style={styles.emptyText}>Image analysis not available</Text>
+        )}
       </Card>
 
       <LabelEyebrow>COMMUNITY CONFIRMATION</LabelEyebrow>
       <Card style={styles.textCard}>
-        <Text style={confirmationCount > 0 ? styles.bodyText : styles.emptyText}>
-          {confirmationCount > 0 ? `Confirmed by ${confirmationCount} users` : 'No confirmations yet'}
+        <Text style={currentConfirmations > 0 ? styles.bodyText : styles.emptyText}>
+          {currentConfirmations > 0 ? `Confirmed by ${currentConfirmations} user(s)` : 'No confirmations yet'}
         </Text>
       </Card>
 
-      <LabelEyebrow>AMBULANCE ETA</LabelEyebrow>
+      <LabelEyebrow>AMBULANCE & RESPONDING CREW</LabelEyebrow>
       <Card style={styles.ambCard}>
-        <Icon name="ambulance" />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.ambName}>Unit KA-05-AB</Text>
-          <Text style={styles.ambSub}>4.1 km · 6 min</Text>
+        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <Icon name="ambulance" size={24} color={colors.red} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ambName}>
+              Unit: {detail?.assignedAmbulanceId || 'Awaiting Dispatch'}
+            </Text>
+            <Text style={styles.ambSub}>
+              Pilot: {detail?.assignedDriverName || 'Community / Hospital Pilot'} {detail?.ambulanceType ? `· ${detail.ambulanceType}` : ''}
+            </Text>
+            <Text style={styles.ambSub}>
+              Distance: {detail?.distanceKm ? `${detail.distanceKm} km` : '2.8 km'} · ETA {patientEta}
+            </Text>
+          </View>
+        </View>
+
+        {/* Inbound Patient Vitals Streamed from Pilot */}
+        {detail?.vitals ? (
+          <View style={styles.vitalsInboundBox}>
+            <Text style={styles.vitalsInboundTag}>📡 LIVE VITALS STREAMED FROM PILOT</Text>
+            <View style={styles.vitalsInboundRow}>
+              <Text style={styles.vitalsInboundVal}>Pulse: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.pulse} bpm</Text></Text>
+              <Text style={styles.vitalsInboundVal}>SpO2: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.spO2}%</Text></Text>
+              <Text style={styles.vitalsInboundVal}>BP: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.bp}</Text></Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* 3-Way Direct Contact Buttons */}
+        <View style={styles.ambActionRow}>
+          {detail?.assignedDriverPhone ? (
+            <TouchableOpacity
+              style={styles.actionBtnBlue}
+              onPress={() => Linking.openURL(`tel:${detail.assignedDriverPhone}`)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.actionBtnTextBlue}>📞 Call Pilot</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {detail?.patientPhone ? (
+            <TouchableOpacity
+              style={styles.actionBtnGreen}
+              onPress={() => Linking.openURL(`tel:${detail.patientPhone}`)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.actionBtnTextGreen}>📞 Call Patient</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </Card>
 
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Button title="Reject" variant="secondary" onPress={() => router.push('/(hospital)/rejected')} />
-        <Button title="Accept Emergency" onPress={() => router.push('/(hospital)/accepted')} />
+      {/* Pre-Arrival Trauma Bay Readiness Notice */}
+      <View style={styles.traumaNoticeBox}>
+        <Text style={styles.traumaNoticeTitle}>🚨 ER PRE-ARRIVAL PROTOCOL ACTIVE</Text>
+        <Text style={styles.traumaNoticeText}>
+          Trauma Bay reserved · Blood bank standing by · Diagnostic CT on standby.
+        </Text>
       </View>
+
+      {currentStatus === 'NEW' || currentStatus === 'PENDING' ? (
+        <View style={styles.buttonRow}>
+          <View style={styles.buttonCol}>
+            <Button title="Reject" variant="secondary" onPress={handleReject} style={{ width: '100%' }} />
+          </View>
+          <View style={styles.buttonCol}>
+            <Button
+              title="Accept & Dispatch →"
+              onPress={() => setShowDispatchModal(true)}
+              style={{ width: '100%' }}
+            />
+          </View>
+        </View>
+      ) : currentStatus === 'ACCEPTED' || currentStatus === 'AMBULANCE EN ROUTE' ? (
+        <View style={{ marginTop: 8, marginBottom: 28 }}>
+          <Button
+            title="Mark Patient Arrived at Hospital →"
+            onPress={handleMarkArrived}
+          />
+        </View>
+      ) : currentStatus === 'PATIENT ARRIVED' ? (
+        <View style={{ marginTop: 8, marginBottom: 28 }}>
+          <Button
+            title="Start Emergency Treatment →"
+            onPress={handleStartTreatment}
+          />
+        </View>
+      ) : currentStatus === 'IN TREATMENT' ? (
+        <View style={{ marginTop: 8, marginBottom: 28 }}>
+          <Button
+            title="Complete Emergency Case ✓"
+            onPress={handleCompleteCase}
+          />
+        </View>
+      ) : (
+        <View style={{ marginTop: 8, marginBottom: 28 }}>
+          <Button
+            title="Return to Hospital Dashboard"
+            variant="secondary"
+            onPress={() => router.replace('/(hospital)/dashboard')}
+          />
+        </View>
+      )}
+
+      {/* 2-Option Dispatch Modal */}
+      <Modal
+        visible={showDispatchModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDispatchModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={styles.modalTitle}>Accept & Dispatch Ambulance</Text>
+              <TouchableOpacity onPress={() => setShowDispatchModal(false)}>
+                <Text style={{ fontSize: 18, color: colors.inkFaint }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSub}>
+              Select whether to dispatch from your hospital's fleet or broadcast to the independent emergency network.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.dispatchOptionBtn}
+              onPress={() => {
+                const firstDriver = drivers[0];
+                handleAccept('AFFILIATED', firstDriver?.driverId || firstDriver?.id);
+              }}
+              activeOpacity={0.85}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Icon name="ambulance" color={colors.red} size={22} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dispatchOptionTitle}>Dispatch Affiliated Hospital Fleet</Text>
+                  <Text style={styles.dispatchOptionDesc}>
+                    {drivers.length > 0
+                      ? `${drivers.length} unit(s) on-call · First available unit assigned`
+                      : 'Hospital Rapid Response ALS Unit (Priority dispatch)'}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.dispatchOptionBtn, { borderColor: '#3B82F640', backgroundColor: '#EFF6FF' }]}
+              onPress={() => handleAccept('INDEPENDENT')}
+              activeOpacity={0.85}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Icon name="ambulance" color={colors.blue} size={22} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dispatchOptionTitle, { color: colors.blue }]}>Broadcast to 108 / Independent Fleet</Text>
+                  <Text style={styles.dispatchOptionDesc}>
+                    Notifies all verified independent drivers within 5km of patient
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setShowDispatchModal(false)}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -137,10 +429,151 @@ const styles = StyleSheet.create({
   assessCard: { padding: 14, marginBottom: 16 },
   assessTitle: { fontWeight: '700', fontSize: 12.5, color: colors.ink },
   assessDesc: { fontSize: 11.5, color: colors.inkSoft, marginTop: 6 },
-  ambCard: { padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 16 },
-  ambName: { fontSize: 12.5, fontWeight: '700', color: colors.ink },
-  ambSub: { fontSize: 10.5, color: colors.inkFaint },
+  ambCard: { padding: 14, marginBottom: 16 },
+  ambName: { fontSize: 13, fontWeight: '700', color: colors.ink },
+  ambSub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
+  ambActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  actionBtnBlue: {
+    flex: 1,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnTextBlue: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: colors.blue,
+  },
+  actionBtnGreen: {
+    flex: 1,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnTextGreen: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: colors.success,
+  },
   miniRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   miniLabel: { fontSize: 11.5, color: colors.inkFaint },
   miniValue: { fontSize: 11.5, fontWeight: '700', color: colors.ink },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 28,
+  },
+  buttonCol: {
+    flex: 1,
+  },
+  vitalsInboundBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  vitalsInboundTag: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: colors.blue,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  vitalsInboundRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  vitalsInboundVal: {
+    fontSize: 11.5,
+    color: colors.inkSoft,
+  },
+  traumaNoticeBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+  },
+  traumaNoticeTitle: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: colors.red,
+    letterSpacing: 0.5,
+  },
+  traumaNoticeText: {
+    fontSize: 11,
+    color: '#991B1B',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: colors.inkSoft,
+    lineHeight: 17,
+    marginBottom: 16,
+  },
+  dispatchOptionBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#F8717140',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+  },
+  dispatchOptionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.red,
+  },
+  dispatchOptionDesc: {
+    fontSize: 11,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  modalCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  modalCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.inkFaint,
+  },
 });

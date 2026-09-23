@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireApproved, requireAuth, requireRole } from "../middleware/auth";
 import {
   registerDriverController,
   getDriverController,
@@ -9,6 +9,8 @@ import {
   assignAmbulanceController,
   getAmbulanceRequestsController,
   getAmbulanceRequestController,
+  dismissAmbulanceRequestController,
+  clearAllAmbulanceRequestsController,
 } from "../controllers/ambulance.controller";
 
 import {
@@ -33,18 +35,40 @@ router.post(
 router.post(
   "/requests/:id/accept",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   assignAmbulanceController,
 );
 
 router.get(
   "/requests",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   getAmbulanceRequestsController,
+);
+
+router.post(
+  "/requests/clear-all",
+  requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
+  clearAllAmbulanceRequestsController,
+);
+
+router.post(
+  "/requests/:id/dismiss",
+  requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
+  dismissAmbulanceRequestController,
 );
 
 router.get(
   "/requests/:id",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   getAmbulanceRequestController,
 );
 
@@ -58,60 +82,80 @@ router.post(
 router.get(
   "/drivers/me",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   getDriverController,
 );
 
 router.patch(
   "/drivers/me/availability",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   updateDriverAvailabilityController,
 );
 
 router.patch(
   "/drivers/me",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   updateDriverController,
 );
 
 router.get(
   "/trips/history",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   getTripHistoryController,
 );
 
 router.post(
   "/trips/:id/start-to-patient",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   startToPatientController,
 );
 
 router.post(
   "/trips/:id/arrived-patient",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   arrivedPatientController,
 );
 
 router.post(
   "/trips/:id/pickup",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   pickupController,
 );
 
 router.post(
   "/trips/:id/start-to-hospital",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   startToHospitalController,
 );
 
 router.post(
   "/trips/:id/arrived-hospital",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   arrivedHospitalController,
 );
 
 router.post(
   "/trips/:id/complete",
   requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
   completeTripController,
 );
 

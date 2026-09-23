@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { AppError } from "../utils/AppError";
 import { sendSuccess } from "../utils/response";
 import {
@@ -22,64 +22,79 @@ function getUserUid(req: Request): string {
 export async function addContactController(
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> {
-  const uid = getUserUid(req);
-  const { crisisId } = req.body;
+  try {
+    const uid = getUserUid(req);
+    const { crisisId } = req.body;
 
-  if (typeof crisisId !== "string" || !crisisId.trim()) {
-    throw new AppError(
-      400,
-      "INVALID_CRISIS_ID",
-      "Crisis ID is required.",
+    if (typeof crisisId !== "string" || !crisisId.trim()) {
+      throw new AppError(
+        400,
+        "INVALID_CRISIS_ID",
+        "Crisis ID is required.",
+      );
+    }
+
+    const contact = await addEmergencyContact(uid, crisisId);
+
+    sendSuccess(
+      res,
+      contact,
+      "Emergency contact added successfully.",
+      201,
     );
+  } catch (err) {
+    next(err);
   }
-
-  const contact = await addEmergencyContact(uid, crisisId);
-
-  sendSuccess(
-    res,
-    contact,
-    "Emergency contact added successfully.",
-    201,
-  );
 }
 
 export async function getContactsController(
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> {
-  const uid = getUserUid(req);
+  try {
+    const uid = getUserUid(req);
 
-  const contacts = await getEmergencyContacts(uid);
+    const contacts = await getEmergencyContacts(uid);
 
-  sendSuccess(
-    res,
-    contacts,
-    "Emergency contacts retrieved successfully.",
-  );
+    sendSuccess(
+      res,
+      contacts,
+      "Emergency contacts retrieved successfully.",
+    );
+  } catch (err) {
+    next(err);
+  }
 }
 
 export async function deleteContactController(
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> {
-  const uid = getUserUid(req);
+  try {
+    const uid = getUserUid(req);
 
-  const { id } = req.params;
+    const { id } = req.params;
 
-  if (!id) {
-    throw new AppError(
-      400,
-      "INVALID_CONTACT_ID",
-      "Contact ID is required.",
+    if (!id) {
+      throw new AppError(
+        400,
+        "INVALID_CONTACT_ID",
+        "Contact ID is required.",
+      );
+    }
+
+    await deleteEmergencyContact(uid, id);
+
+    sendSuccess(
+      res,
+      null,
+      "Emergency contact deleted successfully.",
     );
+  } catch (err) {
+    next(err);
   }
-
-  await deleteEmergencyContact(uid, id);
-
-  sendSuccess(
-    res,
-    null,
-    "Emergency contact deleted successfully.",
-  );
 }

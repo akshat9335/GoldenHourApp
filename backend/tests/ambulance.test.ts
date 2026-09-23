@@ -13,6 +13,9 @@ vi.mock("../src/middleware/auth", () => ({
   requireRole: (_role: string) => (_req: any, _res: any, next: any) => {
     next();
   },
+  requireApproved: (_req: any, _res: any, next: any) => {
+    next();
+  },
 }));
 
 vi.mock("../src/services/ambulance/ambulance.service", () => ({

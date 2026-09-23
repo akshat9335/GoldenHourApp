@@ -1,11 +1,12 @@
 export const AMB_STEPS = [
+  'SOS Broadcasted · Alerting ERs',
+  'Hospital Accepted · ER Ready',
   'Ambulance Assigned',
   'En Route to You',
-  'Arriving Now',
+  'Arrived at Scene',
   'Patient Picked Up',
   'En Route to Hospital',
-  'Arrived at Hospital',
-  'Emergency Completed',
+  'Arrived at Hospital · In Treatment',
 ];
 
 export const EMERGENCY_TYPES: Array<{ label: string; icon: string; color: string }> = [

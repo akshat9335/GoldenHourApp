@@ -4,9 +4,26 @@ import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Stepper, Icon } from '@/components/ui';
 
+import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/services/api';
+
 const STEPS = ['Emergency accepted', 'Team & bay assigned', 'Awaiting patient arrival'];
 
 export default function HospitalReady() {
+  const activeHospitalRequestId = useAppStore((s) => s.activeHospitalRequestId);
+  const emergencyId = useAppStore((s) => s.emergencyId);
+
+  const handlePatientArrived = async () => {
+    const id = activeHospitalRequestId || emergencyId || 'req-demo-1';
+    try {
+      await api.hospitals.markPatientArrived(id);
+      await api.hospitals.completeRequest(id);
+    } catch (_err) {
+      // Handled in demo mode
+    }
+    router.push('/(hospital)/completed');
+  };
+
   return (
     <Screen>
       <TopBar title="Hospital Ready" />
@@ -15,7 +32,7 @@ export default function HospitalReady() {
         <Text style={styles.cardText}>Trauma Bay 2 Prepared</Text>
       </Card>
       <Stepper steps={STEPS} currentIndex={2} />
-      <Button title="Mark Patient Arrived" onPress={() => router.push('/(hospital)/completed')} style={{ marginTop: 16 }} />
+      <Button title="Mark Patient Arrived" onPress={handlePatientArrived} style={{ marginTop: 16 }} />
     </Screen>
   );
 }

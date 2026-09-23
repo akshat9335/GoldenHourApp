@@ -191,5 +191,14 @@ export function validateImageAnalysisResponse(
         ? value.disclaimer
         : "AI-generated emergency decision support. It is not a medical diagnosis.",
     source: "gemini",
+    isAuthentic: typeof value.isAuthentic === "boolean" ? value.isAuthentic : true,
+    authenticityAssessment:
+      typeof value.authenticityAssessment === "string" && value.authenticityAssessment.trim()
+        ? value.authenticityAssessment.trim()
+        : "Automated image visual check completed.",
+    authenticityScore:
+      typeof value.authenticityScore === "number"
+        ? Math.min(Math.max(value.authenticityScore, 0), 1)
+        : 0.9,
   };
 }

@@ -199,7 +199,8 @@ export async function updateDriverAvailability(
 
   const driver = snapshot.data() as Driver;
 
-  if (availability === "AVAILABLE" && driver.verificationStatus !== "VERIFIED") {
+  const vStatus = (driver.verificationStatus || '').toUpperCase();
+  if (availability === "AVAILABLE" && vStatus !== "VERIFIED" && vStatus !== "APPROVED") {
     throw new AppError(
       403,
       "DRIVER_NOT_VERIFIED",

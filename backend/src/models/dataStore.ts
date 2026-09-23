@@ -14,6 +14,7 @@ class InMemoryDataStore {
   public queues: Map<string, LiveQueueState> = new Map(); // key: `${doctorId}_${date}`
   public hospitals: Map<string, HospitalFacility> = new Map();
   public incidents: Map<string, NearbyIncidentSummary> = new Map();
+  public users: Map<string, any> = new Map();
 
   constructor() {
     this.seedInitialData();
@@ -45,6 +46,31 @@ class InMemoryDataStore {
 
     this.clinics.set(clinic1.clinicId, clinic1);
     this.clinics.set(clinic2.clinicId, clinic2);
+
+    const clinicBlr1: ClinicDetails = {
+      clinicId: "clinic-sharma-blr",
+      clinicName: "Sharma Heart Clinic",
+      address: "4th Cross, Koramangala, Bengaluru",
+      lat: 12.9352,
+      lng: 77.6146,
+      phone: "+91-80-25551234",
+      workingHours: "10:00 - 18:00",
+      facilities: ["ECG", "2D Echo", "Cardiac Triage", "Pharmacy"],
+    };
+
+    const clinicBlr2: ClinicDetails = {
+      clinicId: "clinic-verma-blr",
+      clinicName: "Verma Family Clinic",
+      address: "80 Feet Road, Indiranagar, Bengaluru",
+      lat: 12.9719,
+      lng: 77.6412,
+      phone: "+91-80-25555678",
+      workingHours: "09:00 - 21:00",
+      facilities: ["General OPD", "Digital X-Ray", "Vaccination", "Minor Trauma"],
+    };
+
+    this.clinics.set(clinicBlr1.clinicId, clinicBlr1);
+    this.clinics.set(clinicBlr2.clinicId, clinicBlr2);
 
     // Seed Doctors
     const doc1: DoctorProfile = {
@@ -111,6 +137,50 @@ class InMemoryDataStore {
     this.doctors.set(doc2.doctorId, doc2);
     this.doctors.set(doc3Pending.doctorId, doc3Pending);
 
+    const docBlr1: DoctorProfile = {
+      doctorId: "doc-1",
+      userId: "user-dr-rahul",
+      name: "Dr. Rahul Sharma",
+      specialty: "Cardiologist",
+      qualification: "MBBS, MD (Cardiology)",
+      experienceYears: 12,
+      licenseNumber: "KMC-BLR-2012-1142",
+      verificationStatus: "VERIFIED",
+      clinicId: clinicBlr1.clinicId,
+      consultationFee: 500,
+      availability: "AVAILABLE",
+      rating: 4.9,
+      servingToken: 14,
+      queueLength: 18,
+      estimatedWaitMinutes: 25,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const docBlr2: DoctorProfile = {
+      doctorId: "doc-2",
+      userId: "user-dr-anita",
+      name: "Dr. Anita Verma",
+      specialty: "General Physician",
+      qualification: "MBBS, MD (General Medicine)",
+      experienceYears: 9,
+      licenseNumber: "KMC-BLR-2015-8831",
+      verificationStatus: "VERIFIED",
+      clinicId: clinicBlr2.clinicId,
+      consultationFee: 300,
+      availability: "AVAILABLE",
+      rating: 4.8,
+      servingToken: 29,
+      queueLength: 32,
+      estimatedWaitMinutes: 15,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.doctors.set(docBlr1.doctorId, docBlr1);
+    this.doctors.set(docBlr2.doctorId, docBlr2);
+    this.doctors.set("doc-be-0", { ...docBlr1, doctorId: "doc-be-0" });
+
     // Seed Queues
     const today = new Date().toISOString().split("T")[0];
     this.queues.set(`${doc1.doctorId}_${today}`, {
@@ -128,6 +198,33 @@ class InMemoryDataStore {
       servingToken: 1,
       totalTokensIssued: 4,
       avgConsultationMinutes: 12,
+      waitingCount: 3,
+    });
+
+    this.queues.set(`${docBlr1.doctorId}_${today}`, {
+      doctorId: docBlr1.doctorId,
+      date: today,
+      servingToken: 14,
+      totalTokensIssued: 18,
+      avgConsultationMinutes: 15,
+      waitingCount: 4,
+    });
+
+    this.queues.set(`doc-be-0_${today}`, {
+      doctorId: "doc-be-0",
+      date: today,
+      servingToken: 14,
+      totalTokensIssued: 25,
+      avgConsultationMinutes: 10,
+      waitingCount: 11,
+    });
+
+    this.queues.set(`${docBlr2.doctorId}_${today}`, {
+      doctorId: docBlr2.doctorId,
+      date: today,
+      servingToken: 29,
+      totalTokensIssued: 32,
+      avgConsultationMinutes: 8,
       waitingCount: 3,
     });
 
@@ -183,9 +280,63 @@ class InMemoryDataStore {
       verified: true,
     };
 
+    const hospBlr1: HospitalFacility = {
+      hospitalId: "hosp-martha-blr",
+      name: "St. Martha's Hospital",
+      address: "Nrupathunga Road, Bengaluru",
+      lat: 12.9716,
+      lng: 77.5946,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Level 1 Trauma", "Cardiology", "Emergency OT", "Burns Unit"],
+      availableCapacity: 14,
+      traumaLevel: 1,
+      icuAvailable: true,
+      specialistsAvailable: ["Trauma Surgeon", "Cardiologist", "Critical Care Specialist"],
+      diagnosticAvailability: ["CT 128 Slice", "MRI 3T", "Digital X-Ray", "Blood Bank"],
+      verified: true,
+    };
+
+    const hospBlr2: HospitalFacility = {
+      hospitalId: "hosp-fortis-blr",
+      name: "Fortis Emergency Care",
+      address: "Bannerghatta Road, Bengaluru",
+      lat: 12.9352,
+      lng: 77.6146,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Emergency Care", "Cardiology", "Neurology"],
+      availableCapacity: 8,
+      traumaLevel: 1,
+      icuAvailable: true,
+      specialistsAvailable: ["Emergency Physician", "Neurosurgeon"],
+      diagnosticAvailability: ["CT Scan", "Digital X-Ray", "Blood Bank"],
+      verified: true,
+    };
+
+    const hospBlr3: HospitalFacility = {
+      hospitalId: "hosp-apollo-blr",
+      name: "Apollo Speciality",
+      address: "Jayanagar, Bengaluru",
+      lat: 12.9116,
+      lng: 77.6389,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Level 2 Trauma", "Cardiac Care", "Pediatric ICU"],
+      availableCapacity: 9,
+      traumaLevel: 2,
+      icuAvailable: true,
+      specialistsAvailable: ["Emergency Physician", "Pediatrician"],
+      diagnosticAvailability: ["CT Scan", "Ultrasound", "Pathology Lab"],
+      verified: true,
+    };
+
     this.hospitals.set(hosp1.hospitalId, hosp1);
     this.hospitals.set(hosp2.hospitalId, hosp2);
     this.hospitals.set(hosp3.hospitalId, hosp3);
+    this.hospitals.set(hospBlr1.hospitalId, hospBlr1);
+    this.hospitals.set(hospBlr2.hospitalId, hospBlr2);
+    this.hospitals.set(hospBlr3.hospitalId, hospBlr3);
 
     // Seed Nearby Incidents (For Nearby Alerts testing)
     const inc1: NearbyIncidentSummary = {

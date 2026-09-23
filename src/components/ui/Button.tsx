@@ -3,7 +3,7 @@ import { Pressable, Text, StyleSheet, ActivityIndicator, ViewStyle, StyleProp } 
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radii, shadow } from '@/constants/theme';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'blue';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'blue' | 'success';
 
 export function Button({
   title,
@@ -21,14 +21,27 @@ export function Button({
   style?: StyleProp<ViewStyle>;
 }) {
   const content = loading ? <ActivityIndicator color={variant === 'secondary' ? colors.ink : '#fff'} /> : (
-    <Text style={[styles.text, variant === 'secondary' && { color: colors.ink }, variant === 'ghost' && { color: colors.inkSoft }]}>
+    <Text
+      numberOfLines={1}
+      ellipsizeMode="tail"
+      style={[styles.text, variant === 'secondary' && { color: colors.ink }, variant === 'ghost' && { color: colors.inkSoft }]}
+    >
       {title}
     </Text>
   );
 
   if (variant === 'primary') {
     return (
-      <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [style, pressed && styles.pressed, disabled && styles.disabled]}>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        style={({ pressed }) => [
+          styles.primaryWrapper,
+          style,
+          pressed && styles.pressed,
+          disabled && styles.disabled,
+        ]}
+      >
         <LinearGradient colors={[colors.red, colors.redDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.base, shadow.sos]}>
           {content}
         </LinearGradient>
@@ -44,6 +57,7 @@ export function Button({
         variant === 'secondary' && styles.secondary,
         variant === 'ghost' && styles.ghost,
         variant === 'blue' && { backgroundColor: colors.blue },
+        variant === 'success' && { backgroundColor: colors.emerald || '#10B981' },
         pressed && styles.pressed,
         disabled && styles.disabled,
         style,
@@ -55,6 +69,7 @@ export function Button({
 }
 
 const styles = StyleSheet.create({
+  primaryWrapper: { width: '100%' },
   base: { borderRadius: radii.lg, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', width: '100%' },
   secondary: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line },
   ghost: { backgroundColor: 'transparent', paddingVertical: 12 },

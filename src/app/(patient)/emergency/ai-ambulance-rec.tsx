@@ -4,20 +4,33 @@ import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Pill, Banner, Icon } from '@/components/ui';
 
+import { useAppStore } from '@/store/useAppStore';
+
 export default function AiAmbulanceRec() {
+  const aiSeverity = useAppStore((s) => s.aiSeverity);
+
+  const isCriticalOrHigh = aiSeverity === 'critical' || aiSeverity === 'high';
+  const ambType = isCriticalOrHigh ? 'ALS Rescue Ambulance' : 'BLS Response Ambulance';
+  const ambDesc = isCriticalOrHigh
+    ? 'Advanced Life Support: Ventilator, Defibrillator, Trauma Care Specialist aboard.'
+    : 'Basic Life Support: Oxygen delivery, vitals monitoring, Paramedic stabilization.';
+
   return (
     <Screen>
       <TopBar title="Ambulance Recommendation" />
-      <Banner color="red" icon={<Icon name="ambulance" size={15} color={colors.redDark} />}>
-        Based on severity, an ALS (Advanced Life Support) ambulance is recommended.
+      <Banner color={isCriticalOrHigh ? 'red' : 'amber'} icon={<Icon name="ambulance" size={15} color={isCriticalOrHigh ? colors.redDark : colors.amber} />}>
+        {isCriticalOrHigh
+          ? 'Based on AI assessment, an Advanced Life Support (ALS) rescue unit is advised.'
+          : 'Based on moderate severity, a Basic Life Support (BLS) rapid transport unit is advised.'}
       </Banner>
       <View style={{ height: 16 }} />
       <Card style={styles.card}>
         <View style={styles.row}>
-          <Text style={styles.title}>ALS Ambulance</Text>
-          <Pill color="red">RECOMMENDED</Pill>
+          <Text style={styles.title}>{ambType}</Text>
+          <Pill color={isCriticalOrHigh ? 'red' : 'amber'}>RECOMMENDED</Pill>
         </View>
-        <Text style={styles.sub}>Nearest unit: 2.1 km · ETA 6 min</Text>
+        <Text style={styles.sub}>{ambDesc}</Text>
+        <Text style={[styles.sub, { marginTop: 4, fontWeight: '600' }]}>Nearest unit: 2.1 km · ETA 6 min</Text>
       </Card>
       <Button title="Continue" onPress={() => router.push('/(patient)/emergency/ai-hospital-rec')} />
     </Screen>

@@ -9,3 +9,4 @@ export * from './BottomNav';
 export * from './IconPrompt';
 export * from './MapBg';
 export * from './ReportExtras';
+export * from './InteractiveMap';

@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { AppError } from "../utils/AppError";
 import { sendSuccess } from "../utils/response";
 import {
@@ -23,69 +23,83 @@ function getUserUid(req: Request): string {
 export async function createEmergencyController(
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> {
-  const uid = getUserUid(req);
+  try {
+    const uid = getUserUid(req);
+    const input = req.body as CreateEmergencyInput;
+    const emergency = await createEmergency(uid, input);
 
-  const input = req.body as CreateEmergencyInput;
-
-  const emergency = await createEmergency(uid, input);
-
-  sendSuccess(
-    res,
-    emergency,
-    "Emergency reported successfully.",
-    201,
-  );
+    sendSuccess(
+      res,
+      emergency,
+      "Emergency reported successfully.",
+      201,
+    );
+  } catch (err) {
+    next(err);
+  }
 }
 
 export async function getEmergencyController(
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> {
-  const uid = getUserUid(req);
-  const { id } = req.params;
+  try {
+    const uid = getUserUid(req);
+    const { id } = req.params;
 
-  if (!id) {
-    throw new AppError(
-      400,
-      "INVALID_EMERGENCY_ID",
-      "Emergency ID is required.",
+    if (!id) {
+      throw new AppError(
+        400,
+        "INVALID_EMERGENCY_ID",
+        "Emergency ID is required.",
+      );
+    }
+
+    const emergency = await getEmergencyById(id, uid, req.user?.role);
+
+    sendSuccess(
+      res,
+      emergency,
+      "Emergency retrieved successfully.",
     );
+  } catch (err) {
+    next(err);
   }
-
-  const emergency = await getEmergencyById(id, uid);
-
-  sendSuccess(
-    res,
-    emergency,
-    "Emergency retrieved successfully.",
-  );
 }
 
 export async function updateEmergencyController(
   req: Request,
   res: Response,
+  next: NextFunction,
 ): Promise<void> {
-  const uid = getUserUid(req);
-  const { id } = req.params;
+  try {
+    const uid = getUserUid(req);
+    const { id } = req.params;
 
-  if (!id) {
-    throw new AppError(
-      400,
-      "INVALID_EMERGENCY_ID",
-      "Emergency ID is required.",
+    if (!id) {
+      throw new AppError(
+        400,
+        "INVALID_EMERGENCY_ID",
+        "Emergency ID is required.",
+      );
+    }
+
+    const emergency = await updateEmergency(
+      id,
+      uid,
+      req.body,
+      req.user?.role,
     );
+
+    sendSuccess(
+      res,
+      emergency,
+      "Emergency updated successfully.",
+    );
+  } catch (err) {
+    next(err);
   }
-
-  const emergency = await updateEmergency(
-    id,
-    uid,
-    req.body,
-  );
-
-  sendSuccess(
-    res,
-    emergency,
-    "Emergency updated successfully.",
-  );
 }

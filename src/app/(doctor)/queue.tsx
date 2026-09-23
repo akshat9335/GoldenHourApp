@@ -4,6 +4,8 @@ import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Button, LabelEyebrow, Divider, DoctorNav } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 
+import { api } from '@/services/api';
+
 const statusColor: Record<string, 'success' | 'amber' | 'grey'> = {
   running: 'success',
   paused: 'amber',
@@ -12,10 +14,22 @@ const statusColor: Record<string, 'success' | 'amber' | 'grey'> = {
 };
 
 export default function DoctorQueue() {
+  const userProfile = useAppStore((s) => s.userProfile);
   const servingToken = useAppStore((s) => s.servingToken);
   const advanceServingToken = useAppStore((s) => s.advanceServingToken);
   const queueStatus = useAppStore((s) => s.queueStatus);
   const setQueueStatus = useAppStore((s) => s.setQueueStatus);
+
+  const doctorId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
+
+  const handleNext = async () => {
+    advanceServingToken();
+    try {
+      await api.queues.advanceQueue(doctorId);
+    } catch (_err) {
+      // Offline fallback
+    }
+  };
 
   const waiting = [servingToken + 1, servingToken + 2, servingToken + 3, servingToken + 4];
 
@@ -33,9 +47,9 @@ export default function DoctorQueue() {
           <Text style={styles.patientName}>Patient Name — Walk-in</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
             <Button title="Start Consultation" style={{ flex: 1 }} />
-            <Button title="Skip" variant="secondary" style={{ flex: 1 }} onPress={advanceServingToken} />
+            <Button title="Skip" variant="secondary" style={{ flex: 1 }} onPress={handleNext} />
           </View>
-          <Button title="Complete Consultation" variant="blue" style={{ marginTop: 8 }} onPress={advanceServingToken} />
+          <Button title="Complete Consultation" variant="blue" style={{ marginTop: 8 }} onPress={handleNext} />
         </Card>
 
         <View style={styles.controlsRow}>

@@ -268,4 +268,36 @@ describe("Emergencies", () => {
 
     expect(mockEmergencySet).toHaveBeenCalledTimes(1);
   });
+
+  it("allows access and update by assigned responders or privileged roles", async () => {
+    mockEmergencyGet.mockResolvedValue({
+      exists: true,
+      id: "emergency-123",
+      data: () => ({
+        reporterId: "patient-1",
+        crisisId: "AS-1234",
+        incidentType: "ACCIDENT",
+        assignedDriverId: "driver-1",
+        assignedHospitalId: "hospital-1",
+        status: "REPORTED",
+        confirmationCount: 0,
+      }),
+    });
+
+    // Assigned driver can read
+    const forDriver = await getEmergencyById("emergency-123", "driver-1");
+    expect(forDriver.id).toBe("emergency-123");
+
+    // Assigned hospital can update
+    const updatedByHospital = await updateEmergency(
+      "emergency-123",
+      "hospital-1",
+      { status: "HOSPITAL_ACCEPTED" },
+    );
+    expect(updatedByHospital.status).toBe("HOSPITAL_ACCEPTED");
+
+    // Admin role can read
+    const forAdmin = await getEmergencyById("emergency-123", "admin-user", "admin");
+    expect(forAdmin.id).toBe("emergency-123");
+  });
 });
