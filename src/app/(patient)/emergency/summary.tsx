@@ -10,6 +10,7 @@ export default function Summary() {
   const description = useAppStore((s) => s.description);
   const locationAddress = useAppStore((s) => s.locationAddress);
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+  const userEstimatedSeverity = useAppStore((s) => s.userEstimatedSeverity);
 
   const isGpsLocked = !!lastKnownLocation;
 
@@ -17,8 +18,16 @@ export default function Summary() {
     <Screen>
       <TopBar title="Emergency Summary" />
       <Card style={styles.card}>
-        <LabelEyebrow>EMERGENCY TYPE</LabelEyebrow>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <LabelEyebrow>EMERGENCY TYPE</LabelEyebrow>
+          <Pill color="red">{userEstimatedSeverity || 'Moderate'} SEVERITY</Pill>
+        </View>
         <Text style={styles.value}>{selectedType || 'General Emergency'}</Text>
+
+        <LabelEyebrow>USER ESTIMATED SEVERITY</LabelEyebrow>
+        <Text style={[styles.desc, { fontWeight: '700', color: colors.ink, marginBottom: 8 }]}>
+          {userEstimatedSeverity || 'Moderate'} (Reported by caller)
+        </Text>
 
         <LabelEyebrow>DESCRIPTION</LabelEyebrow>
         <Text style={styles.desc}>{description || 'No description provided (Location only dispatch)'}</Text>

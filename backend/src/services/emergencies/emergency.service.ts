@@ -35,6 +35,8 @@ export interface CreateEmergencyInput {
   description?: string;
   voiceTranscript?: string;
   imageUrl?: string;
+  imageBase64?: string;
+  imageMimeType?: string;
   location: EmergencyLocation;
   locationAddress?: string | null;
   severity?: string | null;
@@ -188,6 +190,129 @@ function computeHospitalMatchScore(
   return { score, matchReason, isStabilizationOnly };
 }
 
+export async function rankCandidateHospitalsForLocation(
+  lat: number,
+  lng: number,
+  reqCaps: string[] = ["EMERGENCY_ROOM", "TRAUMA_BAY"],
+  specialtyNeeded: string = "GENERAL",
+  severity: string = "MEDIUM",
+) {
+  const db = getFirestore();
+  const candidateList: any[] = [];
+  const allHospitalsSnap = await db.collection("hospitals").get();
+
+  let hasEquippedFacilityNearby = false;
+  if (allHospitalsSnap && !allHospitalsSnap.empty) {
+    for (const hDoc of allHospitalsSnap.docs) {
+      if (hDoc.id.startsWith("test-")) continue;
+      const hData = hDoc.data();
+      const hLoc = hData.location || { latitude: hData.latitude || 25.4538, longitude: hData.longitude || 81.854 };
+      const dist = calculateHaversineKm(lat, lng, hLoc.latitude, hLoc.longitude);
+      const facilities = (hData.facilities || []).map((f: any) => String(f).toLowerCase());
+      const hospName = String(hData.name || "").toLowerCase();
+      const isEquipped = (hData.availableIcuBeds ?? 0) > 0 || facilities.some((f: string) => f.includes("icu") || f.includes("cath") || f.includes("trauma")) || hospName.includes("medanta") || hospName.includes("srn");
+      if (dist <= 25 && isEquipped) {
+        hasEquippedFacilityNearby = true;
+        break;
+      }
+    }
+  }
+
+  if (allHospitalsSnap && !allHospitalsSnap.empty) {
+    for (const hDoc of allHospitalsSnap.docs) {
+      if (hDoc.id.startsWith("test-")) continue;
+      const hData = hDoc.data();
+      const vStatus = String(hData.verificationStatus || "").toUpperCase();
+      if (vStatus === "REJECTED") continue;
+
+      const hLoc = hData.location || {
+        latitude: hData.latitude || 25.4538,
+        longitude: hData.longitude || 81.854,
+      };
+      const dist = calculateHaversineKm(lat, lng, hLoc.latitude, hLoc.longitude);
+      const eta = Math.max(4, Math.round(dist * 2.5));
+
+      const match = computeHospitalMatchScore(
+        hData,
+        dist,
+        reqCaps,
+        specialtyNeeded,
+        severity,
+        hasEquippedFacilityNearby,
+      );
+
+      candidateList.push({
+        hospitalId: hDoc.id,
+        name: hData.name || "Hospital Emergency Wing",
+        phone: hData.phone || hData.emergencyContact || "+91-532-2460108",
+        location: hLoc,
+        distanceKm: Number(dist.toFixed(1)),
+        etaMinutes: eta,
+        score: match.score,
+        matchReason: match.matchReason,
+        isStabilizationOnly: match.isStabilizationOnly,
+        availableBeds: Number(hData.availableBeds ?? 14),
+        availableIcuBeds: Number(hData.availableIcuBeds ?? 5),
+      });
+    }
+  }
+
+  if (candidateList.length === 0) {
+    candidateList.push(
+      {
+        hospitalId: "hosp-medanta-prayagraj",
+        name: "Medanta Hospital Prayagraj",
+        phone: "+91-532-2460108",
+        location: { latitude: 25.4538, longitude: 81.854 },
+        distanceKm: 2.2,
+        etaMinutes: 6,
+        score: 95,
+        matchReason: "Level-1 Multi-Specialty Trauma Center & Cath Lab Ready",
+        isStabilizationOnly: false,
+        availableBeds: 18,
+        availableIcuBeds: 5,
+      },
+      {
+        hospitalId: "hosp-srn-prayagraj",
+        name: "Swaroop Rani Nehru (SRN) Hospital Prayagraj",
+        phone: "+91-532-2256050",
+        location: { latitude: 25.4484, longitude: 81.846 },
+        distanceKm: 3.1,
+        etaMinutes: 8,
+        score: 88,
+        matchReason: "Government Medical College Emergency Trauma Center",
+        isStabilizationOnly: false,
+        availableBeds: 35,
+        availableIcuBeds: 8,
+      },
+      {
+        hospitalId: "hosp-kamla-nehru",
+        name: "Kamla Nehru Memorial Hospital Prayagraj",
+        phone: "+91-532-2466666",
+        location: { latitude: 25.4350, longitude: 81.8380 },
+        distanceKm: 3.8,
+        etaMinutes: 10,
+        score: 80,
+        matchReason: "Specialized Tertiary Emergency Care & Inpatient Facilities",
+        isStabilizationOnly: false,
+        availableBeds: 24,
+        availableIcuBeds: 4,
+      },
+    );
+  }
+
+  candidateList.sort((a, b) => b.score - a.score);
+
+  return {
+    candidates: candidateList.map((c, idx) => ({
+      ...c,
+      rank: idx + 1,
+      status: idx === 0 ? ("ALERTED" as const) : ("QUEUED_STANDBY" as const),
+    })),
+    hasEquippedFacilityNearby,
+  };
+}
+
 function getFirestore() {
   if (!firestore) {
     throw new AppError(
@@ -282,6 +407,8 @@ export async function createEmergency(
         incidentType: input.incidentType,
         symptoms: symptomsList,
         description: input.description || "",
+        imageBase64: input.imageBase64 || (input as any).image,
+        imageMimeType: (input as any).imageMimeType || "image/jpeg",
       });
     } catch (e) {
       console.warn("[createEmergency] analyzeEmergency fallback:", e);
@@ -318,109 +445,18 @@ export async function createEmergency(
       const reqCaps = ((emergency.aiResult as any)?.requiredCapabilities as string[]) || ["EMERGENCY_ROOM", "TRAUMA_BAY"];
       const specialtyNeeded = ((emergency.aiResult as any)?.specialtyNeeded as string) || "GENERAL";
 
-      const candidateList: any[] = [];
-      const allHospitalsSnap = await db.collection("hospitals").get();
-
-      // Pre-check if any equipped hospital is within Golden Hour corridor (< 25km)
-      let hasEquippedFacilityNearby = false;
-      if (allHospitalsSnap && !allHospitalsSnap.empty) {
-        for (const hDoc of allHospitalsSnap.docs) {
-          if (hDoc.id.startsWith("test-")) continue;
-          const hData = hDoc.data();
-          const hLoc = hData.location || { latitude: hData.latitude || 25.4538, longitude: hData.longitude || 81.854 };
-          const dist = calculateHaversineKm(emergency.location.latitude, emergency.location.longitude, hLoc.latitude, hLoc.longitude);
-          const facilities = (hData.facilities || []).map((f: any) => String(f).toLowerCase());
-          const hospName = String(hData.name || "").toLowerCase();
-          const isEquipped = (hData.availableIcuBeds ?? 0) > 0 || facilities.some((f: string) => f.includes("icu") || f.includes("cath") || f.includes("trauma")) || hospName.includes("medanta") || hospName.includes("srn");
-          if (dist <= 25 && isEquipped) {
-            hasEquippedFacilityNearby = true;
-            break;
-          }
-        }
-      }
-
-      if (allHospitalsSnap && !allHospitalsSnap.empty) {
-        for (const hDoc of allHospitalsSnap.docs) {
-          if (hDoc.id.startsWith("test-")) continue;
-          const hData = hDoc.data();
-          const vStatus = String(hData.verificationStatus || "").toUpperCase();
-          if (vStatus === "REJECTED") continue;
-
-          const hLoc = hData.location || {
-            latitude: hData.latitude || 25.4538,
-            longitude: hData.longitude || 81.854,
-          };
-          const dist = calculateHaversineKm(
-            emergency.location.latitude,
-            emergency.location.longitude,
-            hLoc.latitude,
-            hLoc.longitude,
-          );
-          const eta = Math.max(4, Math.round(dist * 2.5));
-
-          const match = computeHospitalMatchScore(
-            hData,
-            dist,
-            reqCaps,
-            specialtyNeeded,
-            emergency.severity || "MEDIUM",
-            hasEquippedFacilityNearby,
-          );
-
-          candidateList.push({
-            hospitalId: hDoc.id,
-            name: hData.name || "Hospital Emergency Wing",
-            phone: hData.phone || hData.emergencyContact || "+91-532-2460108",
-            location: hLoc,
-            distanceKm: Number(dist.toFixed(1)),
-            etaMinutes: eta,
-            score: match.score,
-            matchReason: match.matchReason,
-            isStabilizationOnly: match.isStabilizationOnly,
-            availableBeds: Number(hData.availableBeds ?? 14),
-            availableIcuBeds: Number(hData.availableIcuBeds ?? 5),
-          });
-        }
-      }
-
-      // If Prayagraj hospitals not yet initialized in Firestore, guarantee high-priority emergency ER candidates
-      if (candidateList.length === 0) {
-        candidateList.push(
-          {
-            hospitalId: "hosp-medanta-prayagraj",
-            name: "Medanta Hospital Prayagraj",
-            phone: "+91-532-2460108",
-            location: { latitude: 25.4538, longitude: 81.854 },
-            distanceKm: 2.2,
-            etaMinutes: 6,
-            score: 95,
-            availableBeds: 18,
-            availableIcuBeds: 5,
-          },
-          {
-            hospitalId: "hosp-srn-prayagraj",
-            name: "Swaroop Rani Nehru (SRN) Hospital Prayagraj",
-            phone: "+91-532-2256050",
-            location: { latitude: 25.4484, longitude: 81.846 },
-            distanceKm: 3.1,
-            etaMinutes: 8,
-            score: 88,
-            availableBeds: 35,
-            availableIcuBeds: 8,
-          },
+      const { candidates: rankedCandidates, hasEquippedFacilityNearby } =
+        await rankCandidateHospitalsForLocation(
+          emergency.location.latitude,
+          emergency.location.longitude,
+          reqCaps,
+          specialtyNeeded,
+          emergency.severity || "MEDIUM",
         );
-      }
 
-      // Sort candidate hospitals by score descending
-      candidateList.sort((a, b) => b.score - a.score);
-
-      // Rank candidate hospitals
-      const rankedCandidates = candidateList.map((c, idx) => ({
-        ...c,
-        rank: idx + 1,
-        status: idx === 0 ? ("ALERTED" as const) : ("QUEUED_STANDBY" as const),
-        alertedAt: idx === 0 ? now : null,
-      }));
+      rankedCandidates.forEach((c) => {
+        if (c.rank === 1) (c as any).alertedAt = now;
+      });
 
       const topRank = rankedCandidates[0];
       const isRuralStabilization = topRank.isStabilizationOnly && !hasEquippedFacilityNearby;
@@ -910,3 +946,42 @@ export async function updateEmergency(
     ...allowedUpdates,
   };
 }
+
+export async function listUserEmergencies(
+  requesterId: string,
+  requesterRole?: string,
+): Promise<Emergency[]> {
+  const db = getFirestore();
+  const normRole = (requesterRole || "").toLowerCase();
+
+  let query: FirebaseFirestore.Query = db.collection(EMERGENCIES_COLLECTION);
+
+  if (normRole.includes("admin")) {
+    // Admin sees all
+    query = query.limit(50);
+  } else if (normRole.includes("hospital")) {
+    query = query.where("assignedHospitalId", "==", requesterId).limit(50);
+  } else if (normRole.includes("ambulance") || normRole.includes("driver")) {
+    query = query.where("assignedDriverId", "==", requesterId).limit(50);
+  } else {
+    // Default to reporter (patient)
+    query = query.where("reporterId", "==", requesterId).limit(50);
+  }
+
+  const snap = await query.get();
+  const emergencies: Emergency[] = [];
+  snap.forEach((doc) => {
+    emergencies.push({
+      id: doc.id,
+      ...(doc.data() as Omit<Emergency, "id">),
+    });
+  });
+
+  emergencies.sort((a, b) => {
+    const timeA = new Date(String((a as any).createdAt || 0)).getTime();
+    const timeB = new Date(String((b as any).createdAt || 0)).getTime();
+    return timeB - timeA;
+  });
+
+  return emergencies;
+}

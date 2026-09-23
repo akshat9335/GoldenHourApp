@@ -20,7 +20,8 @@ CLINICAL TRIAGE & CAPABILITY MATCHING GUIDELINES:
    - Neurological (stroke symptoms, sudden paralysis, unconsciousness) -> ["ICU", "CT_SCAN", "NEURO_TEAM"], specialty: "NEUROLOGY"
    - Animal / Dog bite (dog bite, animal bite, kutta kaatna, rabies risk) -> ["EMERGENCY_ROOM", "WOUND_CARE", "RABIES_VACCINE"], specialty: "GENERAL", severity: "MEDIUM" (NO ICU required unless airway compromised)
    - Pediatric / Burn / Respiratory -> appropriately specialized capabilities.
-3. Fail-Safe Principle: If input is empty, minimal, or ambiguous during an emergency SOS, FAIL-SAFE TO "CRITICAL" with requiredCapabilities: ["EMERGENCY_ROOM", "TRAUMA_BAY", "ICU_STANDBY"], specialty: "GENERAL".
+3. Multimodal Image Assessment: If an emergency photo is attached, visually evaluate the injury scene (active bleeding, wound depth, dog bite punctures, burns, fractures, consciousness) in conjunction with any text description. If text is brief or absent, rely directly on visual findings.
+4. Fail-Safe Principle: If input is empty, minimal, or ambiguous without visible minor indicators, FAIL-SAFE TO "CRITICAL" with requiredCapabilities: ["EMERGENCY_ROOM", "TRAUMA_BAY", "ICU_STANDBY"], specialty: "GENERAL".
 
 Return exactly:
 {

@@ -5,6 +5,7 @@ import {
   createEmergency,
   getEmergencyById,
   updateEmergency,
+  listUserEmergencies,
   CreateEmergencyInput,
 } from "../services/emergencies/emergency.service";
 
@@ -103,3 +104,22 @@ export async function updateEmergencyController(
     next(err);
   }
 }
+
+export async function listUserEmergenciesController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const uid = getUserUid(req);
+    const emergencies = await listUserEmergencies(uid, req.user?.role);
+
+    sendSuccess(
+      res,
+      emergencies,
+      "Emergencies retrieved successfully.",
+    );
+  } catch (err) {
+    next(err);
+  }
+}

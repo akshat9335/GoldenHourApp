@@ -24,8 +24,10 @@ export default function PatientInfo() {
   const locationAddress = useAppStore((s) => s.locationAddress);
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
 
+  const userEstimatedSeverity = useAppStore((s) => s.userEstimatedSeverity);
+  const setUserEstimatedSeverity = useAppStore((s) => s.setUserEstimatedSeverity);
+
   const [who, setWho] = useState('Myself');
-  const [severity, setSeverity] = useState('Moderate');
   const [refreshingGps, setRefreshingGps] = useState(false);
 
   // Area Selection Modal State
@@ -117,7 +119,7 @@ export default function PatientInfo() {
       <InputGroup label="Estimated severity (your view)">
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {['Mild', 'Moderate', 'Severe'].map((s) => (
-            <Chip key={s} label={s} selected={severity === s} onPress={() => setSeverity(s)} />
+            <Chip key={s} label={s} selected={userEstimatedSeverity === s} onPress={() => setUserEstimatedSeverity(s)} />
           ))}
         </View>
       </InputGroup>

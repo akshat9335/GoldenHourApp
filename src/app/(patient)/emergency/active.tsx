@@ -66,11 +66,17 @@ export default function Active() {
         if (mounted && emg) {
           setEmergency(emg);
           const statusKey = String(emg.tripStatus || emg.status || '').toUpperCase();
+          if (statusKey === 'COMPLETED' || emg.status === 'COMPLETED' || emg.tripStatus === 'COMPLETED') {
+            if (timer) clearInterval(timer);
+            router.replace('/(patient)/emergency/completed');
+            return;
+          }
           const stepIndex = BACKEND_STEP_MAP[statusKey] ?? BACKEND_STEP_MAP[String(emg.status || '').toUpperCase()];
           if (stepIndex !== undefined && stepIndex !== ambStatus) {
             setAmbStatus(stepIndex);
-            if (stepIndex >= AMB_STEPS.length - 1 || emg.status === 'COMPLETED') {
+            if (stepIndex >= AMB_STEPS.length - 1) {
               if (timer) clearInterval(timer);
+              router.replace('/(patient)/emergency/completed');
             }
           }
         }
@@ -268,6 +274,74 @@ export default function Active() {
           </View>
         </Card>
       </View>
+
+      {/* Top 3 AI-Matched Hospitals (Live Network View) */}
+      {(() => {
+        const candidateHospitals: any[] =
+          (emergency?.hospitalCandidates && emergency.hospitalCandidates.length > 0)
+            ? emergency.hospitalCandidates
+            : useAppStore.getState().candidateHospitals || [];
+
+        if (candidateHospitals.length === 0) return null;
+
+        return (
+          <View style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: colors.inkFaint, letterSpacing: 0.5 }}>
+                TOP 3 AI-MATCHED HOSPITALS
+              </Text>
+              <Pill color="blue">TRIAGE NETWORK</Pill>
+            </View>
+            {candidateHospitals.slice(0, 3).map((hosp: any, idx: number) => {
+              const isAlerted =
+                (emergency?.assignedHospitalName && (emergency.assignedHospitalName.includes(hosp.name) || hosp.name.includes(emergency.assignedHospitalName))) ||
+                (emergency?.alertedHospitalName && (emergency.alertedHospitalName.includes(hosp.name) || hosp.name.includes(emergency.alertedHospitalName))) ||
+                idx === (emergency?.alertedCandidateIndex ?? 0);
+
+              return (
+                <Card
+                  key={hosp.hospitalId || hosp.id || idx}
+                  style={{
+                    padding: 10,
+                    marginBottom: 8,
+                    borderWidth: 1.5,
+                    borderColor: isAlerted ? colors.red : colors.line,
+                    backgroundColor: isAlerted ? '#FFFDFD' : '#FAFAFA',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Pill color={isAlerted ? 'red' : 'grey'}>
+                          {isAlerted ? '★ ALERT ACTIVE' : `STANDBY #${idx + 1}`}
+                        </Pill>
+                        <Pill color="success">{hosp.score || 85}% MATCH</Pill>
+                      </View>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink, marginTop: 4 }}>
+                        {hosp.name}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.red }}>
+                      {hosp.distanceKm || 2} km · ~{hosp.etaMinutes || 6} min
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: colors.inkSoft, marginTop: 4 }}>
+                    {hosp.matchReason || 'Equipped emergency response center.'}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+                    <Text style={{ fontSize: 10.5, color: colors.inkFaint }}>
+                      🛏️ Beds: <Text style={{ fontWeight: '700', color: colors.ink }}>{hosp.availableBeds ?? 14}</Text>
+                    </Text>
+                    <Text style={{ fontSize: 10.5, color: colors.inkFaint }}>
+                      🚨 ICU: <Text style={{ fontWeight: '700', color: colors.red }}>{hosp.availableIcuBeds ?? 4}</Text>
+                    </Text>
+                  </View>
+                </Card>
+              );
+            })}
+          </View>
+        );
+      })()}
 
       {/* Transit First Aid Micro-Guidance (Interactive AI) */}
       <TouchableOpacity

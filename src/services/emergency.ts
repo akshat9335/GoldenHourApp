@@ -42,6 +42,8 @@ export async function triggerCanonicalEmergencySOS(
       description,
       voiceTranscript,
       imageUrl,
+      imageBase64: store.accidentPhotoBase64 || null,
+      imageMimeType: store.accidentPhotoBase64 ? 'image/jpeg' : null,
       location: loc,
       locationAddress: store.locationAddress || null,
       severity: store.aiSeverity ? store.aiSeverity.toUpperCase() : null,

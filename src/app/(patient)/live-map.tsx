@@ -70,9 +70,11 @@ export default function LiveMap() {
           setEmergency(data);
           setAuthError(null);
 
-          if (data.status === 'COMPLETED') {
+          if (data.status === 'COMPLETED' || data.tripStatus === 'COMPLETED') {
             setIsLiveActive(false);
             if (pollTimer) clearInterval(pollTimer);
+            router.replace('/(patient)/emergency/completed');
+            return;
           }
         }
       } catch (err: any) {

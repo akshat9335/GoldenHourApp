@@ -16,6 +16,7 @@ export default function AmbulanceDashboard() {
   const [onDuty, setOnDuty] = useState(true);
   const [tripCount, setTripCount] = useState(0);
   const [requests, setRequests] = useState<any[]>([]);
+  const [completedMissions, setCompletedMissions] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTrip, setActiveTrip] = useState<any | null>(null);
@@ -47,7 +48,7 @@ export default function AmbulanceDashboard() {
         useAppStore.getState().setUserProfile(profRes);
       }
 
-      if (Array.isArray(tripsRes)) {
+        if (Array.isArray(tripsRes)) {
         setTripCount(tripsRes.length);
         const inProgress = tripsRes.find((t: any) => {
           const s = String(t.status || '').toUpperCase();
@@ -63,6 +64,11 @@ export default function AmbulanceDashboard() {
             s === 'AT_HOSPITAL'
           );
         });
+
+        const finished = tripsRes.filter((t: any) => String(t.status || '').toUpperCase() === 'COMPLETED');
+        finished.sort((a: any, b: any) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0).getTime() - new Date(a.completedAt || a.updatedAt || a.createdAt || 0).getTime());
+        setCompletedMissions(finished);
+
         if (inProgress) {
           setActiveTrip(inProgress);
           setActiveTripId(inProgress.id || inProgress._id);
@@ -444,6 +450,25 @@ export default function AmbulanceDashboard() {
           <Text style={styles.offlineTitle}>Crew is Currently Offline</Text>
           <Text style={styles.offlineSub}>Toggle ON DUTY above to receive emergency dispatch alerts.</Text>
         </Card>
+      )}
+
+      {completedMissions.length > 0 && (
+        <View style={{ marginBottom: 16 }}>
+          <LabelEyebrow>COMPLETED RESCUE MISSIONS ({completedMissions.length})</LabelEyebrow>
+          {completedMissions.slice(0, 5).map((trip: any, idx: number) => (
+            <Card key={trip.id || trip._id || idx} style={{ padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#86EFAC', backgroundColor: '#F0FDF4' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>
+                  Mission #{String(trip.id || trip._id || idx).slice(-6).toUpperCase()} · {trip.incidentType || 'Emergency Rescue'}
+                </Text>
+                <Pill color="success">COMPLETED</Pill>
+              </View>
+              <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 4 }}>
+                Hospital: {trip.hospitalName || 'Emergency ER'} · Patient Handed Over Safely
+              </Text>
+            </Card>
+          ))}
+        </View>
       )}
 
       <LabelEyebrow>SHIFT SUMMARY</LabelEyebrow>

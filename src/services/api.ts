@@ -88,11 +88,14 @@ export const api = {
 
   // Canonical Emergencies
   emergencies: {
+    list: () => request<any[]>('/emergencies'),
     create: (input: {
       incidentType: string;
       description?: string | null;
       voiceTranscript?: string | null;
       imageUrl?: string | null;
+      imageBase64?: string | null;
+      imageMimeType?: string | null;
       location: { latitude: number; longitude: number };
       locationAddress?: string | null;
       severity?: string | null;
@@ -118,6 +121,16 @@ export const api = {
 
   // Hospitals & Capacity
   hospitals: {
+    matchCandidates: (data: {
+      latitude: number;
+      longitude: number;
+      requiredCapabilities?: string[];
+      specialtyNeeded?: string;
+      severity?: string;
+    }) => request<{ candidates: any[]; hasEquippedFacilityNearby: boolean }>('/hospitals/match-candidates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
     register: (data: any) => request('/hospitals/register', { method: 'POST', body: JSON.stringify(data) }),
     getProfile: () => request('/hospitals/me'),
     updateProfile: (data: any) => request('/hospitals/me', { method: 'PATCH', body: JSON.stringify(data) }),

@@ -42,6 +42,8 @@ export interface EmergencyInput {
   bleeding?: BleedingInfo;
   location?: LocationInfo;
   notes?: string;
+  imageBase64?: string;
+  imageMimeType?: string;
 }
 
 export interface TriageResult {

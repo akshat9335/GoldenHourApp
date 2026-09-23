@@ -88,6 +88,14 @@ export function validateEmergencyInput(input: unknown): EmergencyInput {
     throw invalidInput("notes must be a string.");
   }
 
+  const rawImg = (input as any).imageBase64 || (input as any).image || (input as any).imageData;
+  if (rawImg && typeof rawImg === "string") {
+    (input as any).imageBase64 = rawImg;
+  }
+  if ((input as any).imageMimeType && typeof (input as any).imageMimeType === "string") {
+    (input as any).imageMimeType = (input as any).imageMimeType;
+  }
+
   return input as unknown as EmergencyInput;
 }
 

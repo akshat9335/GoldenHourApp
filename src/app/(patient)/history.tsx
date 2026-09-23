@@ -1,31 +1,139 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, RefreshControl, ScrollView } from 'react-native';
 import { router } from 'expo-router';
-import { colors } from '@/constants/theme';
-import { Screen, TopBar, Card, Pill, PatientNav } from '@/components/ui';
-
-const ITEMS: Array<[string, string, string, string, any, string]> = [
-  ['Accident', 'Sep 2, 2026', "St. Martha's Hospital", 'HIGH', 'orange', 'Completed'],
-  ['Chest Pain Assessment', 'Aug 14, 2026', '—', 'MEDIUM', 'amber', 'Resolved via AI'],
-];
+import { colors, severityPillColor } from '@/constants/theme';
+import { Screen, TopBar, Card, Pill, PatientNav, Icon } from '@/components/ui';
+import { api } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 
 export default function History() {
+  const [emergencies, setEmergencies] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const setEmergencyId = useAppStore((s) => s.setEmergencyId);
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const data = await api.emergencies.list();
+      if (Array.isArray(data)) {
+        setEmergencies(data);
+      }
+    } catch (err) {
+      console.warn('Failed to load emergencies list:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchHistory();
+  };
+
+  const formatDate = (isoString?: string) => {
+    if (!isoString) return 'Recent';
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return isoString;
+    }
+  };
+
+  const getStatusInfo = (status?: string) => {
+    const s = String(status || 'PENDING').toUpperCase();
+    if (s === 'COMPLETED') return { label: 'SUCCESSFULLY COMPLETED', color: 'success' as const };
+    if (s === 'REJECTED' || s === 'CANCELLED') return { label: s, color: 'grey' as const };
+    if (s.includes('HOSPITAL') || s.includes('EN_ROUTE') || s.includes('ARRIV') || s.includes('PATIENT')) {
+      return { label: 'ACTIVE IN PROGRESS', color: 'blue' as const };
+    }
+    return { label: s, color: 'amber' as const };
+  };
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Screen>
         <TopBar title="Emergency History" back={false} />
-        {ITEMS.map((it) => (
-          <Pressable key={it[0]} onPress={() => router.push('/history-detail')}>
-            <Card style={styles.card}>
-              <View style={styles.rowTop}>
-                <Text style={styles.title}>{it[0]}</Text>
-                <Pill color={it[4]}>{it[3]}</Pill>
-              </View>
-              <Text style={styles.sub}>{it[1]} · {it[2]}</Text>
-              <View style={{ marginTop: 8 }}><Pill color="grey">{it[5]}</Pill></View>
-            </Card>
-          </Pressable>
-        ))}
+
+        {loading ? (
+          <View style={{ padding: 40, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={colors.red} />
+            <Text style={{ marginTop: 12, color: colors.inkSoft, fontSize: 13 }}>
+              Loading emergency logs...
+            </Text>
+          </View>
+        ) : emergencies.length === 0 ? (
+          <Card style={styles.emptyCard}>
+            <Icon name="history" size={36} color={colors.inkFaint} />
+            <Text style={styles.emptyTitle}>No Emergency Records Yet</Text>
+            <Text style={styles.emptySub}>
+              All emergency dispatches, AI triage assessments, and hospital admissions will be logged here.
+            </Text>
+          </Card>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            contentContainerStyle={{ paddingBottom: 24 }}
+          >
+            {emergencies.map((emg) => {
+              const statusInfo = getStatusInfo(emg.status);
+              const hospName =
+                emg.assignedHospitalName ||
+                emg.alertedHospitalName ||
+                (emg.hospitalCandidates && emg.hospitalCandidates[0]?.name) ||
+                'Verified Emergency Hospital';
+              const sev = String(emg.severity || 'HIGH').toLowerCase();
+              const dateText = formatDate(emg.createdAt);
+
+              return (
+                <Pressable
+                  key={emg.id}
+                  onPress={() => {
+                    setEmergencyId(emg.id);
+                    if (emg.status === 'COMPLETED') {
+                      router.push('/(patient)/emergency/completed');
+                    } else {
+                      router.push('/(patient)/emergency/active');
+                    }
+                  }}
+                >
+                  <Card style={styles.card}>
+                    <View style={styles.rowTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.title}>{emg.incidentType || 'Emergency Incident'}</Text>
+                        <Text style={styles.sub}>{dateText} · {hospName}</Text>
+                      </View>
+                      <Pill color={severityPillColor(sev as any)}>
+                        {String(emg.severity || 'HIGH').toUpperCase()}
+                      </Pill>
+                    </View>
+
+                    <View style={styles.bottomRow}>
+                      <Pill color={statusInfo.color}>{statusInfo.label}</Pill>
+                      {emg.assignedAmbulanceId && (
+                        <Text style={styles.unitText}>
+                          🚑 Unit: {emg.assignedAmbulanceId}
+                        </Text>
+                      )}
+                    </View>
+                  </Card>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
       </Screen>
       <PatientNav active="/(patient)/history" />
     </View>
@@ -33,8 +141,13 @@ export default function History() {
 }
 
 const styles = StyleSheet.create({
-  card: { padding: 14, marginBottom: 10 },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  title: { fontWeight: '700', fontSize: 13, color: colors.ink },
-  sub: { fontSize: 11, color: colors.inkFaint, marginTop: 6 },
+  card: { padding: 14, marginBottom: 12, borderWidth: 1.5, borderColor: colors.line },
+  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  title: { fontWeight: '700', fontSize: 14, color: colors.ink },
+  sub: { fontSize: 11.5, color: colors.inkFaint, marginTop: 4 },
+  bottomRow: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  unitText: { fontSize: 11, fontWeight: '600', color: colors.inkSoft },
+  emptyCard: { padding: 32, alignItems: 'center', marginVertical: 20, borderWidth: 1.5, borderColor: colors.line },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.ink, marginTop: 14 },
+  emptySub: { fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 6, lineHeight: 18 },
 });

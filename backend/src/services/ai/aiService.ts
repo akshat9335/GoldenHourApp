@@ -111,8 +111,15 @@ export async function analyzeEmergency(input: unknown): Promise<TriageResult> {
     result = heuristicResult(validated, "mock");
   } else {
     try {
+      const imagePart = validated.imageBase64
+        ? {
+            mimeType: validated.imageMimeType || "image/jpeg",
+            data: validated.imageBase64.replace(/^data:[^;]+;base64,/, ""),
+          }
+        : undefined;
+
       result = parseTriageResponse(
-        await requestGemini(buildTriagePrompt(validated)),
+        await requestGemini(buildTriagePrompt(validated), imagePart),
       );
     } catch (err: any) {
       console.error("[analyzeEmergency] Gemini call failed:", err?.message || err);

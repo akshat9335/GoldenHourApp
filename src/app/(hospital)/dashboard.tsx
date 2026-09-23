@@ -15,6 +15,7 @@ export default function HospitalDashboard() {
   const [pendingEmergency, setPendingEmergency] = useState<any | null>(null);
   const [activeInbound, setActiveInbound] = useState<any[]>([]);
   const [criticalCount, setCriticalCount] = useState<number>(0);
+  const [completedCases, setCompletedCases] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const [capacity, setCapacity] = useState({
@@ -102,8 +103,17 @@ export default function HospitalDashboard() {
         });
         pending.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         inbound.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+        
+        const completed = items.filter((d: any) => {
+          const s = String(d.status || '').toUpperCase();
+          const ts = String(d.tripStatus || '').toUpperCase();
+          return s === 'COMPLETED' || s === 'RESOLVED' || ts === 'COMPLETED';
+        });
+        completed.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+
         setCriticalCount(pending.length);
         setActiveInbound(inbound);
+        setCompletedCases(completed);
         if (pending.length > 0) {
           setPendingEmergency(pending[0]);
         } else {
@@ -345,6 +355,25 @@ export default function HospitalDashboard() {
             <Pill color="success">Available</Pill>
           </View>
         </Card>
+
+        {completedCases.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <LabelEyebrow>RESOLVED / COMPLETED EMERGENCY CASES ({completedCases.length})</LabelEyebrow>
+            {completedCases.slice(0, 5).map((item, idx) => (
+              <Card key={item.requestId || item.id || idx} style={{ padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#86EFAC', backgroundColor: '#F0FDF4' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>
+                    {item.patientName || 'Emergency Patient'} · {item.incidentType || 'Trauma'}
+                  </Text>
+                  <Pill color="success">RESOLVED</Pill>
+                </View>
+                <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 4 }}>
+                  Unit {item.assignedAmbulanceId || '108'} · Pilot: {item.assignedDriverName || 'Assigned Pilot'}
+                </Text>
+              </Card>
+            ))}
+          </View>
+        )}
 
         <LabelEyebrow>HOSPITAL AMBULANCE FLEET</LabelEyebrow>
         <Pressable onPress={() => router.push('/(hospital)/fleet')}>

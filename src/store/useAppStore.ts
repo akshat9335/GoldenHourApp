@@ -40,12 +40,18 @@ interface AppState {
 
   aiSeverity: Severity;
   setAiSeverity: (s: Severity) => void;
+  userEstimatedSeverity: string;
+  setUserEstimatedSeverity: (s: string) => void;
+  aiAssessedSeverity: string | null;
+  setAiAssessedSeverity: (s: string | null) => void;
 
   ambStatus: number; // index into AMB_STEPS
   setAmbStatus: (n: number | ((prev: number) => number)) => void;
 
   selectedHospital: string;
   setSelectedHospital: (h: string) => void;
+  candidateHospitals: any[];
+  setCandidateHospitals: (h: any[]) => void;
 
   // --- Consult Doctor (patient side) ---
   selectedSpecialty: string;
@@ -153,6 +159,10 @@ export const useAppStore = create<AppState>((set) => ({
 
   aiSeverity: 'medium',
   setAiSeverity: (s) => set({ aiSeverity: s }),
+  userEstimatedSeverity: 'Moderate',
+  setUserEstimatedSeverity: (s) => set({ userEstimatedSeverity: s }),
+  aiAssessedSeverity: null,
+  setAiAssessedSeverity: (s) => set({ aiAssessedSeverity: s }),
 
   ambStatus: 0,
   setAmbStatus: (n) =>
@@ -160,6 +170,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   selectedHospital: '',
   setSelectedHospital: (h) => set({ selectedHospital: h }),
+  candidateHospitals: [],
+  setCandidateHospitals: (h) => set({ candidateHospitals: h }),
 
   resetEmergencySession: () =>
     set({
@@ -172,9 +184,12 @@ export const useAppStore = create<AppState>((set) => ({
       aiTriageResult: null,
       aiImageResult: null,
       aiSeverity: 'medium',
+      userEstimatedSeverity: 'Moderate',
+      aiAssessedSeverity: null,
       ambStatus: 0,
       activeTripId: null,
       activeHospitalRequestId: null,
+      candidateHospitals: [],
     }),
 
   selectedSpecialty: 'All',
