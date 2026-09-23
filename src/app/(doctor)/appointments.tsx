@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
-import { Screen, TopBar, Card, Pill, Chip, DoctorNav } from '@/components/ui';
+import { Screen, TopBar, Card, Pill, Chip, DoctorNav, Button } from '@/components/ui';
 import { APPOINTMENTS } from '@/constants/doctorData';
 
 const TABS = ['Today', 'Upcoming', 'Completed', 'Cancelled'] as const;
@@ -41,6 +42,15 @@ export default function DoctorAppointments() {
                 <Pill color={tabColor[a.status]}>{a.status.toUpperCase()}</Pill>
               </View>
               <Text style={styles.sub}>Token #{a.token} · {a.date}, {a.time}</Text>
+              {a.status !== 'cancelled' && (
+                <View style={{ marginTop: 10 }}>
+                  <Button
+                    title="📹 Start Video Consultation"
+                    variant="success"
+                    onPress={() => router.push(`/(doctor)/teleconsultation/tc_${a.token}` as any)}
+                  />
+                </View>
+              )}
             </Card>
           ))
         )}

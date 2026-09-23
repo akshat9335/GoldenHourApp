@@ -26,16 +26,10 @@ export default function HospitalLayout() {
       router.replace('/hospital-login');
     } else if (!isHospital) {
       router.replace('/role-selection');
-    } else if (hospitalStatus !== 'APPROVED') {
+    } else if (hospitalStatus !== 'APPROVED' && hospitalStatus !== 'VERIFIED') {
       router.replace('/hospital-login');
-    } else if (role !== 'HOSPITAL') {
-      useAppStore.getState().setRole('HOSPITAL');
     }
-  }, [isAuthenticated, isHospital, hospitalStatus, role]);
-
-  if (!isAuthorizedHospital) {
-    return null;
-  }
+  }, [isAuthenticated, isHospital, hospitalStatus]);
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

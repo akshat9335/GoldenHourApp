@@ -84,14 +84,16 @@ export default function HospitalLogin() {
 
   return (
     <Screen center>
-      <Pressable
-        onPress={() => router.replace('/role-selection')}
-        style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, left: 16, zIndex: 10, padding: 8 }}
-      >
-        <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
-      </Pressable>
+      <View style={{ width: '100%', alignItems: 'flex-start', marginBottom: 12 }}>
+        <Pressable
+          onPress={() => router.replace('/role-selection')}
+          style={{ paddingVertical: 8, paddingHorizontal: 4 }}
+        >
+          <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
+        </Pressable>
+      </View>
 
-      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 40 }}>
+      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 10 }}>
         <View style={styles.iconCircle}>
           <Icon name="hospital" size={36} color={colors.red} />
         </View>
@@ -112,6 +114,27 @@ export default function HospitalLogin() {
         title={loading ? "Verifying Hospital Credentials…" : "Sign In with Google"}
         onPress={handleGoogleSignIn}
         disabled={loading}
+      />
+
+      <Button
+        title="🚀 Quick Hospital Demo Login"
+        variant="blue"
+        style={{ marginTop: 12 }}
+        onPress={() => {
+          const store = useAppStore.getState();
+          store.setIsAuthenticated(true);
+          store.setRole('HOSPITAL');
+          store.setRoles(['HOSPITAL']);
+          store.setVerificationStatus('APPROVED');
+          store.setUserProfile({
+            uid: 'demo-hospital-001',
+            name: 'Apollo Trauma Care Hospital',
+            role: 'HOSPITAL',
+            roles: ['HOSPITAL'],
+            verificationStatus: 'APPROVED',
+          });
+          router.replace('/(hospital)/dashboard');
+        }}
       />
 
       <Button

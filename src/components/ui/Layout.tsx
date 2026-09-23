@@ -26,6 +26,7 @@ export function Screen({
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bg }}
       refreshControl={refreshControl}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={[
         {
           paddingHorizontal: 18,

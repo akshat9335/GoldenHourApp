@@ -38,6 +38,11 @@ export default function AppointmentDetail() {
 
       {!cancelled && (
         <View style={{ gap: 8 }}>
+          <Button
+            title="📹 Start Video Consultation"
+            variant="success"
+            onPress={() => router.push(`/(patient)/teleconsultation/tc_${userToken ?? doctor.currentToken}` as any)}
+          />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button title="Get Directions" variant="blue" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/clinic-location')} />
             <Button title="View Queue" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/live-queue')} />

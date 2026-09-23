@@ -33,7 +33,7 @@ export async function initDeviceLocation(): Promise<Coordinates | null> {
     // 1. Instant Cache from AsyncStorage (<5ms)
     try {
       const saved = await AsyncStorage.getItem(STORAGE_KEY);
-      if (saved) {
+      if (saved && saved !== 'undefined' && saved !== 'null') {
         const parsed = JSON.parse(saved);
         if (parsed?.latitude && parsed?.longitude) {
           useAppStore.getState().setLastKnownLocation(parsed);

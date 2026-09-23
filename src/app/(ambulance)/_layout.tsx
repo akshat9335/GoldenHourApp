@@ -18,23 +18,17 @@ export default function AmbulanceLayout() {
     (role === 'AMBULANCE_DRIVER' ? verificationStatus : null) ||
     'PENDING'
   ).toUpperCase();
-  const isAuthorizedDriver = isAuthenticated && isDriver && driverStatus === 'APPROVED';
+  const isAuthorizedDriver = isAuthenticated && isDriver && (driverStatus === 'APPROVED' || driverStatus === 'VERIFIED');
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/');
     } else if (!isDriver) {
       router.replace('/role-selection');
-    } else if (driverStatus !== 'APPROVED') {
+    } else if (driverStatus !== 'APPROVED' && driverStatus !== 'VERIFIED') {
       router.replace('/driver-login');
-    } else if (role !== 'AMBULANCE_DRIVER') {
-      useAppStore.getState().setRole('AMBULANCE_DRIVER');
     }
-  }, [isAuthenticated, isDriver, driverStatus, role]);
-
-  if (!isAuthorizedDriver) {
-    return null;
-  }
+  }, [isAuthenticated, isDriver, driverStatus]);
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

@@ -3,7 +3,7 @@ import { Pressable, Text, StyleSheet, ActivityIndicator, ViewStyle, StyleProp } 
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, radii, shadow } from '@/constants/theme';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'blue';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'blue' | 'success';
 
 export function Button({
   title,
@@ -57,6 +57,7 @@ export function Button({
         variant === 'secondary' && styles.secondary,
         variant === 'ghost' && styles.ghost,
         variant === 'blue' && { backgroundColor: colors.blue },
+        variant === 'success' && { backgroundColor: colors.emerald || '#10B981' },
         pressed && styles.pressed,
         disabled && styles.disabled,
         style,
