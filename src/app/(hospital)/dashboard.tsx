@@ -292,7 +292,7 @@ export default function HospitalDashboard() {
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.actionBtnTextNav}>🧭 Track</Text>
+                      <Text style={styles.actionBtnTextNav}>📡 Live Track</Text>
                     </TouchableOpacity>
 
                     {driverPhone ? (

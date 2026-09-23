@@ -139,7 +139,7 @@ export default function NavigatePatient() {
   return (
     <View style={[styles.screen, { paddingTop: Math.max(insets.top, 16) }]}>
       <View style={styles.header}>
-        <TopBar title="En Route to Patient" back={true} onPressBack={() => router.replace('/(ambulance)/dashboard')} />
+        <TopBar title="📡 En Route to Patient" back={true} onPressBack={() => router.replace('/(ambulance)/dashboard')} />
       </View>
 
       <ScrollView

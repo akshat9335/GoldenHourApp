@@ -307,7 +307,7 @@ export default function HospitalRequestDetail() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={[styles.actionBtnTextBlue, { color: '#38BDF8' }]}>🗺️ Track Unit</Text>
+              <Text style={[styles.actionBtnTextBlue, { color: '#38BDF8' }]}>📡 Live Route</Text>
             </TouchableOpacity>
           ) : null}
         </View>

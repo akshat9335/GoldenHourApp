@@ -119,7 +119,7 @@ export default function PickedUp() {
 
   return (
     <Screen>
-      <TopBar title="Transit to Hospital" back={false} />
+      <TopBar title="📡 Transit to Hospital" back={false} />
 
       <Card style={styles.card}>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>

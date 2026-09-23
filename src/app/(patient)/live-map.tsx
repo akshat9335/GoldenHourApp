@@ -162,7 +162,7 @@ export default function LiveMap() {
     <View style={[styles.screen, { paddingTop: Math.max(insets.top, 16) }]}>
       <View style={styles.header}>
         <TopBar
-          title="Live Emergency GPS"
+          title="📡 Live Mission Updates"
           back={true}
           onPressBack={() => {
             if (activeId) {
@@ -195,7 +195,7 @@ export default function LiveMap() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <View style={[styles.pulseDot, { backgroundColor: isLiveActive ? '#10B981' : colors.inkFaint }]} />
                 <Text style={styles.statusHeadline}>
-                  {isLiveActive ? 'LIVE GPS STREAMING' : 'MISSION RESOLVED'}
+                  {isLiveActive ? 'LIVE UPDATES & GPS STREAMING' : 'MISSION RESOLVED'}
                 </Text>
               </View>
               <Pill color={isLiveActive ? 'red' : 'grey'}>{statusDisplay}</Pill>

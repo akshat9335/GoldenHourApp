@@ -321,7 +321,7 @@ export default function Active() {
       <View style={{ height: 10 }} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button
-          title="Track on Map (Live GPS)"
+          title="📡 Live Updates & Map"
           variant="secondary"
           onPress={() => router.push(emergencyId ? `/(patient)/live-map?emergencyId=${emergencyId}` : '/(patient)/live-map')}
         />

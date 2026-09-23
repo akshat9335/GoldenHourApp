@@ -327,22 +327,32 @@ export default function AmbulanceDashboard() {
           <Text style={styles.activeTripEmergency}>
             Emergency ID: {activeTrip.emergencyId?.slice(-6)?.toUpperCase() || 'ACTIVE'}
           </Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+          <View style={{ gap: 8, marginTop: 10 }}>
             <TouchableOpacity
-              style={[styles.resumeBtn, { flex: 1.3, marginTop: 0 }]}
+              style={styles.liveUpdateBtn}
               onPress={handleResumeTrip}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <Text style={styles.resumeBtnText}>Resume Mission →</Text>
+              <Text style={styles.liveUpdateBtnText}>📡 Live Updates & Route</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.endMissionBtn}
-              onPress={handleEndMission}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.endMissionBtnText}>End Mission</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.resumeBtn, { flex: 1.3, marginTop: 0 }]}
+                onPress={handleResumeTrip}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.resumeBtnText}>Resume Mission →</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.endMissionBtn}
+                onPress={handleEndMission}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.endMissionBtnText}>End Mission</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </Card>
       )}
@@ -522,8 +532,20 @@ const styles = StyleSheet.create({
   },
   activeTripStatus: { fontSize: 11, fontWeight: '700', color: colors.amber },
   activeTripEmergency: { fontSize: 13, fontWeight: '700', color: colors.ink, marginTop: 8 },
+  liveUpdateBtn: {
+    backgroundColor: '#0284C7',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liveUpdateBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 12.5,
+  },
   resumeBtn: {
-    marginTop: 10,
     backgroundColor: colors.amber,
     paddingVertical: 8,
     paddingHorizontal: 12,
