@@ -1108,9 +1108,9 @@ export async function rejectHospitalRequest(
   );
 
   const currentStatus = (requestData.status ??
-    "NEW") as HospitalEmergencyRequestStatus;
+    "NEW") as string;
 
-  if (currentStatus !== "NEW") {
+  if (currentStatus !== "NEW" && currentStatus !== "PENDING" && currentStatus !== "QUEUED_STANDBY") {
     throw new AppError(
       400,
       "INVALID_REQUEST_STATE",
