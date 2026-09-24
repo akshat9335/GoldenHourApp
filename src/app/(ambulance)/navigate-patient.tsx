@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/constants/theme';
@@ -34,12 +34,28 @@ export default function NavigatePatient() {
     const id = emergencyId || useAppStore.getState().emergencyId || params.emergencyId;
     if (!id) return;
     try {
-      const data = await api.emergencies.getById(id);
+      const data: any = await api.emergencies.getById(id);
       if (data) {
         setEmergency(data);
+        const st = String(data.status || '').toUpperCase();
+        const tripSt = String(data.tripStatus || '').toUpperCase();
+        if (st === 'COMPLETED' || tripSt === 'COMPLETED') {
+          useAppStore.getState().setActiveTripId(null);
+          useAppStore.getState().setEmergencyId(null);
+          Alert.alert('Mission Completed', 'The hospital has completed admission for this emergency.');
+          router.replace('/(ambulance)/dashboard');
+          return;
+        }
+        if (st === 'PATIENT_ARRIVED' || tripSt === 'AT_HOSPITAL') {
+          router.replace({
+            pathname: '/(ambulance)/hospital-arrival',
+            params: { emergencyId: id, tripId: activeTripId || params.tripId },
+          });
+          return;
+        }
       }
     } catch {}
-  }, [emergencyId, params.emergencyId]);
+  }, [emergencyId, params.emergencyId, activeTripId, params.tripId]);
 
   useEffect(() => {
     initDeviceLocation();

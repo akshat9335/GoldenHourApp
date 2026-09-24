@@ -66,29 +66,13 @@ export async function getAmbulanceRequests(
       ) {
         return false;
       }
-      // 1. HOSPITAL MUST ACCEPT FIRST!
-      // An ambulance driver should NEVER see an emergency before a hospital has accepted and dispatched it.
-      const hasHospitalAccepted = !!req.assignedHospitalId || st === "HOSPITAL_ACCEPTED" || st === "AMBULANCE_SEARCH";
-      if (!hasHospitalAccepted) {
-        return false;
-      }
+      // 1. Only show emergencies strictly awaiting an ambulance dispatch
+      const isAwaitingDispatch =
+        (st === "HOSPITAL_ACCEPTED" || st === "AMBULANCE_SEARCH") &&
+        !req.assignedDriverId &&
+        !req.assignedAmbulanceId;
 
-      // If already assigned to this driver, it is an active mission, not a pending alert in queue
-      if (req.assignedDriverId && req.assignedDriverId === driverUid) {
-        return false;
-      }
-      // If already assigned to another driver, exclude from this driver's queue
-      if (req.assignedDriverId && req.assignedDriverId !== driverUid) {
-        return false;
-      }
-      // If emergency is already en route/arrived/treated by someone else
-      if (
-        (st === "AMBULANCE_ASSIGNED" ||
-          st === "EN_ROUTE" ||
-          st === "PATIENT_ARRIVED" ||
-          st === "TREATMENT") &&
-        req.assignedDriverId !== driverUid
-      ) {
+      if (!isAwaitingDispatch) {
         return false;
       }
 

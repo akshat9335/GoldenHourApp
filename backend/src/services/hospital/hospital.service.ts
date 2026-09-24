@@ -432,7 +432,50 @@ async function transitionHospitalRequest(
       assignedHospitalName: hospData.name || "Emergency Trauma ER",
       assignedHospitalPhone: hospData.phone || null,
       assignedHospitalLocation: hospLoc,
+      ...(canonicalStatus === "COMPLETED" ? { etaMinutes: null, distanceKm: null, completedAt: now } : {}),
+      ...(canonicalStatus === "PATIENT_ARRIVED" ? { etaMinutes: null, distanceKm: null } : {}),
     });
+
+    // Keep Ambulance Trips, Driver availability, and Ambulance vehicle in sync with hospital status
+    try {
+      if (firestore && emergencyId) {
+        const tripsSnap = await firestore.collection("trips").where("emergencyId", "==", emergencyId).get();
+        for (const tripDoc of tripsSnap.docs) {
+          const tripData = tripDoc.data() || {};
+          if (tripData.status !== "COMPLETED") {
+            if (canonicalStatus === "PATIENT_ARRIVED" || canonicalStatus === "TREATMENT") {
+              await tripDoc.ref.update({
+                status: "AT_HOSPITAL",
+                hospitalArrivalTime: now,
+                updatedAt: now,
+              }).catch(() => {});
+            } else if (canonicalStatus === "COMPLETED") {
+              await tripDoc.ref.update({
+                status: "COMPLETED",
+                completedAt: now,
+                updatedAt: now,
+              }).catch(() => {});
+
+              if (tripData.driverId) {
+                await firestore.collection("drivers").doc(tripData.driverId).update({
+                  availability: "AVAILABLE",
+                  updatedAt: now,
+                }).catch(() => {});
+              }
+              if (tripData.ambulanceId) {
+                const ambSnap = await firestore.collection("ambulances").where("ambulanceId", "==", tripData.ambulanceId).get();
+                if (!ambSnap.empty) {
+                  await ambSnap.docs[0].ref.update({
+                    status: "AVAILABLE",
+                    updatedAt: now,
+                  }).catch(() => {});
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (_tripSyncErr) {}
   }
 
   return {

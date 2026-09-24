@@ -55,6 +55,24 @@ export default function PatientHome() {
     }).catch(() => {});
   }, []);
 
+  const emergencyId = useAppStore((s) => s.emergencyId);
+  const resetEmergencySession = useAppStore((s) => s.resetEmergencySession);
+
+  // Auto-clear active emergency banner and tracking if emergency has been resolved or cancelled
+  useEffect(() => {
+    if (emergencyId) {
+      api.emergencies.getById(emergencyId).then((emg) => {
+        const st = String(emg?.status || '').toUpperCase();
+        const tripSt = String(emg?.tripStatus || '').toUpperCase();
+        if (st === 'COMPLETED' || st === 'CANCELLED' || st === 'RESOLVED' || tripSt === 'COMPLETED' || !emg) {
+          resetEmergencySession();
+        }
+      }).catch(() => {
+        resetEmergencySession();
+      });
+    }
+  }, [emergencyId, resetEmergencySession]);
+
   const displayName = userProfile?.name || 'Golden Hour User';
   const firstName = displayName.split(' ')[0] || 'User';
   const initials = displayName
@@ -64,9 +82,6 @@ export default function PatientHome() {
     .join('')
     .slice(0, 2)
     .toUpperCase() || 'GH';
-
-  const emergencyId = useAppStore((s) => s.emergencyId);
-  const resetEmergencySession = useAppStore((s) => s.resetEmergencySession);
 
   const handleCancelActiveEmergency = () => {
     Alert.alert(

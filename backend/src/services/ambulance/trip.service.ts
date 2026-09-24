@@ -533,6 +533,28 @@ export async function getTripHistory(
     }
   } catch {}
 
+  // 4. Reconcile in-progress trips with underlying emergency status to prevent zombie active missions
+  for (const [id, trip] of tripMap.entries()) {
+    if (trip.status !== "COMPLETED" && trip.emergencyId) {
+      try {
+        const emSnap = await firestore!.collection("emergencies").doc(trip.emergencyId).get();
+        if (emSnap.exists) {
+          const emData = emSnap.data() || {};
+          const emSt = String(emData.status || "").toUpperCase();
+          const emTripSt = String(emData.tripStatus || "").toUpperCase();
+          if (emSt === "COMPLETED" || emSt === "CANCELLED" || emSt === "RESOLVED" || emTripSt === "COMPLETED") {
+            trip.status = "COMPLETED";
+            firestore!.collection(TRIP_COLLECTION).doc(id).update({
+              status: "COMPLETED",
+              completedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
+        }
+      } catch {}
+    }
+  }
+
   return Array.from(tripMap.values()).sort((a, b) =>
     (b.completedAt || b.updatedAt || "").localeCompare(
       a.completedAt || a.updatedAt || "",

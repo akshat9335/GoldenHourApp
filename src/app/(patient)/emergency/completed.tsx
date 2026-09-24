@@ -18,10 +18,12 @@ export default function Completed() {
         }
       }).catch(() => {});
     }
-  }, [emergencyId]);
+    // Wipe active SOS session immediately so ETA, distance, and active banners disappear
+    resetEmergencySession();
+  }, []);
 
   const handleBackHome = () => {
-    if (resetEmergencySession) resetEmergencySession();
+    resetEmergencySession();
     router.replace('/(patient)/home');
   };
 

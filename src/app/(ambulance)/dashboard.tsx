@@ -79,6 +79,8 @@ export default function AmbulanceDashboard() {
           setEmergencyId(inProgress.emergencyId || inProgress.id || inProgress._id);
         } else {
           setActiveTrip(null);
+          setActiveTripId(null);
+          setEmergencyId(null);
         }
       }
 
@@ -222,7 +224,8 @@ export default function AmbulanceDashboard() {
   };
 
   const handleEndMission = () => {
-    if (!activeTrip) return;
+    const effectiveTripId = activeTrip?.id || (activeTrip as any)?._id || (activeTrip as any)?.tripId || activeTripId;
+    if (!effectiveTripId && !activeTrip) return;
     Alert.alert(
       'Complete / End Mission',
       'Are you sure you want to finish or clear this active mission? This will free your ambulance unit for new dispatches.',
@@ -233,8 +236,8 @@ export default function AmbulanceDashboard() {
           style: 'destructive',
           onPress: async () => {
             try {
-              if (activeTrip.id) {
-                await api.ambulances.completeTrip(activeTrip.id);
+              if (effectiveTripId) {
+                await api.ambulances.completeTrip(effectiveTripId);
               }
             } catch (_err) {
               // Non-blocking fallback

@@ -1027,6 +1027,8 @@ export async function cancelEmergencyById(
     cancellationReason: reason,
     cancelledAt: now,
     cancelledBy: requesterId,
+    distanceKm: null as any,
+    etaMinutes: null as any,
     updatedAt: now,
   };
 
@@ -1050,6 +1052,34 @@ export async function cancelEmergencyById(
     batch.set(directRef, { status: "CANCELLED", updatedAt: now }, { merge: true });
     await batch.commit();
   } catch (_e) {}
+
+  // Cascade cancel trips and free assigned driver / ambulance
+  try {
+    const tripsSnap = await db.collection("trips").where("emergencyId", "==", emergencyId).get();
+    for (const tripDoc of tripsSnap.docs) {
+      await tripDoc.ref.update({
+        status: "CANCELLED",
+        completedAt: now,
+        updatedAt: now,
+      }).catch(() => {});
+      const tripData = tripDoc.data() || {};
+      if (tripData.driverId) {
+        await db.collection("drivers").doc(tripData.driverId).update({
+          availability: "AVAILABLE",
+          updatedAt: now,
+        }).catch(() => {});
+      }
+      if (tripData.ambulanceId) {
+        const ambSnap = await db.collection("ambulances").where("ambulanceId", "==", tripData.ambulanceId).get();
+        if (!ambSnap.empty) {
+          await ambSnap.docs[0].ref.update({
+            status: "AVAILABLE",
+            updatedAt: now,
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch (_tErr) {}
 
   return {
     ...existing,

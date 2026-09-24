@@ -43,9 +43,25 @@ export default function PickedUp() {
         } else if (em?.aiResult?.recommendedHospital) {
           setHospitalTitle(em.aiResult.recommendedHospital);
         }
+        const st = String(em.status || '').toUpperCase();
+        const tripSt = String(em.tripStatus || '').toUpperCase();
+        if (st === 'COMPLETED' || tripSt === 'COMPLETED') {
+          useAppStore.getState().setActiveTripId(null);
+          useAppStore.getState().setEmergencyId(null);
+          Alert.alert('Mission Completed', 'The hospital has completed admission for this patient.');
+          router.replace('/(ambulance)/dashboard');
+          return;
+        }
+        if (st === 'PATIENT_ARRIVED' || tripSt === 'AT_HOSPITAL') {
+          router.replace({
+            pathname: '/(ambulance)/hospital-arrival',
+            params: { emergencyId: id, tripId: activeTripId || params.tripId },
+          });
+          return;
+        }
       }
     } catch {}
-  }, [emergencyId, params.emergencyId]);
+  }, [emergencyId, params.emergencyId, activeTripId, params.tripId]);
 
   useEffect(() => {
     const effectiveTripId = activeTripId || params.tripId;
