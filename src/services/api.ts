@@ -106,6 +106,10 @@ export const api = {
     getById: (id: string) => request(`/emergencies/${id}`),
     update: (id: string, updates: any) =>
       request(`/emergencies/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    cancel: (id: string, reason?: string) =>
+      request(`/emergencies/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    cancelActive: (reason?: string) =>
+      request('/emergencies/active/cancel', { method: 'POST', body: JSON.stringify({ reason }) }),
   },
 
   // Confirmations (Multi-user concurrency & verification)

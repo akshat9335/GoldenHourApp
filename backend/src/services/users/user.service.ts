@@ -166,12 +166,21 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   if (profile.role === "HOSPITAL" || profile.roles?.includes("HOSPITAL")) {
     if (firestore) {
       try {
-        // Query hospitals collection by ownerUid or docId
+        // Query hospitals collection by ownerUid, docId (with or without hosp- prefix), or email
         let hospDoc = await firestore.collection("hospitals").doc(uid).get();
+        if (!hospDoc.exists) {
+          hospDoc = await firestore.collection("hospitals").doc(`hosp-${uid}`).get();
+        }
         if (!hospDoc.exists) {
           const hospQuery = await firestore.collection("hospitals").where("ownerUid", "==", uid).limit(1).get();
           if (!hospQuery.empty) {
             hospDoc = hospQuery.docs[0];
+          }
+        }
+        if (!hospDoc.exists && profile.email) {
+          const emailQuery = await firestore.collection("hospitals").where("email", "==", profile.email).limit(1).get();
+          if (!emailQuery.empty) {
+            hospDoc = emailQuery.docs[0];
           }
         }
         if (hospDoc.exists) {

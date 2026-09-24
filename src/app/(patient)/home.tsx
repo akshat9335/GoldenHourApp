@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
@@ -64,7 +65,33 @@ export default function PatientHome() {
     .slice(0, 2)
     .toUpperCase() || 'GH';
 
+  const emergencyId = useAppStore((s) => s.emergencyId);
   const resetEmergencySession = useAppStore((s) => s.resetEmergencySession);
+
+  const handleCancelActiveEmergency = () => {
+    Alert.alert(
+      'Cancel Emergency SOS?',
+      'Are you sure you want to cancel the active emergency? Any responding ambulance units and hospitals will be notified.',
+      [
+        { text: 'Keep Active', style: 'cancel' },
+        {
+          text: 'Yes, Cancel SOS',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (emergencyId) {
+                await api.emergencies.cancel(emergencyId, 'User cancelled from home screen');
+              } else {
+                await api.emergencies.cancelActive('User cancelled from home screen');
+              }
+            } catch {}
+            resetEmergencySession();
+            Alert.alert('Emergency Cancelled', 'The emergency SOS has been cleared.');
+          },
+        },
+      ]
+    );
+  };
 
   const startEmergency = () => {
     resetEmergencySession();
@@ -158,6 +185,38 @@ export default function PatientHome() {
 
         {/* Proactive Nearby Emergency Alert Banner */}
         <NearbyAlertBanner />
+
+        {/* Active Emergency Banner with Cancel Button */}
+        {emergencyId ? (
+          <Card style={styles.activeEmergencyBanner}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={styles.pulseDot} />
+                <Text style={styles.activeEmergencyTitle}>ACTIVE EMERGENCY IN PROGRESS</Text>
+              </View>
+              <Pill color="red">LIVE</Pill>
+            </View>
+            <Text style={styles.activeEmergencySub}>
+              An emergency request is linked to your session. Responding ER units and triage are currently active.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <TouchableOpacity
+                style={styles.activeTrackBtn}
+                onPress={() => router.push('/(patient)/emergency/active')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.activeTrackBtnText}>Track Mission →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.activeCancelBtn}
+                onPress={handleCancelActiveEmergency}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.activeCancelBtnText}>Cancel / End SOS</Text>
+              </TouchableOpacity>
+            </View>
+          </Card>
+        ) : null}
 
         {/* Area Selection / Search Modal (Swiggy / Zomato style) */}
         <Modal visible={pickerVisible} animationType="slide" transparent={true}>
@@ -417,4 +476,58 @@ const styles = StyleSheet.create({
   hubNameSelected: { color: '#fff' },
   hubCoords: { fontSize: 9.5, color: colors.inkFaint },
   hubCoordsSelected: { color: 'rgba(255,255,255,0.8)' },
+  activeEmergencyBanner: {
+    padding: 14,
+    marginVertical: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#F87171',
+    borderRadius: 14,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.red,
+  },
+  activeEmergencyTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.red,
+    letterSpacing: 0.5,
+  },
+  activeEmergencySub: {
+    fontSize: 11,
+    color: colors.inkSoft,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  activeTrackBtn: {
+    flex: 1,
+    backgroundColor: colors.red,
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTrackBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  activeCancelBtn: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#DC2626',
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeCancelBtnText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 12,
+  },
 });

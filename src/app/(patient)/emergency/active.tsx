@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Button, Card, Pill, Stepper, Banner, Icon, HTitle, openExternalMapPreview } from '@/components/ui';
@@ -43,12 +43,38 @@ export default function Active() {
   const ambStatus = useAppStore((s) => s.ambStatus);
   const setAmbStatus = useAppStore((s) => s.setAmbStatus);
   const emergencyId = useAppStore((s) => s.emergencyId);
+  const resetEmergencySession = useAppStore((s) => s.resetEmergencySession);
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
   const locationAddress = useAppStore((s) => s.locationAddress);
   const [emergency, setEmergency] = useState<any | null>(null);
   const step = AMB_STEPS[ambStatus] || AMB_STEPS[0];
   const elapsed = 2 + ambStatus * 3;
   const isLast = ambStatus >= AMB_STEPS.length - 1;
+
+  const handleCancelEmergency = () => {
+    Alert.alert(
+      'Cancel Emergency SOS?',
+      'Are you sure you want to cancel? Responding ambulance pilots and emergency hospital rooms will be notified immediately.',
+      [
+        { text: 'Keep Active', style: 'cancel' },
+        {
+          text: 'Yes, Cancel SOS',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (emergencyId) {
+                await api.emergencies.cancel(emergencyId, 'Patient requested cancellation');
+              } else {
+                await api.emergencies.cancelActive('Patient requested cancellation');
+              }
+            } catch {}
+            resetEmergencySession();
+            router.replace('/(patient)/home');
+          },
+        },
+      ]
+    );
+  };
 
   const pickupLat = emergency?.location?.latitude ?? lastKnownLocation?.latitude;
   const pickupLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude;
@@ -458,6 +484,19 @@ export default function Active() {
           onPress={() => router.push(emergencyId ? `/(patient)/live-map?emergencyId=${emergencyId}` : '/(patient)/live-map')}
         />
       )}
+
+      {!isLast && (
+        <>
+          <View style={{ height: 10 }} />
+          <TouchableOpacity
+            style={styles.cancelEmergencyBtn}
+            onPress={handleCancelEmergency}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cancelEmergencyBtnText}>🛑 Cancel Emergency / False Alarm</Text>
+          </TouchableOpacity>
+        </>
+      )}
     </Screen>
   );
 }
@@ -547,5 +586,20 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     color: colors.inkFaint,
     marginTop: 3,
+  },
+  cancelEmergencyBtn: {
+    backgroundColor: '#FFF',
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  cancelEmergencyBtnText: {
+    color: '#DC2626',
+    fontWeight: '800',
+    fontSize: 13,
   },
 });

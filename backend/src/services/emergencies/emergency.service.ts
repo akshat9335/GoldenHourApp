@@ -990,4 +990,89 @@ export async function listUserEmergencies(
   });
 
   return emergencies;
+}
+
+export async function cancelEmergencyById(
+  emergencyId: string,
+  requesterId: string,
+  reason: string = "User cancelled emergency SOS",
+  requesterRole?: string,
+): Promise<Emergency> {
+  const db = getFirestore();
+  const emergencyRef = db.collection(EMERGENCIES_COLLECTION).doc(emergencyId);
+  const snap = await emergencyRef.get();
+
+  if (!snap.exists) {
+    throw new AppError(404, "EMERGENCY_NOT_FOUND", "Emergency was not found.");
+  }
+
+  const existing = snap.data() as Emergency;
+  const isReporter = existing.reporterId === requesterId;
+  const isAssigned =
+    existing.assignedDriverId === requesterId ||
+    existing.assignedHospitalId === requesterId;
+  const isAuthorizedRole =
+    !!requesterRole &&
+    ["admin", "hospital", "ambulance", "doctor", "ambulance_driver"].includes(requesterRole.toLowerCase());
+
+  if (!isReporter && !isAssigned && !isAuthorizedRole) {
+    throw new AppError(403, "FORBIDDEN", "You are not allowed to cancel this emergency.");
+  }
+
+  const now = new Date().toISOString();
+  const cancellationUpdates = {
+    status: "CANCELLED" as any,
+    tripStatus: "CANCELLED",
+    cancellationReason: reason,
+    cancelledAt: now,
+    cancelledBy: requesterId,
+    updatedAt: now,
+  };
+
+  await emergencyRef.set(cancellationUpdates, { merge: true });
+
+  // Cascade cancel hospital requests
+  try {
+    const hospReqs = await db.collection(HOSPITAL_REQUESTS_COLLECTION)
+      .where("emergencyId", "==", emergencyId)
+      .get();
+    const batch = db.batch();
+    hospReqs.forEach((doc) => {
+      batch.update(doc.ref, {
+        status: "CANCELLED",
+        cancelledAt: now,
+        cancellationReason: reason,
+        updatedAt: now,
+      });
+    });
+    const directRef = db.collection(HOSPITAL_REQUESTS_COLLECTION).doc(emergencyId);
+    batch.set(directRef, { status: "CANCELLED", updatedAt: now }, { merge: true });
+    await batch.commit();
+  } catch (_e) {}
+
+  return {
+    ...existing,
+    ...cancellationUpdates,
+  };
+}
+
+export async function cancelActiveUserEmergency(
+  userId: string,
+  reason: string = "User cleared active pending emergency",
+): Promise<{ count: number }> {
+  const db = getFirestore();
+  const snap = await db.collection(EMERGENCIES_COLLECTION)
+    .where("reporterId", "==", userId)
+    .get();
+
+  let count = 0;
+  for (const doc of snap.docs) {
+    const data = doc.data() as any;
+    if (data.status !== "COMPLETED" && data.status !== "CANCELLED") {
+      await cancelEmergencyById(doc.id, userId, reason);
+      count++;
+    }
+  }
+
+  return { count };
 }

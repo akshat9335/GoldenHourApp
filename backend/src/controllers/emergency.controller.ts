@@ -6,6 +6,8 @@ import {
   getEmergencyById,
   updateEmergency,
   listUserEmergencies,
+  cancelEmergencyById,
+  cancelActiveUserEmergency,
   CreateEmergencyInput,
 } from "../services/emergencies/emergency.service";
 
@@ -118,6 +120,65 @@ export async function listUserEmergenciesController(
       res,
       emergencies,
       "Emergencies retrieved successfully.",
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelEmergencyController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const uid = getUserUid(req);
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    if (!id) {
+      throw new AppError(
+        400,
+        "INVALID_EMERGENCY_ID",
+        "Emergency ID is required.",
+      );
+    }
+
+    const cancelled = await cancelEmergencyById(
+      id,
+      uid,
+      reason || "Cancelled by user",
+      req.user?.role,
+    );
+
+    sendSuccess(
+      res,
+      cancelled,
+      "Emergency cancelled successfully.",
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelActiveEmergencyController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const uid = getUserUid(req);
+    const { reason } = req.body || {};
+
+    const result = await cancelActiveUserEmergency(
+      uid,
+      reason || "Cancelled active emergency by user",
+    );
+
+    sendSuccess(
+      res,
+      result,
+      `Cancelled ${result.count} active emergencies.`,
     );
   } catch (err) {
     next(err);
