@@ -5,6 +5,7 @@ import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, LabelEyebrow, TopBar, Button } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import { authService } from '@/services/auth';
 import { watchDeviceLocation } from '@/services/deviceLocation';
 
 export default function AmbulanceDashboard() {
@@ -266,6 +267,30 @@ export default function AmbulanceDashboard() {
     );
   };
 
+  const handleAccountOptions = () => {
+    Alert.alert(
+      driverName,
+      'Select an action to switch role or log out of this ambulance pilot console:',
+      [
+        {
+          text: 'Switch Role',
+          onPress: () => router.replace('/role-selection'),
+        },
+        {
+          text: 'Log Out Account',
+          style: 'destructive',
+          onPress: async () => {
+            await authService.logout().catch(() => {});
+            useAppStore.getState().setUserProfile(null);
+            useAppStore.getState().setAuthToken(null);
+            router.replace('/role-selection');
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
   return (
     <Screen
       refreshControl={
@@ -277,7 +302,23 @@ export default function AmbulanceDashboard() {
         />
       }
     >
-      <TopBar title="Ambulance Console" back={true} onPressBack={() => router.replace('/role-selection')} />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <TouchableOpacity
+          onPress={handleAccountOptions}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
+          hitSlop={8}
+        >
+          <Text style={{ fontSize: 18, color: colors.ink }}>‹</Text>
+          <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>Ambulance Console</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleAccountOptions}
+          style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' }}
+          hitSlop={8}
+        >
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft }}>Switch / Exit</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Driver Unit Card */}
       <Card style={styles.driverUnitCard}>

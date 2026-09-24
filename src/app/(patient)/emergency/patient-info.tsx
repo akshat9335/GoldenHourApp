@@ -89,14 +89,20 @@ export default function PatientInfo() {
     <Screen>
       <TopBar title={selectedType} />
 
-      <InputGroup label="Who is this for?">
+      <InputGroup
+        label="Who is this for?"
+        tooltip="Specify whether the emergency is for you or someone you are assisting nearby."
+      >
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Chip label="Myself" selected={who === 'Myself'} onPress={() => setWho('Myself')} />
           <Chip label="Someone else" selected={who === 'Someone else'} onPress={() => setWho('Someone else')} />
         </View>
       </InputGroup>
 
-      <InputGroup label="Add Accident Photo (Optional)">
+      <InputGroup
+        label="Add Incident / Trauma Photo (Optional)"
+        tooltip="Upload a real photograph of the accident or injury for AI multimodal severity and authenticity assessment."
+      >
         <PhotoInput
           uri={accidentPhotoUri}
           onChange={(uri, b64) => {
@@ -106,17 +112,32 @@ export default function PatientInfo() {
         />
       </InputGroup>
 
-      <InputGroup label="Describe what happened (Optional)">
-        <Input multiline numberOfLines={3} value={description} onChangeText={setDescription} placeholder="Tell us briefly what happened..." />
+      <InputGroup
+        label="Describe what happened (Optional)"
+        tooltip="Mention key symptoms, visible injuries, or cause of accident in English, Hindi, or Hinglish."
+      >
+        <Input
+          multiline
+          numberOfLines={3}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="e.g. Bike skid, deep laceration on right arm, conscious and breathing..."
+        />
       </InputGroup>
 
-      <InputGroup label="Voice Description (Optional)">
+      <InputGroup
+        label="Voice Description (Optional)"
+        tooltip="Speak in English, Hindi, or Marathi; live speech recognition will capture your emergency notes."
+      >
         <VoiceInput transcript={voiceTranscript} onChangeTranscript={setVoiceTranscript} />
       </InputGroup>
 
       <LabelEyebrow>You can submit with location only — photo, text and voice are all optional.</LabelEyebrow>
 
-      <InputGroup label="Estimated severity (your view)">
+      <InputGroup
+        label="Estimated severity (your view)"
+        tooltip="Your initial assessment of urgency. AI triage will cross-reference this with clinical protocols."
+      >
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {['Mild', 'Moderate', 'Severe'].map((s) => (
             <Chip key={s} label={s} selected={userEstimatedSeverity === s} onPress={() => setUserEstimatedSeverity(s)} />

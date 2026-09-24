@@ -401,8 +401,26 @@ export default function Active() {
           );
         }
 
-        const ambLat = ambLoc?.latitude ?? hospLoc?.latitude;
-        const ambLng = ambLoc?.longitude ?? hospLoc?.longitude;
+        const ambLat = ambLoc?.latitude;
+        const ambLng = ambLoc?.longitude;
+
+        if (!hasAmbulanceAssigned) {
+          return (
+            <Card style={{ padding: 12, borderWidth: 1, borderColor: '#FED7AA', backgroundColor: '#FFF7ED', marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Icon name="ambulance" size={16} color={colors.amber} />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.amber }}>
+                  {hasHospitalAccepted ? 'Ambulance Unit Dispatching...' : 'Awaiting Hospital Acceptance'}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 11, color: colors.inkSoft, marginTop: 4 }}>
+                {hasHospitalAccepted
+                  ? 'Hospital desk is assigning the nearest on-call ambulance pilot. Live Google Maps navigation will activate immediately upon assignment.'
+                  : `Transmitting triage vitals to ${emergency?.alertedHospitalName || 'nearest trauma center'}. Stand by for ER confirmation.`}
+              </Text>
+            </Card>
+          );
+        }
 
         return (
           <TouchableOpacity

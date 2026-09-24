@@ -22,16 +22,28 @@ export default function DriverLogin() {
       const isDriver = userRoles.includes('AMBULANCE_DRIVER') || userRoles.includes('AMBULANCE');
 
       if (!session.profileExists || !isDriver) {
-        try {
-          await authService.register({
-            name: session.name || 'Ambulance Crew Pilot',
-            email: session.email || 'driver@goldenhour.org',
-            role: 'AMBULANCE_DRIVER',
-            verificationStatus: 'APPROVED',
-            licenseNumber: 'UP-70-DL-2024-991',
-            ambulanceId: 'Unit UP-70-AMB',
-          });
-        } catch {}
+        Alert.alert(
+          'Registration Required',
+          `The Google account (${session.email}) is not registered as an Ambulance Driver.\n\nPlease submit an application to join the Golden Hour Emergency Fleet.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Register Now', onPress: () => router.push('/driver-register') },
+          ]
+        );
+        return;
+      }
+
+      const status = (session.profile?.verificationStatus || session.profile?.roleVerificationStatus?.AMBULANCE_DRIVER || 'PENDING').toUpperCase();
+
+      if (status === 'PENDING') {
+        setPendingStatus('Your driver application is currently pending admin review. You will receive emergency alerts once your license and vehicle details are approved.');
+        Alert.alert('Verification Pending', 'Your application is awaiting Admin verification. You cannot access the dispatch dashboard until approved.');
+        return;
+      }
+
+      if (status === 'REJECTED') {
+        Alert.alert('Application Rejected', 'Your driver registration was rejected by the Medical Admin. Please contact support or register again.');
+        return;
       }
 
       useAppStore.getState().setRole('AMBULANCE_DRIVER');

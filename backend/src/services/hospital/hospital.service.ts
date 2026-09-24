@@ -778,13 +778,28 @@ export async function getHospitalRequests(uid: string) {
       const primaryHospId = candidateIds[0] || hospital.docId;
       for (const emDoc of activeSnap.docs) {
         const em = emDoc.data();
+        // Strict hospital targeting check: Only bridge if this hospital is specifically targeted/assigned
+        const isTargeted =
+          candidateIds.includes(em.hospitalId) ||
+          candidateIds.includes(em.alertedHospitalId) ||
+          candidateIds.includes(em.targetHospitalId) ||
+          candidateIds.includes(em.assignedHospitalId) ||
+          (Array.isArray(em.hospitalCandidates) &&
+            em.hospitalCandidates.some((c: any) => candidateIds.includes(c.hospitalId)));
+
+        if (!isTargeted) continue;
+
+        // Skip emergencies older than 24 hours to prevent stale test leakage
+        const emTime = new Date(em.createdAt || 0).getTime();
+        if (emTime && Date.now() - emTime > 24 * 60 * 60 * 1000) continue;
+
         const reqDocId = `${emDoc.id}_${primaryHospId}`;
         const bridgedData = {
           id: reqDocId,
           requestId: reqDocId,
           emergencyId: emDoc.id,
           hospitalId: primaryHospId,
-          hospitalName: hospital.data?.name || "Hospital Facility",
+          hospitalName: hospital.data?.hospitalName || hospital.data?.name || "Hospital Facility",
           patientName: em.patientName || em.userName || "Emergency Patient",
           patientPhone: em.patientPhone || null,
           goldenHourId: em.goldenHourId || em.crisisId || "GH-SOS",
@@ -796,8 +811,8 @@ export async function getHospitalRequests(uid: string) {
           location: em.location,
           locationAddress: em.locationAddress || null,
           status: em.status === "PENDING" || em.status === "ACTIVE" ? "NEW" : em.status,
-          eta: "8 min",
-          distanceKm: 2.5,
+          eta: em.eta || "8 min",
+          distanceKm: em.distanceKm || 2.5,
           trustScore: em.trustScore ?? 100,
           createdAt: em.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -2256,6 +2271,22 @@ export async function searchDriverForHospital(uid: string, rawQuery: string) {
 
   const query = rawQuery.trim();
   const upperQuery = query.toUpperCase();
+  const cleanDigits = query.replace(/[^\d]/g, "");
+
+  // Candidate phone strings to search
+  const phoneCandidates = Array.from(
+    new Set([
+      query,
+      cleanDigits,
+      cleanDigits.length === 10 ? `+91${cleanDigits}` : null,
+      cleanDigits.startsWith("91") && cleanDigits.length === 12 ? `+${cleanDigits}` : null,
+      cleanDigits.startsWith("91") && cleanDigits.length === 12 ? cleanDigits.slice(2) : null,
+    ].filter(Boolean) as string[])
+  );
+
+  let targetUid: string | null = null;
+  let userData: any = null;
+  let driverDoc: any = null;
 
   // 1. Search in users by crisisId (Golden Hour ID)
   let userSnap = await firestore
@@ -2264,25 +2295,29 @@ export async function searchDriverForHospital(uid: string, rawQuery: string) {
     .limit(1)
     .get();
 
-  // 2. If not found by crisisId, search by phone
+  // 2. Search users by phone candidates
   if (userSnap.empty) {
-    userSnap = await firestore
-      .collection("users")
-      .where("phone", "==", query)
-      .limit(1)
-      .get();
+    for (const p of phoneCandidates) {
+      const pSnap = await firestore.collection("users").where("phone", "==", p).limit(1).get();
+      if (!pSnap.empty) {
+        userSnap = pSnap;
+        break;
+      }
+    }
   }
 
-  let targetUid: string | null = null;
-  let userData: any = null;
+  // 3. Search users by email
+  if (userSnap.empty && query.includes("@")) {
+    const eSnap = await firestore.collection("users").where("email", "==", query.toLowerCase()).limit(1).get();
+    if (!eSnap.empty) userSnap = eSnap;
+  }
 
   if (!userSnap.empty) {
     targetUid = userSnap.docs[0].id;
     userData = userSnap.docs[0].data();
   }
 
-  // 3. Look up in drivers collection
-  let driverDoc: any = null;
+  // 4. Look up in drivers collection by targetUid
   if (targetUid) {
     const dSnap = await firestore.collection("drivers").doc(targetUid).get();
     if (dSnap.exists) {
@@ -2290,26 +2325,39 @@ export async function searchDriverForHospital(uid: string, rawQuery: string) {
     }
   }
 
-  // If driverDoc not found by targetUid, search drivers collection by phone or vehiclePlateNumber
+  // 5. If driverDoc not found by targetUid, search drivers collection by phone, plate, license
   if (!driverDoc) {
-    const drvByPhone = await firestore
+    for (const p of phoneCandidates) {
+      const drvByPhone = await firestore.collection("drivers").where("phone", "==", p).limit(1).get();
+      if (!drvByPhone.empty) {
+        driverDoc = drvByPhone.docs[0];
+        targetUid = driverDoc.id;
+        break;
+      }
+    }
+  }
+
+  if (!driverDoc) {
+    const drvByPlate = await firestore
       .collection("drivers")
-      .where("phone", "==", query)
+      .where("vehiclePlateNumber", "==", upperQuery)
       .limit(1)
       .get();
-    if (!drvByPhone.empty) {
-      driverDoc = drvByPhone.docs[0];
+    if (!drvByPlate.empty) {
+      driverDoc = drvByPlate.docs[0];
       targetUid = driverDoc.id;
-    } else {
-      const drvByPlate = await firestore
-        .collection("drivers")
-        .where("vehiclePlateNumber", "==", upperQuery)
-        .limit(1)
-        .get();
-      if (!drvByPlate.empty) {
-        driverDoc = drvByPlate.docs[0];
-        targetUid = driverDoc.id;
-      }
+    }
+  }
+
+  if (!driverDoc) {
+    const drvByLic = await firestore
+      .collection("drivers")
+      .where("licenseNumber", "==", upperQuery)
+      .limit(1)
+      .get();
+    if (!drvByLic.empty) {
+      driverDoc = drvByLic.docs[0];
+      targetUid = driverDoc.id;
     }
   }
 
@@ -2427,6 +2475,7 @@ export async function addHospitalDriver(uid: string, data: any) {
   }
 
   const driverId = `drv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const goldenHourId = `GH-DRV-${driverId.slice(-4).toUpperCase()}`;
 
   const newDriver = {
     uid: driverId,
@@ -2448,6 +2497,25 @@ export async function addHospitalDriver(uid: string, data: any) {
 
   await firestore.collection("drivers").doc(driverId).set(newDriver);
 
+  // Sync to users collection so driver profile and Golden Hour ID exist
+  await firestore.collection("users").doc(driverId).set({
+    uid: driverId,
+    name: newDriver.name,
+    phone: newDriver.phone,
+    email: newDriver.email,
+    role: "AMBULANCE_DRIVER",
+    roles: ["AMBULANCE_DRIVER"],
+    verificationStatus: "APPROVED",
+    crisisId: goldenHourId,
+    goldenHourId,
+    hospitalId: hospital.docId,
+    hospitalName: hospName,
+    vehiclePlateNumber: newDriver.vehiclePlateNumber,
+    ambulanceId: newDriver.vehiclePlateNumber,
+    createdAt: now,
+    updatedAt: now,
+  }, { merge: true });
+
   // Register corresponding vehicle in ambulances collection
   await firestore.collection("ambulances").doc(newDriver.vehiclePlateNumber).set({
     ambulanceId: newDriver.vehiclePlateNumber,
@@ -2460,7 +2528,7 @@ export async function addHospitalDriver(uid: string, data: any) {
     updatedAt: now,
   });
 
-  return newDriver;
+  return { ...newDriver, goldenHourId, crisisId: goldenHourId };
 }
 
 export async function unlinkHospitalDriver(uid: string, driverId: string) {

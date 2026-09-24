@@ -36,6 +36,15 @@ function heuristicResult(input: EmergencyInput, source: "mock" | "fallback"): Tr
   let specialtyNeeded = "GENERAL";
   let recommendedHospitalType = "Emergency Care Facility";
 
+  let immediateActions: string[] = [
+    "Keep the patient comfortable, calm, and monitor vitals closely.",
+    "Stand by for incoming ambulance paramedic assessment.",
+  ];
+  let avoidActions: string[] = [
+    "Do not give food, water, or oral medication unless directed by emergency physicians.",
+    "Do not move the patient unnecessarily if spinal or head injury is suspected.",
+  ];
+
   if (!text.trim() || text.length < 3) {
     // Fail-safe golden rule: Blank SOS or panic tap must default to CRITICAL resuscitation capability
     severity = "CRITICAL";
@@ -43,18 +52,42 @@ function heuristicResult(input: EmergencyInput, source: "mock" | "fallback"): Tr
     requiredCapabilities = ["EMERGENCY_ROOM", "TRAUMA_BAY", "ICU_STANDBY"];
     specialtyNeeded = "GENERAL";
     recommendedHospitalType = "Level-1 Multi-Specialty ER Trauma Center";
+    immediateActions = [
+      "Ensure patient is in a safe location away from oncoming traffic or hazards.",
+      "Check responsiveness and breathing; keep airways open.",
+      "Stand by as priority emergency dispatch and hospital alert are activated.",
+    ];
   } else if (/\b(minor|small|superficial|scratch|bruise|chhoti chot)\b/.test(text)) {
     severity = "LOW";
     emergencyType = "Minor injury or symptoms";
     requiredCapabilities = ["OUTPATIENT_CLINIC", "FIRST_AID"];
     specialtyNeeded = "GENERAL";
     recommendedHospitalType = "Primary Healthcare Center / Outpatient Clinic";
+    immediateActions = [
+      "Cleanse area gently with mild soap and clean drinking water.",
+      "Apply clean sterile adhesive dressing to prevent bacterial contamination.",
+      "Rest and elevate the injured area if mild swelling is present.",
+    ];
+    avoidActions = [
+      "Do not scratch, rub, or pick at injured skin.",
+      "Do not apply unverified home concoctions, toothpaste, or unsterile powders.",
+    ];
   } else if (/\b(dog bite|animal bite|kutta|kutte|snake bite|saanp|cat bite|rabies|bite)\b/.test(text)) {
     severity = "MEDIUM";
     emergencyType = "Animal Bite / Potential Rabies Exposure";
     requiredCapabilities = ["EMERGENCY_ROOM", "WOUND_CARE", "RABIES_VACCINE"];
     specialtyNeeded = "GENERAL";
     recommendedHospitalType = "Emergency Care Center / Anti-Rabies Clinic";
+    immediateActions = [
+      "Wash the bite wound vigorously under running water with soap for at least 15 minutes immediately.",
+      "Apply antiseptic solution (Povidone-iodine / Betadine) and leave wound loosely covered with clean cloth.",
+      "Proceed immediately to nearest ER for Rabies Post-Exposure Prophylaxis (PEP) vaccine and Immunoglobulin (RIG).",
+    ];
+    avoidActions = [
+      "Do NOT apply chili powder, lime, plant juices, ash, or turmeric to the animal bite wound.",
+      "Do NOT cauterize, cut, suck, or tightly suture the bite wound.",
+      "Do NOT delay or skip the anti-rabies vaccination schedule.",
+    ];
   } else if (
     /\b(chest pain|difficulty breathing|shortness of breath|seene me dard|chhaati me dard|heart|saans|cardiac)\b/.test(text)
   ) {
@@ -63,6 +96,17 @@ function heuristicResult(input: EmergencyInput, source: "mock" | "fallback"): Tr
     requiredCapabilities = ["ICU", "CATH_LAB", "CARDIAC_TEAM"];
     specialtyNeeded = "CARDIOLOGY";
     recommendedHospitalType = "Tertiary Cardiac & Emergency Hospital";
+    immediateActions = [
+      "Seat patient upright in a comfortable position (W-position) to reduce cardiac workload and ease breathing.",
+      "Loosen tight clothing around neck, chest, and waist.",
+      "If prescribed and conscious, chew 300mg Aspirin or take Sorbitrate under tongue as advised by doctor.",
+      "Keep patient calm, resting, and completely still while cardiac ambulance is en route.",
+    ];
+    avoidActions = [
+      "Do NOT allow patient to walk, climb stairs, or exert themselves physically.",
+      "Do NOT offer food, heavy water, or hot stimulants.",
+      "Do NOT leave patient alone or unmonitored.",
+    ];
   } else if (
     /\b(fracture|head injury|burn|accident|khoon|bleeding|haddi|behoshi|unconscious|paralysis|stroke)\b/.test(text)
   ) {
@@ -71,6 +115,17 @@ function heuristicResult(input: EmergencyInput, source: "mock" | "fallback"): Tr
     requiredCapabilities = ["TRAUMA_BAY", "ORTHOPEDIC", "BLOOD_BANK", "ICU"];
     specialtyNeeded = "TRAUMA_ORTHO";
     recommendedHospitalType = "Level-1 Multi-Specialty Trauma Center";
+    immediateActions = [
+      "Apply direct, continuous pressure to bleeding wounds using clean cloth or sterile gauze.",
+      "Support and immobilize injured limbs in position found—do NOT attempt realignment.",
+      "Keep patient warm with a jacket or blanket to prevent traumatic shock.",
+      "Ensure clear airway; if vomiting, gently roll patient as a unit into recovery position.",
+    ];
+    avoidActions = [
+      "Do NOT move patient's neck, head, or spine unless in immediate fire or structural danger.",
+      "Do NOT remove deeply impaled or embedded objects from puncture wounds.",
+      "Do NOT offer fluids or food (may complicate emergency surgery).",
+    ];
   }
 
   const rule = evaluateSafetyRules(input);
@@ -86,14 +141,8 @@ function heuristicResult(input: EmergencyInput, source: "mock" | "fallback"): Tr
     requiredCapabilities,
     specialtyNeeded,
     recommendedHospitalType,
-    immediateActions: rule?.immediateActions || [
-      "Keep the person comfortable and monitor vital signs closely.",
-      "Stand by for incoming ambulance paramedic assessment.",
-    ],
-    avoidActions: rule?.avoidActions || [
-      "Do not give food, water, or oral medication unless directed by emergency physicians.",
-      "Do not move the patient unnecessarily if spinal or head injury is suspected.",
-    ],
+    immediateActions: rule?.immediateActions || immediateActions,
+    avoidActions: rule?.avoidActions || avoidActions,
     hospitalRequired: severity !== "LOW",
     ambulanceRecommended: severity === "CRITICAL" || severity === "HIGH",
     explanation:

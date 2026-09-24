@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, RefreshControl, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, Pressable, StyleSheet, RefreshControl, TouchableOpacity, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, HospitalNav, HTitle, LabelEyebrow, openExternalNavigation } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import { authService } from '@/services/auth';
 import { acquireFreshLocation } from '@/services/deviceLocation';
 
 export default function HospitalDashboard() {
@@ -159,6 +160,30 @@ export default function HospitalDashboard() {
     } catch (_e) {}
   };
 
+  const handleAccountOptions = () => {
+    Alert.alert(
+      hospitalName,
+      'Select an action to switch role or log out of this facility console:',
+      [
+        {
+          text: 'Switch Role',
+          onPress: () => router.replace('/role-selection'),
+        },
+        {
+          text: 'Log Out Account',
+          style: 'destructive',
+          onPress: async () => {
+            await authService.logout().catch(() => {});
+            useAppStore.getState().setUserProfile(null);
+            useAppStore.getState().setAuthToken(null);
+            router.replace('/role-selection');
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <Screen
@@ -173,14 +198,26 @@ export default function HospitalDashboard() {
       >
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-            <Pressable onPress={() => router.replace('/role-selection')} style={{ marginRight: 8, padding: 4 }} hitSlop={8}>
+            <Pressable onPress={handleAccountOptions} style={{ marginRight: 8, padding: 4 }} hitSlop={8}>
               <Icon name="chevL" size={20} color={colors.ink} />
             </Pressable>
-            <HTitle size={16}>{hospitalName}</HTitle>
+            <TouchableOpacity onPress={handleAccountOptions} style={{ flex: 1 }}>
+              <HTitle size={15}>{hospitalName}</HTitle>
+              <Text style={{ fontSize: 10.5, color: colors.inkFaint }}>Tap to switch role or log out</Text>
+            </TouchableOpacity>
           </View>
-          <Pressable style={styles.bellBtn} onPress={() => router.push('/notifications')}>
-            <Icon name="bell" />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <TouchableOpacity
+              style={styles.switchBtn}
+              onPress={handleAccountOptions}
+              hitSlop={8}
+            >
+              <Text style={styles.switchBtnText}>Switch</Text>
+            </TouchableOpacity>
+            <Pressable style={styles.bellBtn} onPress={() => router.push('/notifications')}>
+              <Icon name="bell" />
+            </Pressable>
+          </View>
         </View>
 
         {/* Dynamic Emergency Card: Incoming vs Standby */}
@@ -399,6 +436,8 @@ export default function HospitalDashboard() {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   bellBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  switchBtn: { paddingHorizontal: 9, paddingVertical: 8, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center' },
+  switchBtnText: { fontSize: 11, fontWeight: '700', color: colors.inkSoft },
   incomingCard: { padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.line },
   activeIncomingCard: { borderColor: colors.red, backgroundColor: '#FEF2F2' },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between' },

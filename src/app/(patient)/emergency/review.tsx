@@ -13,9 +13,24 @@ export default function Review() {
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
   const locationAddress = useAppStore((s) => s.locationAddress);
 
+  const selectedHospital = useAppStore((s) => s.selectedHospital);
+  const candidateHospitals = useAppStore((s) => s.candidateHospitals);
+
+  const chosenHospital =
+    (candidateHospitals && candidateHospitals.length > 0)
+      ? candidateHospitals.find((h: any) => (h.hospitalId || h.id) === selectedHospital) || candidateHospitals[0]
+      : null;
+
   const displayName = userProfile?.name || 'Emergency Caller';
   const hospitalName =
-    aiTriageResult?.recommendedHospital || 'Nearest Verified Trauma ER';
+    chosenHospital?.name ||
+    aiTriageResult?.recommendedHospital ||
+    'Nearest Verified Trauma ER';
+
+  const journeyDetails = chosenHospital?.distanceKm
+    ? `${chosenHospital.distanceKm} km · ~${chosenHospital.etaMinutes || 6} min ETA`
+    : null;
+
   const locDisplay = lastKnownLocation
     ? (locationAddress
         ? `${locationAddress} (${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E)`
@@ -38,8 +53,18 @@ export default function Review() {
         ) : null}
       </View>,
     ],
-    ['Ambulance', <Text style={styles.bold}>ALS Unit · Priority Dispatch</Text>],
-    ['Hospital ER', <Text style={styles.bold}>{hospitalName}</Text>],
+    ['Ambulance', <Text style={styles.bold}>Priority Emergency Dispatch</Text>],
+    [
+      'Hospital ER',
+      <View style={{ alignItems: 'flex-end', maxWidth: '65%' }}>
+        <Text style={[styles.bold, { textAlign: 'right' }]}>{hospitalName}</Text>
+        {journeyDetails ? (
+          <Text style={{ fontSize: 10.5, color: colors.blue, marginTop: 2, textAlign: 'right', fontWeight: '600' }}>
+            ⚡ {journeyDetails}
+          </Text>
+        ) : null}
+      </View>,
+    ],
   ];
 
   return (

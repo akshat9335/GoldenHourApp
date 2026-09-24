@@ -21,21 +21,38 @@ export default function HospitalLogin() {
       const rawRoles = (session.profile?.roles || [session.role || 'PATIENT']).map((r: string) => String(r).toUpperCase());
       const hasHospitalRole = rawRoles.includes('HOSPITAL');
 
-      const facilityName = session.name
-        ? `${session.name} Emergency Desk`
-        : (session.email ? `${session.email.split('@')[0].toUpperCase()} Hospital` : 'City Emergency Hospital');
-
       if (!session.profileExists || !hasHospitalRole) {
-        try {
-          await authService.register({
-            name: session.name || facilityName,
-            email: session.email || 'hospital@goldenhour.org',
-            role: 'HOSPITAL',
-            verificationStatus: 'APPROVED',
-            hospitalName: facilityName,
-          });
-        } catch {}
+        Alert.alert(
+          'Registration Required',
+          `The Google account (${session.email}) is not registered as an Emergency Hospital Facility.\n\nPlease submit an application to register your emergency desk.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Register Hospital', onPress: () => router.push('/hospital-register') },
+          ]
+        );
+        return;
       }
+
+      const status = (session.profile?.verificationStatus || session.profile?.roleVerificationStatus?.HOSPITAL || 'PENDING').toUpperCase();
+
+      if (status === 'PENDING') {
+        setPendingStatus('Your hospital registration is currently pending admin review. You will be activated once facility license and capacity details are verified.');
+        Alert.alert('Verification Pending', 'Your facility registration is awaiting Admin verification. You cannot access the hospital console until approved.');
+        return;
+      }
+
+      if (status === 'REJECTED') {
+        Alert.alert('Application Rejected', 'Your hospital application was rejected by the Medical Admin. Please contact support or re-register with valid credentials.');
+        return;
+      }
+
+      // Hydrate official hospital facility name
+      const officialName = session.profile?.hospitalName || session.profile?.name || 'Emergency Trauma Center';
+      useAppStore.getState().setUserProfile({
+        ...session.profile,
+        hospitalName: officialName,
+        name: officialName,
+      });
 
       useAppStore.getState().setRole('HOSPITAL');
       useAppStore.getState().setVerificationStatus('APPROVED');

@@ -163,38 +163,59 @@ export default function DriverRegister() {
           </View>
         </Card>
         <View style={{ height: 12 }} />
-      <InputGroup label="Driver Name">
-        <Input placeholder="Full name" value={name} onChangeText={setName} />
+      <InputGroup
+        label="Driver Full Name"
+        required
+        tooltip="Full legal name as listed on your commercial driving license."
+      >
+        <Input placeholder="e.g. Ramesh Kumar" value={name} onChangeText={setName} />
       </InputGroup>
-      <InputGroup label="Email">
+      <InputGroup
+        label="Contact Email"
+        required
+        tooltip="Official email where verification notices and dispatch summaries will be delivered."
+      >
         <Input
-          placeholder="you@example.com"
+          placeholder="e.g. pilot@emergency.org"
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
         />
       </InputGroup>
-      <InputGroup label="Phone">
+      <InputGroup
+        label="Mobile Phone Number"
+        required
+        tooltip="Active 10-digit mobile number for dispatch center calls and patient navigation."
+      >
         <Input
-          placeholder="+91 98765 43210"
+          placeholder="e.g. +91 98765 43210"
           keyboardType="phone-pad"
           value={phone}
           onChangeText={setPhone}
         />
       </InputGroup>
-      <InputGroup label="Driver License / Badge ID">
+      <InputGroup
+        label="Commercial Driving License / Badge ID"
+        required
+        tooltip="Official government driving license or paramedic vehicle operator badge ID."
+      >
         <Input
           placeholder="e.g. DL-0420110023456"
           value={driverId}
           onChangeText={setDriverId}
         />
       </InputGroup>
-      <InputGroup label="Ambulance Vehicle Plate Number">
+      <InputGroup
+        label="Ambulance Vehicle Plate Number"
+        required
+        tooltip="Official state registration number plate of the ambulance vehicle (e.g. UP-70-AB-1234)."
+      >
         <Input
           placeholder="e.g. UP-70-AB-1234"
           value={ambulanceId}
           onChangeText={setAmbulanceId}
+          autoCapitalize="characters"
         />
       </InputGroup>
       <View style={{ marginBottom: 14 }}>
@@ -210,7 +231,10 @@ export default function DriverRegister() {
           })}
         </View>
       </View>
-      <InputGroup label="Hospital Affiliation (or Independent Fleet)">
+      <InputGroup
+        label="Hospital Affiliation (or Independent Fleet)"
+        tooltip="Enter the name of your affiliated hospital, or 'Independent Fleet' if operating as a community 108 responder."
+      >
         <Input
           placeholder="e.g. Apollo Hospital or Independent Fleet"
           value={hospitalAffiliation}

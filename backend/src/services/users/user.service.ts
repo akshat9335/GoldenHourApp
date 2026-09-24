@@ -141,7 +141,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
   // Hydrate driver details if driver
   if (profile.role === "AMBULANCE_DRIVER" || profile.roles?.includes("AMBULANCE_DRIVER")) {
-    if (firestore && (!profile.vehiclePlateNumber || !profile.ambulanceId)) {
+    if (firestore) {
       try {
         const driverDoc = await firestore.collection("drivers").doc(uid).get();
         if (driverDoc.exists) {
@@ -153,21 +153,42 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
               vehiclePlateNumber: dData.vehiclePlateNumber || dData.ambulanceId || profile.vehiclePlateNumber || null,
               hospitalId: dData.hospitalId || profile.hospitalId || null,
               hospitalName: dData.hospitalName || profile.hospitalName || null,
+              verificationStatus: dData.verificationStatus || profile.verificationStatus || "PENDING",
             };
             dataStore.users.set(uid, profile);
           }
         }
       } catch {}
     }
+  }
 
-    if (profile.verificationStatus !== "REJECTED") {
-      profile.verificationStatus = "APPROVED";
-    }
-    if (!profile.roleVerificationStatus) {
-      profile.roleVerificationStatus = {};
-    }
-    if (profile.roleVerificationStatus.AMBULANCE_DRIVER !== "REJECTED") {
-      profile.roleVerificationStatus.AMBULANCE_DRIVER = "APPROVED";
+  // Hydrate hospital details if hospital
+  if (profile.role === "HOSPITAL" || profile.roles?.includes("HOSPITAL")) {
+    if (firestore) {
+      try {
+        // Query hospitals collection by ownerUid or docId
+        let hospDoc = await firestore.collection("hospitals").doc(uid).get();
+        if (!hospDoc.exists) {
+          const hospQuery = await firestore.collection("hospitals").where("ownerUid", "==", uid).limit(1).get();
+          if (!hospQuery.empty) {
+            hospDoc = hospQuery.docs[0];
+          }
+        }
+        if (hospDoc.exists) {
+          const hData = hospDoc.data() as any;
+          if (hData) {
+            const resolvedHospName = hData.hospitalName || hData.name || null;
+            profile = {
+              ...profile,
+              hospitalId: hospDoc.id,
+              hospitalName: resolvedHospName,
+              name: resolvedHospName || profile.name,
+              verificationStatus: hData.verificationStatus || profile.verificationStatus || "PENDING",
+            };
+            dataStore.users.set(uid, profile);
+          }
+        }
+      } catch {}
     }
   }
 

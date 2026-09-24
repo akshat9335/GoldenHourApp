@@ -107,12 +107,17 @@ export default function LiveMap() {
   const pLng = emergency?.location?.longitude ?? lastKnownLocation?.longitude ?? 77.2090;
 
   const hospCoord = emergency?.assignedHospitalLocation;
-  const ambCoord = emergency?.ambulanceLocation || hospCoord;
+  const ambCoord = emergency?.ambulanceLocation;
   const ambLat = ambCoord?.latitude;
   const ambLng = ambCoord?.longitude;
 
-  const distanceKm = emergency?.distanceKm ?? (ambLat ? 1.8 : 2.4);
-  const etaMinutes = emergency?.etaMinutes ?? (ambLat ? 4 : 7);
+  const hasAmbulanceAssigned =
+    ambStatus >= 2 ||
+    !!emergency?.assignedDriverName ||
+    (!!emergency?.assignedAmbulanceId && emergency?.assignedAmbulanceId !== 'Unit Dispatching');
+
+  const distanceKm = hasAmbulanceAssigned ? (emergency?.distanceKm ?? (ambLat ? 1.8 : null)) : null;
+  const etaMinutes = hasAmbulanceAssigned ? (emergency?.etaMinutes ?? (ambLat ? 4 : null)) : null;
 
   const statusDisplay = emergency?.status
     ? emergency.status.replace(/_/g, ' ')
@@ -221,11 +226,19 @@ export default function LiveMap() {
               <View style={styles.telemetryHeader}>
                 <View>
                   <Text style={styles.telemetryLabel}>ESTIMATED ARRIVAL</Text>
-                  <Text style={styles.etaText}>~{etaMinutes} min</Text>
+                  <Text style={styles.etaText}>
+                    {hasAmbulanceAssigned
+                      ? (etaMinutes ? `~${etaMinutes} min` : 'Calculating...')
+                      : (hasHospitalAccepted ? 'Dispatching...' : 'Awaiting ER')}
+                  </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={styles.telemetryLabel}>DISTANCE</Text>
-                  <Text style={styles.distText}>{distanceKm} km</Text>
+                  <Text style={styles.distText}>
+                    {hasAmbulanceAssigned
+                      ? (distanceKm ? `${distanceKm} km` : 'En route')
+                      : 'Pending Dispatch'}
+                  </Text>
                 </View>
               </View>
 
@@ -248,29 +261,31 @@ export default function LiveMap() {
               ) : null}
             </Card>
 
-            {/* High-Impact Native Google Maps Action Button */}
-            <TouchableOpacity
-              style={[styles.gMapsActionBtn, isEnRouteToHospital && { backgroundColor: '#DC2626' }]}
-              onPress={handleOpenGoogleMaps}
-              activeOpacity={0.85}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Text style={{ fontSize: 20 }}>🗺️</Text>
-                <View>
-                  <Text style={styles.gMapsActionTitle}>
-                    {isEnRouteToHospital
-                      ? 'Track Route to Hospital in Google Maps'
-                      : 'Track Responding Ambulance in Google Maps'}
-                  </Text>
-                  <Text style={styles.gMapsActionSub}>
-                    {isEnRouteToHospital
-                      ? `En route to ${emergency?.assignedHospitalName || 'Hospital ER'}`
-                      : 'Opens native map with live satellite & real-time traffic'}
-                  </Text>
+            {/* High-Impact Native Google Maps Action Button (active only when assigned or en route) */}
+            {hasAmbulanceAssigned ? (
+              <TouchableOpacity
+                style={[styles.gMapsActionBtn, isEnRouteToHospital && { backgroundColor: '#DC2626' }]}
+                onPress={handleOpenGoogleMaps}
+                activeOpacity={0.85}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Text style={{ fontSize: 20 }}>🗺️</Text>
+                  <View>
+                    <Text style={styles.gMapsActionTitle}>
+                      {isEnRouteToHospital
+                        ? 'Track Route to Hospital in Google Maps'
+                        : 'Track Responding Ambulance in Google Maps'}
+                    </Text>
+                    <Text style={styles.gMapsActionSub}>
+                      {isEnRouteToHospital
+                        ? `En route to ${emergency?.assignedHospitalName || 'Hospital ER'}`
+                        : 'Opens native map with live satellite & real-time traffic'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>➔</Text>
-            </TouchableOpacity>
+                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800' }}>➔</Text>
+              </TouchableOpacity>
+            ) : null}
 
             {/* Assigned Ambulance Unit Card */}
             <Card style={styles.entityCard}>

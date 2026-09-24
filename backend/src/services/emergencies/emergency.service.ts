@@ -368,28 +368,34 @@ export async function createEmergency(
 
   const userRef = db.collection(USERS_COLLECTION).doc(reporterId);
   const userSnapshot = await userRef.get();
-
-  if (!userSnapshot.exists) {
-    throw new AppError(
-      404,
-      "USER_NOT_FOUND",
-      "Reporter user profile was not found.",
-    );
-  }
-
-  const user = userSnapshot.data() as {
-    crisisId?: string;
-    name?: string;
-    patientName?: string;
-    phone?: string;
+  let user = {
+    crisisId: `CR-${Date.now().toString(36).toUpperCase()}`,
+    name: "Emergency Patient",
+    patientName: "Emergency Patient",
+    phone: "",
   };
 
-  if (!user.crisisId) {
-    throw new AppError(
-      400,
-      "CRISIS_ID_NOT_FOUND",
-      "Reporter does not have a Crisis ID.",
-    );
+  if (userSnapshot.exists) {
+    const rawData = userSnapshot.data() || {};
+    user = {
+      crisisId: rawData.crisisId || user.crisisId,
+      name: rawData.name || rawData.patientName || user.name,
+      patientName: rawData.patientName || rawData.name || user.patientName,
+      phone: rawData.phone || "",
+    };
+    if (!rawData.crisisId) {
+      await userRef.set({ crisisId: user.crisisId }, { merge: true });
+    }
+  } else {
+    // Auto-create minimal profile for new user so emergency dispatch never fails
+    await userRef.set({
+      uid: reporterId,
+      crisisId: user.crisisId,
+      name: user.name,
+      role: "PATIENT",
+      roles: ["PATIENT"],
+      createdAt: new Date().toISOString(),
+    }, { merge: true });
   }
 
   const emergencyRef = db

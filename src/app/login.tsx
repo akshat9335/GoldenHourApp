@@ -33,8 +33,48 @@ export default function LoginScreen() {
         } catch {
           useAppStore.getState().setProfileExists(true);
         }
+        useAppStore.getState().setRole('PATIENT');
+        router.replace('/(patient)/home');
+        return;
       }
 
+      // Existing user: Route intelligently to their active professional role
+      const userRoles = (session.profile?.roles || [session.role || 'PATIENT']).map((r: string) => String(r).toUpperCase());
+
+      if (userRoles.includes('HOSPITAL')) {
+        const hStatus = session.profile?.verificationStatus || session.profile?.roleVerificationStatus?.HOSPITAL || 'APPROVED';
+        if (hStatus === 'APPROVED') {
+          useAppStore.getState().setRole('HOSPITAL');
+          router.replace('/(hospital)/dashboard');
+          return;
+        }
+      }
+
+      if (userRoles.includes('AMBULANCE_DRIVER') || userRoles.includes('AMBULANCE')) {
+        const dStatus = session.profile?.verificationStatus || session.profile?.roleVerificationStatus?.AMBULANCE_DRIVER || 'APPROVED';
+        if (dStatus === 'APPROVED') {
+          useAppStore.getState().setRole('AMBULANCE_DRIVER');
+          router.replace('/(ambulance)/dashboard');
+          return;
+        }
+      }
+
+      if (userRoles.includes('DOCTOR')) {
+        const docStatus = session.profile?.verificationStatus || session.profile?.roleVerificationStatus?.DOCTOR || 'APPROVED';
+        if (docStatus === 'APPROVED') {
+          useAppStore.getState().setRole('DOCTOR');
+          router.replace('/(doctor)/dashboard');
+          return;
+        }
+      }
+
+      if (userRoles.includes('FRONTLINE_WORKER') || userRoles.includes('ASHA')) {
+        useAppStore.getState().setRole('FRONTLINE_WORKER');
+        router.replace('/(worker)/dashboard');
+        return;
+      }
+
+      // Default patient user
       useAppStore.getState().setRole('PATIENT');
       router.replace('/(patient)/home');
     } catch (err: any) {
