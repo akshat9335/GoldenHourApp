@@ -84,25 +84,37 @@ export default function PatientHome() {
     .toUpperCase() || 'GH';
 
   const handleCancelActiveEmergency = () => {
+    const doCancel = async (reason: string) => {
+      try {
+        if (emergencyId) {
+          await api.emergencies.cancel(emergencyId, reason);
+        } else {
+          await api.emergencies.cancelActive(reason);
+        }
+      } catch {}
+      resetEmergencySession();
+      try {
+        const me = await api.users.getProfile();
+        if (me?.trustScore !== undefined) {
+          useAppStore.getState().setTrustScore(me.trustScore);
+        }
+      } catch {}
+      Alert.alert('Emergency Cleared', 'The emergency SOS has been cancelled.');
+    };
+
     Alert.alert(
       'Cancel Emergency SOS?',
-      'Are you sure you want to cancel the active emergency? Any responding ambulance units and hospitals will be notified.',
+      'Are you sure you want to cancel?\n\n• False Alarm / Test Report: 20 points deducted from Trust Score\n• Situation Resolved Safely: No penalty applied',
       [
         { text: 'Keep Active', style: 'cancel' },
         {
-          text: 'Yes, Cancel SOS',
+          text: 'Resolved Safely',
+          onPress: () => doCancel('Situation resolved safely by user'),
+        },
+        {
+          text: 'False Alarm (-20)',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              if (emergencyId) {
-                await api.emergencies.cancel(emergencyId, 'User cancelled from home screen');
-              } else {
-                await api.emergencies.cancelActive('User cancelled from home screen');
-              }
-            } catch {}
-            resetEmergencySession();
-            Alert.alert('Emergency Cancelled', 'The emergency SOS has been cleared.');
-          },
+          onPress: () => doCancel('False alarm reported by user'),
         },
       ]
     );

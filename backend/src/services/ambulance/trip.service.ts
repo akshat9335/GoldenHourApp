@@ -1,5 +1,6 @@
 import { firestore, assertFirebaseReady } from "../../config/firebase";
 import { AmbulanceStatus } from "../../models/ambulance.model";
+import { adjustUserTrustScore } from "../users/user.service";
 
 const TRIP_COLLECTION = "ambulanceTrips";
 const ASSIGNMENT_COLLECTION = "ambulanceAssignments";
@@ -76,6 +77,26 @@ async function syncEmergencyFromTrip(
         }
         await hDoc.ref.set(hData, { merge: true });
       }
+    }
+
+    if (updates.status === "COMPLETED" && firestore) {
+      try {
+        const emSnap = await firestore.collection("emergencies").doc(emergencyId).get();
+        if (emSnap.exists) {
+          const emData = emSnap.data() || {};
+          if (emData.reporterId && !emData.trustScoreAwarded) {
+            await firestore.collection("emergencies").doc(emergencyId).update({
+              trustScoreAwarded: true,
+              updatedAt: now,
+            }).catch(() => {});
+            void adjustUserTrustScore(
+              emData.reporterId,
+              10,
+              "Genuine emergency ambulance mission completed",
+            ).catch(() => {});
+          }
+        }
+      } catch (_tErr) {}
     }
   } catch (_e) {
     // Non-blocking sync for test/partial-mock environments

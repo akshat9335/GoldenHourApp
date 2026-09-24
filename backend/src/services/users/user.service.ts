@@ -166,9 +166,12 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   if (profile.role === "HOSPITAL" || profile.roles?.includes("HOSPITAL")) {
     if (firestore) {
       try {
-        // Query hospitals collection by ownerUid, docId (with or without hosp- prefix), or email
-        let hospDoc = await firestore.collection("hospitals").doc(uid).get();
-        if (!hospDoc.exists) {
+        // Query hospitals collection: prefer profile.hospitalId, then hosp-${uid}, then ownerUid
+        let hospDoc: any = null;
+        if (profile.hospitalId) {
+          hospDoc = await firestore.collection("hospitals").doc(profile.hospitalId).get();
+        }
+        if (!hospDoc || !hospDoc.exists) {
           hospDoc = await firestore.collection("hospitals").doc(`hosp-${uid}`).get();
         }
         if (!hospDoc.exists) {
@@ -176,6 +179,9 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
           if (!hospQuery.empty) {
             hospDoc = hospQuery.docs[0];
           }
+        }
+        if (!hospDoc.exists) {
+          hospDoc = await firestore.collection("hospitals").doc(uid).get();
         }
         if (!hospDoc.exists && profile.email) {
           const emailQuery = await firestore.collection("hospitals").where("email", "==", profile.email).limit(1).get();
@@ -536,4 +542,69 @@ export async function updateUserProfile(
   }
 
   return merged;
+}
+
+/**
+ * Adjusts user trust score dynamically (+10 for genuine verified emergency, -20 for false alarm/fake report).
+ * Clamped strictly between 0 and 100.
+ */
+export async function adjustUserTrustScore(
+  uid: string,
+  delta: number,
+  reason: string,
+): Promise<number> {
+  if (!uid) return 100;
+
+  let currentScore = 100;
+  const inMemory = dataStore.users.get(uid);
+  if (inMemory && typeof inMemory.trustScore === "number") {
+    currentScore = inMemory.trustScore;
+  }
+
+  if (firestore) {
+    try {
+      const userRef = firestore.collection(USERS_COLLECTION).doc(uid);
+      const snap = await userRef.get();
+      if (snap.exists) {
+        const data = snap.data() || {};
+        if (typeof data.trustScore === "number") {
+          currentScore = data.trustScore;
+        }
+      }
+    } catch {}
+  }
+
+  const newScore = Math.max(0, Math.min(100, currentScore + delta));
+  const now = new Date().toISOString();
+
+  if (inMemory) {
+    inMemory.trustScore = newScore;
+  }
+
+  if (firestore) {
+    try {
+      const userRef = firestore.collection(USERS_COLLECTION).doc(uid);
+      const snap = await userRef.get();
+      const existingHistory = snap.exists && Array.isArray(snap.data()?.trustHistory)
+        ? snap.data()!.trustHistory
+        : [];
+
+      await userRef.set(
+        {
+          trustScore: newScore,
+          trustHistory: [
+            ...existingHistory.slice(-20),
+            { delta, reason, timestamp: now, newScore },
+          ],
+          updatedAt: now,
+        },
+        { merge: true },
+      );
+      console.log(`[TrustScore] User ${uid} adjusted by ${delta > 0 ? "+" : ""}${delta} (${reason}) -> New score: ${newScore}`);
+    } catch (err) {
+      console.warn("[UserService] Failed to adjust trustScore in Firestore:", err);
+    }
+  }
+
+  return newScore;
 }

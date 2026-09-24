@@ -3,6 +3,7 @@ import { AppError } from "../../utils/AppError";
 import { emergencyAlertService } from "../notifications/emergencyAlert.service";
 import { locationService } from "../location/location.service";
 import { analyzeEmergency } from "../ai/aiService";
+import { adjustUserTrustScore } from "../users/user.service";
 
 const USERS_COLLECTION = "users";
 const EMERGENCIES_COLLECTION = "emergencies";
@@ -712,21 +713,22 @@ export async function getEmergencyById(
   }
 
   // 4. Smart Auto-Escalation Check:
-  // If emergency is still waiting for hospital acceptance (REPORTED / HOSPITAL_SEARCH),
-  // and alertedAt was more than 60 seconds ago, auto-escalate to next hospital candidate!
+  // If emergency is still waiting for hospital acceptance (REPORTED / HOSPITAL_SEARCH / PENDING),
+  // and alertedAt was more than 45 seconds ago, auto-escalate to next hospital candidate!
+  const emStatusStr = String(emergency.status || "").toUpperCase();
   if (
-    (emergency.status === "REPORTED" || emergency.status === "HOSPITAL_SEARCH") &&
+    (emStatusStr === "REPORTED" || emStatusStr === "HOSPITAL_SEARCH" || emStatusStr === "PENDING") &&
     !emergency.assignedHospitalId &&
     !(emergency as any).fallbackMode &&
     (emergency as any).alertedAt
   ) {
     const alertedTime = new Date((emergency as any).alertedAt).getTime();
     const elapsedMs = Date.now() - alertedTime;
-    if (elapsedMs > 60000) {
+    if (elapsedMs > 45000) {
       try {
         const escalated = await escalateEmergencyToNextHospital(
           emergency.id,
-          "Hospital response timeout (60s) without acceptance",
+          "Hospital response timeout (45s) without acceptance",
         );
         if (escalated) {
           Object.assign(emergency, escalated);
@@ -773,7 +775,22 @@ export async function escalateEmergencyToNextHospital(
     candidates[nextIdx].status = "ALERTED";
     candidates[nextIdx].alertedAt = now;
 
-    // Activate next hospital's request doc in hospitalEmergencyRequests
+    // 1. Mark previous hospital's request doc in hospitalEmergencyRequests as TIMEOUT
+    const prevHospital = candidates[currentIdx];
+    if (prevHospital?.hospitalId) {
+      const prevDocId = `${emergencyId}_${prevHospital.hospitalId}`;
+      try {
+        await db.collection(HOSPITAL_REQUESTS_COLLECTION).doc(prevDocId).set(
+          {
+            status: "TIMEOUT",
+            updatedAt: now,
+          },
+          { merge: true },
+        );
+      } catch (_e) {}
+    }
+
+    // 2. Activate next hospital's request doc in hospitalEmergencyRequests
     const reqDocId = `${emergencyId}_${nextHospital.hospitalId}`;
     try {
       await db.collection(HOSPITAL_REQUESTS_COLLECTION).doc(reqDocId).set(
@@ -948,6 +965,20 @@ export async function updateEmergency(
     }
   }
 
+  // Award +10 trust score if genuine emergency is successfully completed
+  if (
+    (updates as any).status === "COMPLETED" &&
+    existing.reporterId &&
+    !(existing as any).trustScoreAwarded
+  ) {
+    (allowedUpdates as any).trustScoreAwarded = true;
+    void adjustUserTrustScore(
+      existing.reporterId,
+      10,
+      "Genuine emergency mission successfully completed",
+    ).catch(() => {});
+  }
+
   return {
     ...existing,
     ...allowedUpdates,
@@ -1031,6 +1062,20 @@ export async function cancelEmergencyById(
     etaMinutes: null as any,
     updatedAt: now,
   };
+
+  // Check if cancellation is a false alarm / invalid report (-20 trust score penalty)
+  const isFalseAlarm =
+    /false|fake|prank|mistake|accidental|invalid/i.test(reason) ||
+    reason.toLowerCase().includes("false alarm");
+
+  if (isFalseAlarm && existing.reporterId && !(existing as any).trustScorePenalized) {
+    (cancellationUpdates as any).trustScorePenalized = true;
+    void adjustUserTrustScore(
+      existing.reporterId,
+      -20,
+      `False alarm reported: ${reason}`,
+    ).catch(() => {});
+  }
 
   await emergencyRef.set(cancellationUpdates, { merge: true });
 

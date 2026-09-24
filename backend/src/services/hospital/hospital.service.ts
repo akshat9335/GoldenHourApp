@@ -1,6 +1,7 @@
 import { firestore } from "../../config/firebase";
 import { AppError } from "../../utils/AppError";
 import { escalateEmergencyToNextHospital } from "../emergencies/emergency.service";
+import { adjustUserTrustScore } from "../users/user.service";
 
 // ============================================================
 // TYPES
@@ -121,6 +122,13 @@ async function getHospitalByOwnerUid(uid: string) {
   }
 
   if (!hospitalDoc) {
+    const prefixedDoc = await firestore.collection("hospitals").doc(`hosp-${uid}`).get();
+    if (prefixedDoc.exists) {
+      hospitalDoc = prefixedDoc;
+    }
+  }
+
+  if (!hospitalDoc) {
     const hospitalSnapshot = await firestore
       .collection("hospitals")
       .where("ownerUid", "==", uid)
@@ -128,13 +136,6 @@ async function getHospitalByOwnerUid(uid: string) {
       .get();
     if (!hospitalSnapshot.empty) {
       hospitalDoc = hospitalSnapshot.docs[0];
-    }
-  }
-
-  if (!hospitalDoc) {
-    const prefixedDoc = await firestore.collection("hospitals").doc(`hosp-${uid}`).get();
-    if (prefixedDoc.exists) {
-      hospitalDoc = prefixedDoc;
     } else {
       const directDoc = await firestore.collection("hospitals").doc(uid).get();
       if (directDoc.exists && directDoc.data()?.name) {
@@ -476,6 +477,29 @@ async function transitionHospitalRequest(
         }
       }
     } catch (_tripSyncErr) {}
+
+    // Award +10 trust score to the reporter when genuine care is successfully completed
+    if (canonicalStatus === "COMPLETED") {
+      try {
+        if (firestore && emergencyId) {
+          const emSnap = await firestore.collection("emergencies").doc(emergencyId).get();
+          if (emSnap.exists) {
+            const emData = emSnap.data() || {};
+            if (emData.reporterId && !emData.trustScoreAwarded) {
+              await firestore.collection("emergencies").doc(emergencyId).update({
+                trustScoreAwarded: true,
+                updatedAt: now,
+              }).catch(() => {});
+              void adjustUserTrustScore(
+                emData.reporterId,
+                10,
+                "Genuine emergency care delivered at hospital",
+              ).catch(() => {});
+            }
+          }
+        }
+      } catch (_tErr) {}
+    }
   }
 
   return {
@@ -832,9 +856,9 @@ export async function getHospitalRequests(uid: string) {
 
         if (!isTargeted) continue;
 
-        // Skip emergencies older than 24 hours to prevent stale test leakage
+        // Skip emergencies older than 30 minutes to prevent stale request resurrection
         const emTime = new Date(em.createdAt || 0).getTime();
-        if (emTime && Date.now() - emTime > 24 * 60 * 60 * 1000) continue;
+        if (emTime && Date.now() - emTime > 30 * 60 * 1000) continue;
 
         const reqDocId = `${emDoc.id}_${primaryHospId}`;
         const bridgedData = {
@@ -866,10 +890,18 @@ export async function getHospitalRequests(uid: string) {
     } catch {}
   }
 
-  // Filter out COMPLETED, REJECTED, and CANCELLED requests so the hospital console stays ultra-fast
+  // Hospital must ONLY see active requests intended for them right now:
+  // Must NOT show QUEUED_STANDBY (until escalated to NEW), TIMEOUT, REJECTED, COMPLETED, or CANCELLED
   const activeResults = results.filter((item: any) => {
     const st = String(item.status || "").toUpperCase();
-    return st !== "COMPLETED" && st !== "REJECTED" && st !== "CANCELLED";
+    return (
+      st === "NEW" ||
+      st === "PENDING" ||
+      st === "ACCEPTED" ||
+      st === "AMBULANCE EN ROUTE" ||
+      st === "PATIENT ARRIVED" ||
+      st === "IN TREATMENT"
+    );
   });
 
   // Sort newest first so the latest incoming emergency is at the top, limit to latest 15
@@ -913,10 +945,20 @@ export async function clearHospitalRequests(uid: string) {
 
   const batch = firestore.batch();
   let count = 0;
+  const now = new Date().toISOString();
 
   for (const doc of snapshot.docs) {
+    const data = doc.data() || {};
     batch.delete(doc.ref);
     count++;
+    if (data.emergencyId) {
+      try {
+        void escalateEmergencyToNextHospital(
+          data.emergencyId,
+          "Hospital ER cleared queue from console",
+        ).catch(() => {});
+      } catch (_e) {}
+    }
   }
 
   if (count > 0) {
@@ -954,11 +996,23 @@ export async function dismissHospitalRequest(requestId: string, uid: string) {
   }
 
   if (snap.exists) {
+    const data = snap.data() || {};
+    const now = new Date().toISOString();
     await docRef.update({
       status: "REJECTED",
       resolutionNotes: "Dismissed from console",
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
+    const emId = data.emergencyId;
+    if (emId) {
+      // When an individual hospital declines/dismisses, auto-escalate to the next candidate hospital!
+      try {
+        await escalateEmergencyToNextHospital(
+          emId,
+          "Hospital ER dismissed request from console",
+        );
+      } catch (_escErr) {}
+    }
   }
 }
 

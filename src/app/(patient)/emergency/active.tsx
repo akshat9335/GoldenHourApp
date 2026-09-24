@@ -51,26 +51,38 @@ export default function Active() {
   const elapsed = 2 + ambStatus * 3;
   const isLast = ambStatus >= AMB_STEPS.length - 1;
 
+  const performCancellation = async (reason: string) => {
+    try {
+      if (emergencyId) {
+        await api.emergencies.cancel(emergencyId, reason);
+      } else {
+        await api.emergencies.cancelActive(reason);
+      }
+    } catch {}
+    resetEmergencySession();
+    try {
+      const me = await api.users.getProfile();
+      if (me?.trustScore !== undefined) {
+        useAppStore.getState().setTrustScore(me.trustScore);
+      }
+    } catch {}
+    router.replace('/(patient)/home');
+  };
+
   const handleCancelEmergency = () => {
     Alert.alert(
       'Cancel Emergency SOS?',
-      'Are you sure you want to cancel? Responding ambulance pilots and emergency hospital rooms will be notified immediately.',
+      'Are you sure you want to cancel?\n\n• False Alarm / Test Report: 20 points deducted from Trust Score\n• Situation Resolved Safely: No penalty applied',
       [
         { text: 'Keep Active', style: 'cancel' },
         {
-          text: 'Yes, Cancel SOS',
+          text: 'Resolved Safely',
+          onPress: () => performCancellation('Situation resolved safely on scene'),
+        },
+        {
+          text: 'False Alarm (-20)',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              if (emergencyId) {
-                await api.emergencies.cancel(emergencyId, 'Patient requested cancellation');
-              } else {
-                await api.emergencies.cancelActive('Patient requested cancellation');
-              }
-            } catch {}
-            resetEmergencySession();
-            router.replace('/(patient)/home');
-          },
+          onPress: () => performCancellation('False alarm reported by user'),
         },
       ]
     );
@@ -202,7 +214,15 @@ export default function Active() {
             </Pill>
           )}
         </View>
-        <Text style={styles.elapsed}>{elapsed} min elapsed</Text>
+        {!isLast && (
+          <TouchableOpacity
+            onPress={handleCancelEmergency}
+            style={styles.topCancelBadge}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.topCancelText}>🛑 Cancel SOS</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <Card style={styles.statusCard}>
         <Text style={styles.statusLabel}>CURRENT STATUS</Text>
@@ -608,5 +628,18 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontWeight: '800',
     fontSize: 13,
+  },
+  topCancelBadge: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  topCancelText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#DC2626',
   },
 });
