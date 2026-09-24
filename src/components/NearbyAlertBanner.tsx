@@ -55,7 +55,9 @@ export default function NearbyAlertBanner() {
     };
   }, [lastKnownLocation]);
 
-  if (!activeIncident || dismissed) {
+  const emergencyId = useAppStore((s) => s.emergencyId);
+
+  if (!activeIncident || dismissed || emergencyId) {
     return null;
   }
 

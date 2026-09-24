@@ -10,7 +10,7 @@ export default function WorkerLayout() {
   const role = useAppStore((s) => s.role);
 
   if (role !== 'FRONTLINE_WORKER') {
-    return <Redirect href="/role-selection" />;
+    return <Redirect href={'/asha-login' as any} />;
   }
 
   return (

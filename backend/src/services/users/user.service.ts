@@ -296,12 +296,10 @@ export async function registerUserProfile(
     new Set([...existingRoles, requestedRole as CanonicalRole])
   );
 
-  // Auto-approve patients and operational testing roles so drivers and hospitals are never locked out
+  // Only regular patients are auto-approved; professional roles (DOCTOR, AMBULANCE_DRIVER, HOSPITAL)
+  // strictly require Admin verification before gaining operational access.
   const targetVerificationStatus: VerificationStatus =
-    input.verificationStatus === "APPROVED" ||
-    requestedRole === "PATIENT" ||
-    requestedRole === "AMBULANCE_DRIVER" ||
-    requestedRole === "HOSPITAL"
+    input.verificationStatus === "APPROVED" || requestedRole === "PATIENT"
       ? "APPROVED"
       : "PENDING";
 
@@ -406,8 +404,8 @@ export async function registerUserProfile(
       clinicName: clinicRecord.clinicName,
       clinicAddress: clinicRecord.address,
       consultationFee: profile.consultationFee || 500,
-      verificationStatus: "PENDING" as const,
-      availability: "OFFLINE" as const,
+      verificationStatus: targetVerificationStatus === "APPROVED" ? ("VERIFIED" as const) : ("PENDING" as const),
+      availability: targetVerificationStatus === "APPROVED" ? ("AVAILABLE" as const) : ("OFFLINE" as const),
       rating: 5.0,
       servingToken: 0,
       queueLength: 0,
@@ -499,6 +497,30 @@ export async function registerUserProfile(
       try {
         await firestore.collection("drivers").doc(uid).set(driverRecord, { merge: true });
       } catch {}
+    }
+  } else if (requestedRole === "FRONTLINE_WORKER" || requestedRole === "ASHA") {
+    const workerRecord = {
+      id: uid,
+      uid,
+      userId: uid,
+      name: profile.name || "ASHA / ANM Worker",
+      phone: profile.phone || null,
+      email: profile.email || null,
+      workerType: input.workerType || "ASHA",
+      assignedPhc: input.assignedPhc || "Prayagraj Rural PHC",
+      village: input.village || "Soraon",
+      regNumber: input.regNumber || input.licenseNumber || null,
+      verificationStatus: targetVerificationStatus === "APPROVED" ? ("APPROVED" as const) : ("PENDING" as const),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (firestore) {
+      try {
+        await firestore.collection("workers").doc(uid).set(workerRecord, { merge: true });
+      } catch (err) {
+        console.warn("[UserService] Failed to write worker record:", err);
+      }
     }
   }
 

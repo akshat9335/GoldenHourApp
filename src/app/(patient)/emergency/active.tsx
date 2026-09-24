@@ -224,6 +224,23 @@ export default function Active() {
           </TouchableOpacity>
         )}
       </View>
+      {emergencyId?.startsWith('emg-offline-') ? (
+        <Card style={{ backgroundColor: '#FEF2F2', borderColor: '#F87171', borderWidth: 1.5, padding: 14, marginBottom: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <Icon name="alert-triangle" size={17} color="#DC2626" />
+            <Text style={{ fontSize: 13, fontWeight: '800', color: '#DC2626' }}>OFFLINE DISPATCH QUEUED</Text>
+          </View>
+          <Text style={{ fontSize: 12, color: '#7F1D1D', lineHeight: 17 }}>
+            No network detected. Your emergency GPS fix is safely queued on device and will auto-transmit to the cloud immediately once connectivity returns.
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#DC2626', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            onPress={() => Linking.openURL('tel:112')}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13 }}>🚨 Call 112 (National Emergency Helpline)</Text>
+          </TouchableOpacity>
+        </Card>
+      ) : null}
       <Card style={styles.statusCard}>
         <Text style={styles.statusLabel}>CURRENT STATUS</Text>
         <HTitle size={17}>{step}</HTitle>

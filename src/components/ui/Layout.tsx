@@ -42,19 +42,23 @@ export function Screen({
   );
 }
 
-export function TopBar({ title, back = true, onPressBack }: { title: string; back?: boolean; onPressBack?: () => void }) {
+export function TopBar({ title, back = true, onPressBack, right }: { title: string; back?: boolean; onPressBack?: () => void; right?: React.ReactNode }) {
   const router = useRouter();
   return (
-    <View style={styles.topbar}>
-      {back ? (
-        <Pressable style={styles.backbtn} onPress={onPressBack || (() => router.back())}>
-          <Icon name="chevL" size={14} />
-        </Pressable>
-      ) : null}
-      <HTitle size={17}>{title}</HTitle>
+    <View style={[styles.topbar, right ? { justifyContent: 'space-between' } : null]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+        {back ? (
+          <Pressable style={styles.backbtn} onPress={onPressBack || (() => router.back())}>
+            <Icon name="chevL" size={14} />
+          </Pressable>
+        ) : null}
+        <HTitle size={17}>{title}</HTitle>
+      </View>
+      {right}
     </View>
   );
 }
+
 
 type BannerColor = 'blue' | 'red' | 'amber' | 'success';
 const bannerBg: Record<BannerColor, string> = {

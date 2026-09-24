@@ -39,8 +39,15 @@ export default function DoctorLogin() {
       const status = session.profile?.roleVerificationStatus?.DOCTOR || session.profile?.verificationStatus || 'PENDING';
       const isApproved = status === 'APPROVED' || status === 'VERIFIED';
 
+      if (!isApproved) {
+        setPendingStatus(
+          `Your registration for Dr. ${session.profile?.name || ''} is currently under administrative review. Please wait for approval.`
+        );
+        return;
+      }
+
       useAppStore.getState().setRole('DOCTOR');
-      useAppStore.getState().setVerificationStatus(isApproved ? 'APPROVED' : 'PENDING');
+      useAppStore.getState().setVerificationStatus('APPROVED');
       router.replace('/(doctor)/dashboard');
       return;
     } catch (err: any) {

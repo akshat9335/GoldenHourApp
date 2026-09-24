@@ -61,8 +61,12 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     if (devRoleHeader && !canonicalRoles.includes(devRoleHeader)) {
       canonicalRoles = [devRoleHeader, ...canonicalRoles];
     }
-    const verificationStatus = (profile?.verificationStatus || "APPROVED") as VerificationStatus;
-    const roleVerificationStatus = (profile?.roleVerificationStatus || { ADMIN: "APPROVED" as const, PATIENT: "APPROVED" as const, HOSPITAL: "APPROVED" as const }) as Partial<Record<CanonicalRole, VerificationStatus>>;
+    const defaultStatus = canonicalRole === "PATIENT" || isAdminEmail ? "APPROVED" : "PENDING";
+    const verificationStatus = (profile?.verificationStatus || defaultStatus) as VerificationStatus;
+    const roleVerificationStatus = (profile?.roleVerificationStatus || {
+      ADMIN: "APPROVED" as const,
+      PATIENT: "APPROVED" as const,
+    }) as Partial<Record<CanonicalRole, VerificationStatus>>;
     if (isAdminEmail) {
       roleVerificationStatus.ADMIN = "APPROVED";
     }
@@ -169,12 +173,13 @@ export function requireApproved(req: Request, _res: Response, next: NextFunction
   }
 
   if (statusToCheck === "REJECTED") {
-    next(new AppError(403, "VERIFICATION_REJECTED", "Your professional account application has been rejected."));
+    next(new AppError(403, "VERIFICATION_REJECTED", "Your professional account application has been rejected by the administrator."));
     return;
   }
 
-  if (statusToCheck === "PENDING" && req.user) {
-    req.user.verificationStatus = "APPROVED";
+  if (statusToCheck === "PENDING") {
+    next(new AppError(403, "VERIFICATION_PENDING", "Your application is currently pending administrative review. Access will be granted once verified by the Admin."));
+    return;
   }
 
   next();

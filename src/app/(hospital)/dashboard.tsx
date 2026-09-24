@@ -15,6 +15,7 @@ export default function HospitalDashboard() {
   const [hospitalName, setHospitalName] = useState(initialName.endsWith('— ER') ? initialName : `${initialName} — ER`);
   const [pendingEmergency, setPendingEmergency] = useState<any | null>(null);
   const [activeInbound, setActiveInbound] = useState<any[]>([]);
+  const [admittedPatients, setAdmittedPatients] = useState<any[]>([]);
   const [criticalCount, setCriticalCount] = useState<number>(0);
   const [completedCases, setCompletedCases] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -79,12 +80,21 @@ export default function HospitalDashboard() {
         const items = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
         const pending = items.filter((d: any) => {
           const s = String(d.status || 'NEW').toUpperCase();
-          return s === 'NEW' || s === 'PENDING' || s === 'QUEUED_STANDBY';
+          return s === 'NEW' || s === 'PENDING';
         });
+
+        const admitted = items.filter((d: any) => {
+          const s = String(d.status || '').toUpperCase();
+          const ts = String(d.tripStatus || '').toUpperCase();
+          if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
+          return s === 'PATIENT ARRIVED' || s === 'IN TREATMENT' || s === 'AT_HOSPITAL' || ts === 'AT_HOSPITAL';
+        });
+
         const inbound = items.filter((d: any) => {
           const s = String(d.status || '').toUpperCase();
           const ts = String(d.tripStatus || '').toUpperCase();
           if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
+          if (s === 'PATIENT ARRIVED' || s === 'IN TREATMENT' || s === 'AT_HOSPITAL' || ts === 'AT_HOSPITAL') return false;
           return (
             s === 'ACCEPTED' ||
             s === 'HOSPITAL_ACCEPTED' ||
@@ -95,23 +105,16 @@ export default function HospitalDashboard() {
             s === 'AT_PATIENT' ||
             s === 'PATIENT_ONBOARD' ||
             s === 'EN_ROUTE_TO_HOSPITAL' ||
-            s === 'PATIENT ARRIVED' ||
-            s === 'AT_HOSPITAL' ||
-            s === 'IN TREATMENT' ||
-            s.includes('ACCEPT') ||
-            s.includes('AMBULANCE') ||
-            s.includes('ROUTE') ||
-            s.includes('ARRIV') ||
             ts === 'ASSIGNED' ||
             ts === 'EN_ROUTE_TO_PATIENT' ||
             ts === 'AT_PATIENT' ||
             ts === 'PATIENT_ONBOARD' ||
-            ts === 'EN_ROUTE_TO_HOSPITAL' ||
-            ts === 'AT_HOSPITAL'
+            ts === 'EN_ROUTE_TO_HOSPITAL'
           );
         });
         pending.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         inbound.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+        admitted.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
         
         const completed = items.filter((d: any) => {
           const s = String(d.status || '').toUpperCase();
@@ -122,6 +125,7 @@ export default function HospitalDashboard() {
 
         setCriticalCount(pending.length);
         setActiveInbound(inbound);
+        setAdmittedPatients(admitted);
         setCompletedCases(completed);
         if (pending.length > 0) {
           setPendingEmergency(pending[0]);
@@ -172,6 +176,50 @@ export default function HospitalDashboard() {
       await api.hospitals.dismissRequest(reqId);
       loadData();
     } catch (_e) {}
+  };
+
+  const handleDischargePatient = (patient: any) => {
+    const patientName = patient.patientName || 'Emergency Patient';
+    const reqId = patient.requestId || patient.id;
+    Alert.alert(
+      'Discharge Patient?',
+      `Confirm discharge for ${patientName}?\n\n• Frees up hospital ER bed capacity\n• Awards +10 Trust Score to the patient for verified care`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Discharge',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.hospitals.completeRequest(reqId);
+              loadData();
+              Alert.alert('Patient Discharged', `${patientName} has been discharged and case resolved.`);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Could not discharge patient');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearResolved = () => {
+    Alert.alert(
+      'Clear Resolved Cases?',
+      'Do you want to clean up resolved cases from this hospital view?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          onPress: async () => {
+            try {
+              await api.hospitals.clearRequests();
+              loadData();
+            } catch {}
+          },
+        },
+      ]
+    );
   };
 
   const handleAccountOptions = () => {
@@ -393,6 +441,76 @@ export default function HospitalDashboard() {
           </View>
         )}
 
+        {/* Admitted Patients in ER / Treatment Section */}
+        {admittedPatients.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <LabelEyebrow>🏥 ADMITTED PATIENTS IN ER ({admittedPatients.length})</LabelEyebrow>
+              <Text style={{ fontSize: 11, color: colors.success, fontWeight: '700' }}>Active Treatment</Text>
+            </View>
+            {admittedPatients.map((item, idx) => {
+              const driverName = item.assignedDriverName || item.driverName || 'Pilot';
+              const vehicle = item.assignedAmbulanceId || item.ambulanceId || '108';
+              const patientPhone = item.patientPhone || item.contactPhone;
+              return (
+                <Card key={item.requestId || item.id || idx} style={styles.admittedCard}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 16 }}>🏥</Text>
+                      <Text style={styles.admittedTitle}>
+                        {item.patientName || 'Emergency Patient'}
+                      </Text>
+                    </View>
+                    <Pill color="success">IN ER TREATMENT</Pill>
+                  </View>
+
+                  <View style={styles.inboundMetaRow}>
+                    <Icon name="hospital" size={14} color={colors.inkSoft} />
+                    <Text style={styles.inboundMetaText}>
+                      ID: {item.requestId || item.id?.slice?.(0, 8) || 'EM-911'} · {item.incidentType || 'Critical'}
+                    </Text>
+                  </View>
+
+                  <Text style={{ fontSize: 11.5, color: colors.inkFaint, marginBottom: 10 }}>
+                    Unit {vehicle} ({driverName}) · Bed allocated
+                  </Text>
+
+                  <View style={styles.inboundBtnRow}>
+                    <TouchableOpacity
+                      style={styles.actionBtnGrey}
+                      onPress={() => {
+                        setActiveHospitalRequestId(item.requestId || item.id);
+                        router.push('/(hospital)/request-detail');
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.actionBtnTextGrey}>🩺 Details</Text>
+                    </TouchableOpacity>
+
+                    {patientPhone ? (
+                      <TouchableOpacity
+                        style={styles.actionBtnGreen}
+                        onPress={() => Linking.openURL(`tel:${patientPhone}`)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.actionBtnTextGreen}>📞 Call</Text>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    <TouchableOpacity
+                      style={styles.dischargeBtn}
+                      onPress={() => handleDischargePatient(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.dischargeBtnText}>✅ Discharge</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              );
+            })}
+          </View>
+        )}
+
         <LabelEyebrow>EMERGENCY DEPARTMENT STATUS</LabelEyebrow>
         <Card style={{ padding: 14 }}>
           <View style={styles.statusRow}>
@@ -409,7 +527,15 @@ export default function HospitalDashboard() {
 
         {completedCases.length > 0 && (
           <View style={{ marginBottom: 16 }}>
-            <LabelEyebrow>RESOLVED / COMPLETED EMERGENCY CASES ({completedCases.length})</LabelEyebrow>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <LabelEyebrow>RESOLVED / COMPLETED EMERGENCY CASES ({completedCases.length})</LabelEyebrow>
+              <TouchableOpacity
+                onPress={handleClearResolved}
+                style={{ paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#F1F5F9', borderRadius: 6, borderWidth: 1, borderColor: '#CBD5E1' }}
+              >
+                <Text style={{ fontSize: 10.5, fontWeight: '700', color: colors.inkSoft }}>🧹 Clear</Text>
+              </TouchableOpacity>
+            </View>
             {completedCases.slice(0, 5).map((item, idx) => (
               <Card key={item.requestId || item.id || idx} style={{ padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#86EFAC', backgroundColor: '#F0FDF4' }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -560,5 +686,30 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1,
     borderColor: '#FECACA',
+  },
+  admittedCard: {
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    backgroundColor: '#F0FDF4',
+  },
+  admittedTitle: {
+    fontWeight: '800',
+    fontSize: 14,
+    color: colors.ink,
+  },
+  dischargeBtn: {
+    flex: 1.2,
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dischargeBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

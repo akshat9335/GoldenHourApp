@@ -51,6 +51,9 @@ export default function PatientHome() {
     api.users.getProfile().then((profile) => {
       if (profile) {
         setUserProfile(profile);
+        if (profile.trustScore !== undefined) {
+          useAppStore.getState().setTrustScore(profile.trustScore);
+        }
       }
     }).catch(() => {});
   }, []);
@@ -60,15 +63,15 @@ export default function PatientHome() {
 
   // Auto-clear active emergency banner and tracking if emergency has been resolved or cancelled
   useEffect(() => {
-    if (emergencyId) {
+    if (emergencyId && !emergencyId.startsWith('emg-offline-') && !emergencyId.startsWith('emg-demo-')) {
       api.emergencies.getById(emergencyId).then((emg) => {
         const st = String(emg?.status || '').toUpperCase();
         const tripSt = String(emg?.tripStatus || '').toUpperCase();
-        if (st === 'COMPLETED' || st === 'CANCELLED' || st === 'RESOLVED' || tripSt === 'COMPLETED' || !emg) {
+        if (st === 'COMPLETED' || st === 'CANCELLED' || st === 'RESOLVED' || tripSt === 'COMPLETED') {
           resetEmergencySession();
         }
       }).catch(() => {
-        resetEmergencySession();
+        // Do not auto-clear session on transient network error
       });
     }
   }, [emergencyId, resetEmergencySession]);
@@ -158,6 +161,10 @@ export default function PatientHome() {
     setPickerVisible(false);
   };
 
+  const storeTrustScore = useAppStore((s) => s.trustScore);
+  const trustScore = storeTrustScore ?? userProfile?.trustScore ?? 100;
+  const goldenHourId = useAppStore((s) => s.goldenHourId) || userProfile?.crisisId || userProfile?.uid?.slice?.(0, 8);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Screen padBottom={95}>
@@ -184,6 +191,36 @@ export default function PatientHome() {
             </Pressable>
           </View>
         </View>
+
+        {/* User Identity & Safety Trust Score Bar */}
+        <TouchableOpacity
+          style={styles.profileBadgeCard}
+          onPress={() => router.push('/(patient)/profile')}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+              <View style={styles.profileBadgeIcon}>
+                <Text style={{ fontSize: 16 }}>🛡️</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.profileBadgeName} numberOfLines={1}>{displayName}</Text>
+                  <Pill color={trustScore >= 80 ? 'success' : trustScore >= 50 ? 'amber' : 'red'}>
+                    {trustScore >= 80 ? 'Verified' : 'Review'}
+                  </Pill>
+                </View>
+                <Text style={styles.profileBadgeSub} numberOfLines={1}>
+                  Trust Score: <Text style={{ fontWeight: '800', color: trustScore >= 80 ? colors.success : colors.amber }}>{trustScore}/100</Text> · Crisis ID: {goldenHourId || 'GH-USER'}
+                </Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: 8 }}>
+              <Text style={{ fontSize: 11.5, color: colors.blue, fontWeight: '700' }}>View Profile</Text>
+              <Icon name="chevR" size={13} color={colors.blue} />
+            </View>
+          </View>
+        </TouchableOpacity>
 
         {/* Swiggy/Zomato style Interactive Location Bar */}
         <TouchableOpacity onPress={() => setPickerVisible(true)} activeOpacity={0.8}>
@@ -556,5 +593,36 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontWeight: '700',
     fontSize: 12,
+  },
+  profileBadgeCard: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  profileBadgeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileBadgeName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  profileBadgeSub: {
+    fontSize: 11,
+    color: colors.inkSoft,
+    marginTop: 2,
   },
 });

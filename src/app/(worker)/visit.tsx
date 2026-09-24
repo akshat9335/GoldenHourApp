@@ -43,16 +43,31 @@ function evaluateSeverity(params: {
   return 'NORMAL';
 }
 
-const SEVERITY_CONFIG: Record<TriageSeverity, { color: string; hiLabel: string; enLabel: string }> = {
-  CRITICAL: { color: '#DC2626', hiLabel: 'गंभीर (CRITICAL) — तत्काल अस्पताल भेजें', enLabel: 'CRITICAL — Immediate Hospital Transfer' },
-  MODERATE: { color: '#EA580C', hiLabel: 'मध्यम (MODERATE) — जिला अस्पताल', enLabel: 'MODERATE — District Hospital' },
-  NORMAL: { color: '#16A34A', hiLabel: 'सामान्य (NORMAL) — घर पर देखभाल', enLabel: 'NORMAL — Home Care & Monitor' },
+const SEVERITY_CONFIG: Record<TriageSeverity, { color: string; hiLabel: string; mrLabel: string; enLabel: string }> = {
+  CRITICAL: {
+    color: '#DC2626',
+    hiLabel: 'गंभीर (CRITICAL) — तत्काल अस्पताल भेजें',
+    mrLabel: 'गंभीर (CRITICAL) — तातडीने रुग्णालयात पाठवा',
+    enLabel: 'CRITICAL — Immediate Hospital Transfer',
+  },
+  MODERATE: {
+    color: '#EA580C',
+    hiLabel: 'मध्यम (MODERATE) — जिला अस्पताल',
+    mrLabel: 'मध्यम (MODERATE) — जिल्हा रुग्णालय',
+    enLabel: 'MODERATE — District Hospital',
+  },
+  NORMAL: {
+    color: '#16A34A',
+    hiLabel: 'सामान्य (NORMAL) — घर पर देखभाल',
+    mrLabel: 'सामान्य (NORMAL) — घरी काळजी घ्या',
+    enLabel: 'NORMAL — Home Care & Monitor',
+  },
 };
 
 export default function VisitScreen() {
   const { t, i18n } = useTranslation();
   const { patientId } = useLocalSearchParams<{ patientId?: string }>();
-  const lang = i18n.language as 'en' | 'hi';
+  const lang = i18n.language as 'en' | 'hi' | 'mr';
 
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState(patientId || '');
@@ -141,9 +156,9 @@ export default function VisitScreen() {
           t('asha.visitRecorded'),
           `${t('asha.visitSaved')}\n\n⚠️ ${t('asha.triageAssessment')}: ${SEVERITY_CONFIG[severity].enLabel}`,
           [
-            { text: lang === 'hi' ? 'डैशबोर्ड जाएं' : 'Done', onPress: () => router.back() },
+            { text: lang === 'mr' ? 'डॅशबोर्डवर जा' : lang === 'hi' ? 'डैशबोर्ड जाएं' : 'Done', onPress: () => router.back() },
             {
-              text: lang === 'hi' ? 'रेफरल भेजें' : 'Create Referral',
+              text: lang === 'mr' ? 'रेफरल पाठवा' : lang === 'hi' ? 'रेफरल भेजें' : 'Create Referral',
               style: 'destructive',
               onPress: () =>
                 router.replace({ pathname: '/(worker)/referral' as any, params: { patientId: selectedPatientId } }),
@@ -285,7 +300,13 @@ export default function VisitScreen() {
           <TextInput
             style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
             multiline
-            placeholder={lang === 'hi' ? 'लक्षण यहाँ लिखें…' : 'Describe symptoms here…'}
+            placeholder={
+              lang === 'mr'
+                ? 'लक्षणे येथे लिहा…'
+                : lang === 'hi'
+                ? 'लक्षण यहाँ लिखें…'
+                : 'Describe symptoms here…'
+            }
             value={symptoms}
             onChangeText={setSymptoms}
           />
@@ -296,7 +317,7 @@ export default function VisitScreen() {
           <Text style={styles.cardTitle}>{t('asha.triageAssessment')}</Text>
           <View style={[styles.triageBadge, { backgroundColor: cfg.color }]}>
             <Text style={styles.triageBadgeText}>
-              {lang === 'hi' ? cfg.hiLabel : cfg.enLabel}
+              {lang === 'mr' ? cfg.mrLabel : lang === 'hi' ? cfg.hiLabel : cfg.enLabel}
             </Text>
           </View>
         </View>

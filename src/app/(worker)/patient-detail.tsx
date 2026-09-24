@@ -207,7 +207,7 @@ export default function PatientDetailScreen() {
             {patient.isPregnant && (
               <View style={[styles.tagPill, { backgroundColor: '#FFEDD5', borderColor: '#FDBA74' }]}>
                 <Text style={[styles.tagText, { color: '#C2410C' }]}>
-                  🤰 {lang === 'hi' ? 'गर्भवती' : 'Pregnant'}{patient.expectedDeliveryDate ? ` (EDD: ${patient.expectedDeliveryDate})` : ''}
+                  🤰 {lang === 'mr' ? 'गर्भवती' : lang === 'hi' ? 'गर्भवती' : 'Pregnant'}{patient.expectedDeliveryDate ? ` (EDD: ${patient.expectedDeliveryDate})` : ''}
                 </Text>
               </View>
             )}
@@ -227,7 +227,9 @@ export default function PatientDetailScreen() {
             activeOpacity={0.85}
           >
             <Icon name="profile" size={18} color="#fff" />
-            <Text style={styles.actionBtnText}>{lang === 'hi' ? 'गृह भ्रमण / जाँच' : 'Record Home Visit'}</Text>
+            <Text style={styles.actionBtnText}>
+              {lang === 'mr' ? 'गृह भेट / तपासणी' : lang === 'hi' ? 'गृह भ्रमण / जाँच' : 'Record Home Visit'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -236,7 +238,9 @@ export default function PatientDetailScreen() {
             activeOpacity={0.85}
           >
             <Icon name="hospital" size={18} color="#fff" />
-            <Text style={styles.actionBtnText}>{lang === 'hi' ? 'अस्पताल रेफरल' : 'Digital Referral'}</Text>
+            <Text style={styles.actionBtnText}>
+              {lang === 'mr' ? 'रुग्णालय रेफरल' : lang === 'hi' ? 'अस्पताल रेफरल' : 'Digital Referral'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -247,13 +251,15 @@ export default function PatientDetailScreen() {
           activeOpacity={0.85}
         >
           <Icon name="ambulance" size={20} color="#fff" />
-          <Text style={styles.sosButtonText}>{t('asha.emergencySos')} — {lang === 'hi' ? 'तुरंत एम्बुलेंस बुलाएं' : 'Immediate Ambulance SOS'}</Text>
+          <Text style={styles.sosButtonText}>
+            {t('asha.emergencySos')} — {lang === 'mr' ? 'तातडीने अ‍ॅम्ब्युलन्स बोलवा' : lang === 'hi' ? 'तुरंत एम्बुलेंस बुलाएं' : 'Immediate Ambulance SOS'}
+          </Text>
         </TouchableOpacity>
 
         {/* Visit & Vital History Timeline */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {lang === 'hi' ? 'पूर्व जाँच और विटल्स (History)' : 'Visit & Vital Signs History'}
+            {lang === 'mr' ? 'मागील तपासण्या आणि विटल्स (History)' : lang === 'hi' ? 'पूर्व जाँच और विटल्स (History)' : 'Visit & Vital Signs History'}
           </Text>
 
           {visits.length === 0 ? (
@@ -333,7 +339,9 @@ export default function PatientDetailScreen() {
         {/* Referrals Section */}
         {referrals.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{lang === 'hi' ? 'रेफरल स्थिति' : 'Referral Status'}</Text>
+            <Text style={styles.sectionTitle}>
+              {lang === 'mr' ? 'रेफरल स्थिती' : lang === 'hi' ? 'रेफरल स्थिति' : 'Referral Status'}
+            </Text>
             {referrals.map((r) => (
               <View key={r.id} style={styles.refCard}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

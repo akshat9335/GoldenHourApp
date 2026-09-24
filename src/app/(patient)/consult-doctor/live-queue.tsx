@@ -95,13 +95,24 @@ export default function LiveQueue() {
           <Stepper steps={steps} currentIndex={Math.max(steps.length - 2, 0)} />
         </Card>
 
+        <Button
+          title="📹 Join Teleconsultation Room"
+          style={{ marginTop: 14, backgroundColor: colors.blue }}
+          onPress={() => router.push(`/(patient)/teleconsultation/tc_${myToken}` as any)}
+        />
+
         {isMyTurn ? (
-          <Button title="Consultation Completed" style={{ marginTop: 16 }} onPress={() => router.replace('/(patient)/consult-doctor' as any)} />
+          <Button
+            title="Mark Consultation Completed"
+            variant="secondary"
+            style={{ marginTop: 10 }}
+            onPress={() => router.replace('/(patient)/consult-doctor' as any)}
+          />
         ) : (
           <Button
             title="Simulate Queue Moving (Demo)"
             variant="secondary"
-            style={{ marginTop: 16 }}
+            style={{ marginTop: 10 }}
             onPress={handleAdvance}
           />
         )}

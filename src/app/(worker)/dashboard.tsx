@@ -153,8 +153,10 @@ export default function WorkerDashboard() {
   const handleSync = async () => {
     if (!isOnline) {
       Alert.alert(
-        lang === 'hi' ? 'ऑफ़लाइन मोड' : 'Offline',
-        lang === 'hi'
+        lang === 'mr' ? 'ऑफलाइन मोड' : lang === 'hi' ? 'ऑफ़लाइन मोड' : 'Offline',
+        lang === 'mr'
+          ? 'डेटा डिव्हाइसवर सुरक्षित आहे. इंटरनेट कनेक्ट झाल्यावर आपोआप सिंक होईल.'
+          : lang === 'hi'
           ? 'डेटा डिवाइस में सुरक्षित है। इंटरनेट कनेक्ट होने पर स्वतः सिंक हो जाएगा।'
           : 'Records are securely queued locally and will auto-sync once internet is connected.'
       );
@@ -165,8 +167,8 @@ export default function WorkerDashboard() {
     setIsSyncing(false);
     await loadPendingCount();
     Alert.alert(
-      lang === 'hi' ? 'सिंक पूरा हुआ' : 'Sync Complete',
-      `✓ ${result.success} ${lang === 'hi' ? 'रिकॉर्ड क्लाउड पर सिंक हुए' : 'records synced to cloud'}${
+      lang === 'mr' ? 'सिंक पूर्ण झाले' : lang === 'hi' ? 'सिंक पूरा हुआ' : 'Sync Complete',
+      `✓ ${result.success} ${lang === 'mr' ? 'रेकॉर्ड्स क्लाउडवर सिंक झाले' : lang === 'hi' ? 'रिकॉर्ड क्लाउड पर सिंक हुए' : 'records synced to cloud'}${
         result.failed ? `, ${result.failed} failed` : ''
       }.`
     );
@@ -180,26 +182,43 @@ export default function WorkerDashboard() {
 
   const getBannerConfig = () => {
     if (isSyncing)
-      return { bg: '#EFF6FF', border: '#3B82F6', text: '#1E40AF', msg: lang === 'hi' ? 'रिकॉर्ड सिंक हो रहे हैं…' : 'Syncing records…' };
+      return {
+        bg: '#EFF6FF',
+        border: '#3B82F6',
+        text: '#1E40AF',
+        msg: lang === 'mr' ? 'रेकॉर्ड्स सिंक होत आहेत…' : lang === 'hi' ? 'रिकॉर्ड सिंक हो रहे हैं…' : 'Syncing records…',
+      };
     if (pendingCount > 0 && !isOnline)
       return {
         bg: '#FEFCE8',
         border: '#F59E0B',
         text: '#92400E',
-        msg: lang === 'hi' ? `${pendingCount} रिकॉर्ड ऑफ़लाइन सुरक्षित हैं। नेटवर्क मिलने पर सिंक होंगे।` : `${pendingCount} records saved offline. Will auto-sync when online.`,
+        msg: lang === 'mr'
+          ? `${pendingCount} रेकॉर्ड्स ऑफलाइन सुरक्षित आहेत. नेटवर्क आल्यावर सिंक होतील.`
+          : lang === 'hi'
+          ? `${pendingCount} रिकॉर्ड ऑफ़लाइन सुरक्षित हैं। नेटवर्क मिलने पर सिंक होंगे।`
+          : `${pendingCount} records saved offline. Will auto-sync when online.`,
       };
     if (pendingCount > 0 && isOnline)
       return {
         bg: '#FEF3C7',
         border: '#D97706',
         text: '#78350F',
-        msg: lang === 'hi' ? `${pendingCount} रिकॉर्ड सिंक के लिए तैयार — टैप करके सिंक करें।` : `${pendingCount} records pending sync — tap to sync now.`,
+        msg: lang === 'mr'
+          ? `${pendingCount} रेकॉर्ड्स सिंकसाठी तयार — टॅप करून सिंक करा.`
+          : lang === 'hi'
+          ? `${pendingCount} रिकॉर्ड सिंक के लिए तैयार — टैप करके सिंक करें।`
+          : `${pendingCount} records pending sync — tap to sync now.`,
       };
     return {
       bg: '#ECFDF5',
       border: '#10B981',
       text: '#065F46',
-      msg: lang === 'hi' ? 'सभी डेटा सिंक है ✓ (ऑफ़लाइन तैयार)' : 'All data synced with cloud ✓ (Offline-Ready)',
+      msg: lang === 'mr'
+        ? 'सर्व डेटा सिंक आहे ✓ (ऑफलाइन सज्ज)'
+        : lang === 'hi'
+        ? 'सभी डेटा सिंक है ✓ (ऑफ़लाइन तैयार)'
+        : 'All data synced with cloud ✓ (Offline-Ready)',
     };
   };
 
@@ -210,8 +229,12 @@ export default function WorkerDashboard() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>{lang === 'hi' ? 'गोल्डन ऑवर फ़्रंटलाइन' : 'Golden Hour Frontline'}</Text>
-          <Text style={styles.headerSub}>{lang === 'hi' ? 'आशा / एएनएम स्वास्थ्य कार्यकर्ता कंसोल' : 'ASHA / ANM Frontline Worker Console'}</Text>
+          <Text style={styles.headerTitle}>
+            {lang === 'mr' ? 'गोल्डन अवर फ्रंटलाइन' : lang === 'hi' ? 'गोल्डन ऑवर फ़्रंटलाइन' : 'Golden Hour Frontline'}
+          </Text>
+          <Text style={styles.headerSub}>
+            {lang === 'mr' ? 'आशा / एएनएम आरोग्य सेविका कन्सोल' : lang === 'hi' ? 'आशा / एएनएम स्वास्थ्य कार्यकर्ता कंसोल' : 'ASHA / ANM Frontline Worker Console'}
+          </Text>
         </View>
         <LanguageSelector />
       </View>
@@ -235,15 +258,21 @@ export default function WorkerDashboard() {
         <View style={styles.metricsRow}>
           <View style={[styles.metricCard, { borderLeftColor: '#0284C7' }]}>
             <Text style={styles.metricVal}>{patients.length}</Text>
-            <Text style={styles.metricLabel}>{lang === 'hi' ? 'समुदाय के मरीज' : 'Community Patients'}</Text>
+            <Text style={styles.metricLabel}>
+              {lang === 'mr' ? 'समुदायातील रुग्ण' : lang === 'hi' ? 'समुदाय के मरीज' : 'Community Patients'}
+            </Text>
           </View>
           <View style={[styles.metricCard, { borderLeftColor: '#F59E0B' }]}>
             <Text style={styles.metricVal}>2</Text>
-            <Text style={styles.metricLabel}>{lang === 'hi' ? 'आज की जाँच' : "Today's Visits"}</Text>
+            <Text style={styles.metricLabel}>
+              {lang === 'mr' ? 'आजच्या तपासण्या' : lang === 'hi' ? 'आज की जाँच' : "Today's Visits"}
+            </Text>
           </View>
           <View style={[styles.metricCard, { borderLeftColor: '#DC2626' }]}>
             <Text style={styles.metricVal}>{pendingReferralsCount}</Text>
-            <Text style={styles.metricLabel}>{lang === 'hi' ? 'लंबित रेफरल' : 'Pending Referrals'}</Text>
+            <Text style={styles.metricLabel}>
+              {lang === 'mr' ? 'प्रलंबित रेफरल्स' : lang === 'hi' ? 'लंबित रेफरल' : 'Pending Referrals'}
+            </Text>
           </View>
         </View>
 
@@ -255,7 +284,9 @@ export default function WorkerDashboard() {
             activeOpacity={0.85}
           >
             <Icon name="profile" size={17} color="#fff" />
-            <Text style={styles.actionBtnText}>{lang === 'hi' ? 'नया मरीज जोड़ें' : 'Register Patient'}</Text>
+            <Text style={styles.actionBtnText}>
+              {lang === 'mr' ? 'नवीन रुग्ण जोडा' : lang === 'hi' ? 'नया मरीज जोड़ें' : 'Register Patient'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -264,7 +295,9 @@ export default function WorkerDashboard() {
             activeOpacity={0.85}
           >
             <Icon name="hospital" size={17} color="#fff" />
-            <Text style={styles.actionBtnText}>{lang === 'hi' ? 'डिजिटल रेफरल' : 'New Referral'}</Text>
+            <Text style={styles.actionBtnText}>
+              {lang === 'mr' ? 'डिजिटल रेफरल' : lang === 'hi' ? 'डिजिटल रेफरल' : 'New Referral'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -273,20 +306,24 @@ export default function WorkerDashboard() {
             activeOpacity={0.85}
           >
             <Icon name="ambulance" size={17} color="#fff" />
-            <Text style={styles.actionBtnText}>{lang === 'hi' ? 'इमरजेंसी SOS' : 'Emergency SOS'}</Text>
+            <Text style={styles.actionBtnText}>
+              {lang === 'mr' ? 'आपत्कालीन SOS' : lang === 'hi' ? 'इमरजेंसी SOS' : 'Emergency SOS'}
+            </Text>
           </TouchableOpacity>
         </View>
 
         {/* Patient Directory */}
         <View style={styles.section}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <Text style={styles.sectionTitle}>{lang === 'hi' ? 'गाँव के मरीजों की सूची' : 'Village Patients Directory'}</Text>
+            <Text style={styles.sectionTitle}>
+              {lang === 'mr' ? 'गावातील रुग्णांची यादी' : lang === 'hi' ? 'गाँव के मरीजों की सूची' : 'Village Patients Directory'}
+            </Text>
             <Text style={styles.sectionCount}>({filtered.length})</Text>
           </View>
 
           <TextInput
             style={styles.searchInput}
-            placeholder={lang === 'hi' ? 'नाम या गाँव से खोजें…' : 'Search by patient name or village…'}
+            placeholder={lang === 'mr' ? 'नाव किंवा गावावरून शोधा…' : lang === 'hi' ? 'नाम या गाँव से खोजें…' : 'Search by patient name or village…'}
             value={search}
             onChangeText={setSearch}
             placeholderTextColor={colors.inkFaint}

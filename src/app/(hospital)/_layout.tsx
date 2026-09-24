@@ -26,7 +26,7 @@ export default function HospitalLayout() {
       router.replace('/hospital-login');
     } else if (!isHospital) {
       router.replace('/role-selection');
-    } else if (hospitalStatus !== 'APPROVED') {
+    } else if (!isAuthorizedHospital) {
       router.replace('/hospital-login');
     } else if (role !== 'HOSPITAL') {
       useAppStore.getState().setRole('HOSPITAL');

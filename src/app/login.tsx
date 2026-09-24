@@ -88,6 +88,25 @@ export default function LoginScreen() {
     }
   };
 
+  const handleDemoPatient = () => {
+    useAppStore.getState().setRole('PATIENT');
+    useAppStore.getState().setUserProfile({
+      uid: 'patient-demo-1',
+      name: 'Rahul Patel',
+      email: 'rahul.patel@gmail.com',
+      phone: '+91 98765 12345',
+      role: 'PATIENT',
+      roles: ['PATIENT'],
+      verificationStatus: 'APPROVED',
+      isPhoneVerified: true,
+      hasCompletedProfile: true,
+      crisisId: 'CRISIS-RP-911',
+    } as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
+    router.replace('/(patient)/home');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -141,21 +160,25 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.orText}>OR</Text>
-            <View style={styles.divider} />
+          {/* Modern Reassuring Info Box for New Users */}
+          <View style={styles.infoBox}>
+            <Text style={styles.infoIcon}>⚡</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoTitle}>New to Golden Hour? Instant Access</Text>
+              <Text style={styles.infoDescription}>
+                No registration forms needed. Your emergency account is created automatically on your first Google sign-in.
+              </Text>
+            </View>
           </View>
 
-          <Text style={styles.infoText}>
-            New to Golden Hour?
-          </Text>
-
-          <Text style={styles.infoDescription}>
-            Your account will be created automatically when you
-            continue with Google.
-          </Text>
+          {/* Quick Demo Access for Testing */}
+          <TouchableOpacity
+            style={styles.demoButton}
+            onPress={handleDemoPatient}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.demoButtonText}>Quick Demo Access (Test Patient)</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Terms */}
@@ -290,38 +313,50 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
 
-  dividerRow: {
+  infoBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 22,
+    alignItems: 'flex-start',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 18,
+    gap: 10,
   },
 
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E2E8F0',
+  infoIcon: {
+    fontSize: 16,
+    marginTop: 1,
   },
 
-  orText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#94A3B8',
-    marginHorizontal: 12,
-  },
-
-  infoText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
-    textAlign: 'center',
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#15803D',
   },
 
   infoDescription: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#94A3B8',
-    textAlign: 'center',
-    marginTop: 5,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: '#166534',
+    marginTop: 2,
+  },
+
+  demoButton: {
+    marginTop: 14,
+    paddingVertical: 11,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+
+  demoButtonText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#475569',
   },
 
   terms: {

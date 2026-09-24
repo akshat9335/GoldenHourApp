@@ -120,8 +120,8 @@ export default function LiveMap() {
   const etaMinutes = hasAmbulanceAssigned ? (emergency?.etaMinutes ?? (ambLat ? 4 : null)) : null;
 
   const statusDisplay = emergency?.status
-    ? emergency.status.replace(/_/g, ' ')
-    : AMB_STEPS[ambStatus] || 'ALERT ACTIVE';
+    ? (emergency.status === 'HOSPITAL_SEARCH' ? 'ALERTING ER' : emergency.status.replace(/_/g, ' '))
+    : 'STANDBY';
 
   const isEnRouteToHospital =
     ambStatus >= 5 ||
@@ -208,6 +208,23 @@ export default function LiveMap() {
             <Text style={styles.errorTitle}>🔒 Authorization Notice</Text>
             <Text style={styles.errorSub}>{authError}</Text>
           </Card>
+        ) : !activeId || !emergency || emergency.status === 'COMPLETED' || emergency.status === 'CANCELLED' ? (
+          <View style={styles.standbyBox}>
+            <View style={styles.standbyIconCircle}>
+              <Icon name="gps" size={36} color={colors.success} />
+            </View>
+            <Text style={styles.standbyTitle}>All Units on Standby</Text>
+            <Text style={styles.standbyDesc}>
+              No active emergency mission currently linked to your session. Live GPS telemetry and ambulance tracking stream automatically once an emergency SOS is triggered.
+            </Text>
+            <TouchableOpacity
+              style={styles.standbyHomeBtn}
+              onPress={() => router.replace('/(patient)/home')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.standbyHomeBtnText}>Go to Emergency Dashboard →</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <>
             {/* Live GPS Active Banner */}
@@ -428,4 +445,52 @@ const styles = StyleSheet.create({
   callBtnText: { color: colors.blue, fontSize: 11.5, fontWeight: '700' },
   returnBtn: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   returnBtnText: { color: colors.blue, fontSize: 13, fontWeight: '700' },
+  standbyBox: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  standbyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  standbyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.ink,
+    textAlign: 'center',
+  },
+  standbyDesc: {
+    fontSize: 12,
+    color: colors.inkSoft,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 8,
+    paddingHorizontal: 8,
+  },
+  standbyHomeBtn: {
+    backgroundColor: '#1E293B',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    marginTop: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  standbyHomeBtnText: {
+    color: '#fff',
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
 });

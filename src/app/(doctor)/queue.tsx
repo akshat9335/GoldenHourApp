@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Button, LabelEyebrow, Divider, DoctorNav, Icon } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
@@ -28,6 +29,16 @@ const QUICK_DIAGNOSES = [
   'Viral Fever & URI',
   'Trauma / Suspected Fracture',
   'Acute Bronchial Asthma',
+];
+
+const STANDARD_MEDICINES: PrescribedMed[] = [
+  { name: 'Paracetamol 650mg', dosage: '1 tablet', frequency: '1-0-1', duration: '5 days', instructions: 'After meals' },
+  { name: 'Pantoprazole 40mg', dosage: '1 tablet', frequency: '1-0-0', duration: '7 days', instructions: 'Before breakfast' },
+  { name: 'Amoxicillin 500mg', dosage: '1 capsule', frequency: '1-0-1', duration: '5 days', instructions: 'After food' },
+  { name: 'Ondansetron 4mg', dosage: '1 tablet', frequency: 'SOS (as needed)', duration: '3 days', instructions: 'For nausea/vomiting' },
+  { name: 'Cetirizine 10mg', dosage: '1 tablet', frequency: '0-0-1', duration: '5 days', instructions: 'At bedtime' },
+  { name: 'Tramadol 50mg', dosage: '1 tablet', frequency: '1-0-1', duration: '3 days', instructions: 'For severe pain' },
+  { name: 'ORS Sachet', dosage: '1 packet in 1L water', frequency: 'Sip throughout day', duration: '2 days', instructions: 'Rehydration' },
 ];
 
 const PRAYAGRAJ_HOSPITALS = [
@@ -69,7 +80,8 @@ export default function DoctorQueue() {
     { name: 'Paracetamol 650mg', dosage: '1 tablet', frequency: '1-0-1', duration: '5 days', instructions: 'After meals' },
   ]);
 
-  // Referral states
+  // Referral states & Real Registered Hospitals from DB
+  const [registeredHospitals, setRegisteredHospitals] = useState<any[]>(PRAYAGRAJ_HOSPITALS);
   const [isReferralActive, setIsReferralActive] = useState(false);
   const [selectedHospitalId, setSelectedHospitalId] = useState(PRAYAGRAJ_HOSPITALS[0].id);
   const [referralPriority, setReferralPriority] = useState<'HIGH' | 'NORMAL'>('HIGH');
@@ -93,10 +105,31 @@ export default function DoctorQueue() {
         }
       })
       .catch(() => {});
+
+    // Fetch real registered hospitals from Firestore
+    api.location
+      .getNearbyHospitals(25.4484, 81.8460, 50)
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.data || res?.hospitals || []);
+        if (list && list.length > 0) {
+          const mapped = list.map((h: any) => ({
+            id: h.id || h.hospitalId || `hosp-${Math.random().toString(36).slice(2, 6)}`,
+            name: h.name || h.hospitalName || 'Hospital',
+            address: h.address || h.vicinity || 'Prayagraj',
+          }));
+          setRegisteredHospitals(mapped);
+          if (!mapped.find((m: any) => m.id === selectedHospitalId)) {
+            setSelectedHospitalId(mapped[0].id);
+          }
+        }
+      })
+      .catch(() => {});
   };
 
   React.useEffect(() => {
     fetchQueueData();
+    const timer = setInterval(fetchQueueData, 5000);
+    return () => clearInterval(timer);
   }, [doctorId]);
 
   const currentAppt = appointments.find(
@@ -167,7 +200,7 @@ export default function DoctorQueue() {
 
     setSavingConsult(true);
     try {
-      const selectedHosp = PRAYAGRAJ_HOSPITALS.find((h) => h.id === selectedHospitalId);
+      const selectedHosp = registeredHospitals.find((h) => h.id === selectedHospitalId) || PRAYAGRAJ_HOSPITALS[0];
 
       const payload = {
         patientId: currentAppt?.patientId || `patient-token-${servingToken}`,
@@ -198,6 +231,24 @@ export default function DoctorQueue() {
       };
 
       await api.healthRecords.create(payload);
+
+      if (isReferralActive) {
+        try {
+          await api.referrals.create({
+            patientId: currentAppt?.patientId || `patient-token-${servingToken}`,
+            patientName: currentPatientName,
+            doctorId,
+            doctorName,
+            hospitalId: selectedHospitalId,
+            hospitalName: selectedHosp?.name || 'Tertiary Care Hospital',
+            reason: referralReason || diagnosis,
+            priority: referralPriority,
+            notes: notes || `Referred by ${doctorName}`,
+          });
+        } catch (refErr) {
+          console.warn('Referral creation warning:', refErr);
+        }
+      }
 
       setModalVisible(false);
       Alert.alert(
@@ -271,11 +322,19 @@ export default function DoctorQueue() {
           </View>
 
           <Button
-            title="Complete & Prescribe (Phases 2-5)"
+            title="Complete & Prescribe"
             variant="blue"
             style={{ marginTop: 8 }}
             onPress={handleOpenConsultModal}
           />
+
+          {servingToken > 0 && (
+            <Button
+              title="📹 Join Teleconsultation Room"
+              style={{ marginTop: 8, backgroundColor: colors.blue }}
+              onPress={() => router.push(`/(doctor)/teleconsultation/tc_${servingToken}` as any)}
+            />
+          )}
         </Card>
 
         <View style={styles.controlsRow}>
@@ -372,9 +431,27 @@ export default function DoctorQueue() {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
                 <Text style={styles.inputLabel}>DIGITAL PRESCRIPTION (Rx)</Text>
                 <TouchableOpacity onPress={handleAddMedicine} style={styles.addMedBtn}>
-                  <Text style={styles.addMedText}>+ Add Medicine</Text>
+                  <Text style={styles.addMedText}>+ Add Custom</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Quick Standard Medicine Suggestions */}
+              <Text style={[styles.miniLabel, { marginTop: 4 }]}>QUICK SUGGESTIONS (TAP TO ADD):</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
+                {STANDARD_MEDICINES.map((sm) => (
+                  <TouchableOpacity
+                    key={sm.name}
+                    style={styles.chip}
+                    onPress={() => {
+                      if (!prescriptions.some((p) => p.name.toLowerCase() === sm.name.toLowerCase())) {
+                        setPrescriptions((prev) => [...prev, sm]);
+                      }
+                    }}
+                  >
+                    <Text style={styles.chipText}>+ {sm.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
               {prescriptions.map((med, idx) => (
                 <View key={idx} style={styles.medCard}>
@@ -450,8 +527,8 @@ export default function DoctorQueue() {
 
                 {isReferralActive && (
                   <View style={{ marginTop: 8 }}>
-                    <Text style={styles.miniLabel}>SELECT TERTIARY HOSPITAL</Text>
-                    {PRAYAGRAJ_HOSPITALS.map((h) => (
+                    <Text style={styles.miniLabel}>SELECT TERTIARY HOSPITAL (DB REGISTERED)</Text>
+                    {registeredHospitals.map((h) => (
                       <TouchableOpacity
                         key={h.id}
                         style={[styles.hospChoice, selectedHospitalId === h.id && styles.hospChoiceActive]}
@@ -460,6 +537,11 @@ export default function DoctorQueue() {
                         <Text style={[styles.hospChoiceText, selectedHospitalId === h.id && styles.hospChoiceTextActive]}>
                           {h.name}
                         </Text>
+                        {h.address && (
+                          <Text style={{ fontSize: 10, color: selectedHospitalId === h.id ? '#93c5fd' : colors.inkFaint, marginTop: 2 }}>
+                            {h.address}
+                          </Text>
+                        )}
                       </TouchableOpacity>
                     ))}
 

@@ -71,10 +71,16 @@ export default function DoctorDashboard() {
         loadDoctorData(doctorId);
       });
 
+    const pollTimer = setInterval(() => {
+      const activeId = doctorDetails?.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
+      loadDoctorData(activeId);
+    }, 4000);
+
     return () => {
       mounted = false;
+      clearInterval(pollTimer);
     };
-  }, [userProfile?.uid, doctorId]);
+  }, [userProfile?.uid, doctorId, doctorDetails?.doctorId]);
 
   const handleCallNext = async () => {
     try {

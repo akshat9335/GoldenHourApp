@@ -278,7 +278,7 @@ export class LocationService {
    * Retrieves nearby active emergency incidents within radius.
    * Applies privacy fuzzing to coordinates to prevent exposing exact patient locations.
    */
-  public async getNearbyIncidents(lat: number, lng: number, radiusKm = 10): Promise<NearbyIncidentSummary[]> {
+  public async getNearbyIncidents(lat: number, lng: number, radiusKm = 10, callerUid?: string): Promise<NearbyIncidentSummary[]> {
     if (!validateCoordinates(lat, lng)) {
       throw new AppError(400, "INVALID_COORDINATES", "Invalid query coordinates.");
     }
@@ -291,6 +291,15 @@ export class LocationService {
         if (snap && !snap.empty) {
           for (const doc of snap.docs) {
             const d = doc.data();
+            if (!d) continue;
+
+            const rawStatus = typeof d.status === "string" ? d.status.toUpperCase() : "REPORTED";
+            const tripStatus = typeof d.tripStatus === "string" ? d.tripStatus.toUpperCase() : "";
+            if (rawStatus === "COMPLETED" || rawStatus === "CANCELLED" || tripStatus === "COMPLETED") continue;
+            if (callerUid && d.reporterId === callerUid) continue;
+            const emTime = new Date(d.createdAt || 0).getTime();
+            if (emTime > 0 && Date.now() - emTime > 45 * 60 * 1000) continue;
+
             const loc = d.location;
             if (loc && typeof loc.latitude === "number" && typeof loc.longitude === "number") {
               const rawSeverity = typeof d.severity === "string" ? d.severity.toUpperCase() : "HIGH";
@@ -322,7 +331,8 @@ export class LocationService {
       }
     }
 
-    if (incidentList.length === 0) {
+    // Live mode: Do not populate mock Delhi seed incidents
+    if (incidentList.length === 0 && process.env.NODE_ENV === "test") {
       for (const inc of dataStore.incidents.values()) {
         incidentList.push(inc);
       }

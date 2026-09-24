@@ -70,11 +70,11 @@ export default function CreateReferralScreen() {
 
   const handleSubmit = async () => {
     if (!selectedPatientId) {
-      Alert.alert(t('common.error'), lang === 'hi' ? 'कृपया रोगी चुनें।' : 'Please select a patient.');
+      Alert.alert(t('common.error'), lang === 'mr' ? 'कृपया रुग्ण निवडा.' : lang === 'hi' ? 'कृपया रोगी चुनें।' : 'Please select a patient.');
       return;
     }
     if (!reason.trim()) {
-      Alert.alert(t('common.error'), lang === 'hi' ? 'कृपया रेफरल का कारण दर्ज करें।' : 'Please enter referral reason / symptoms.');
+      Alert.alert(t('common.error'), lang === 'mr' ? 'कृपया रेफरलचे कारण लिहा.' : lang === 'hi' ? 'कृपया रेफरल का कारण दर्ज करें।' : 'Please enter referral reason / symptoms.');
       return;
     }
 
@@ -125,8 +125,10 @@ export default function CreateReferralScreen() {
       }
 
       Alert.alert(
-        lang === 'hi' ? 'रेफरल सफलतापूर्वक प्रेषित ✓' : 'Referral Transmitted ✓',
-        lang === 'hi'
+        lang === 'mr' ? 'रेफरल यशस्वीरीत्या पाठवले ✓' : lang === 'hi' ? 'रेफरल सफलतापूर्वक प्रेषित ✓' : 'Referral Transmitted ✓',
+        lang === 'mr'
+          ? `रेफरल कोड: ${referralCode}\nरुग्णाला ${destinationFacility} येथे पाठवले आहे.`
+          : lang === 'hi'
           ? `रेफरल कोड: ${referralCode}\nमरीज को ${destinationFacility} भेजा गया है।`
           : `Referral Code: ${referralCode}\nTransmitted to ${destinationFacility} (${priority} Priority).`,
         [{ text: 'OK', onPress: () => router.back() }]
@@ -138,11 +140,11 @@ export default function CreateReferralScreen() {
     }
   };
 
-  const PRIORITY_OPTIONS: Array<{ key: ReferralPriority; labelEn: string; labelHi: string; color: string }> = [
-    { key: 'CRITICAL', labelEn: 'CRITICAL (Immediate SOS)', labelHi: 'गंभीर (आपातकालीन SOS)', color: '#DC2626' },
-    { key: 'HIGH', labelEn: 'HIGH (Urgent PHC/Hospital)', labelHi: 'उच्च (तत्काल अस्पताल)', color: '#EA580C' },
-    { key: 'MODERATE', labelEn: 'MODERATE (PHC Evaluation)', labelHi: 'मध्यम (PHC जाँच)', color: '#2563EB' },
-    { key: 'NORMAL', labelEn: 'NORMAL (Routine Transfer)', labelHi: 'सामान्य (नियमित जाँच)', color: '#16A34A' },
+  const PRIORITY_OPTIONS: Array<{ key: ReferralPriority; labelEn: string; labelHi: string; labelMr: string; color: string }> = [
+    { key: 'CRITICAL', labelEn: 'CRITICAL (Immediate SOS)', labelHi: 'गंभीर (आपातकालीन SOS)', labelMr: 'गंभीर (तातडीची मदत/SOS)', color: '#DC2626' },
+    { key: 'HIGH', labelEn: 'HIGH (Urgent PHC/Hospital)', labelHi: 'उच्च (तत्काल अस्पताल)', labelMr: 'उच्च (तातडीने रुग्णालय)', color: '#EA580C' },
+    { key: 'MODERATE', labelEn: 'MODERATE (PHC Evaluation)', labelHi: 'मध्यम (PHC जाँच)', labelMr: 'मध्यम (PHC तपासणी)', color: '#2563EB' },
+    { key: 'NORMAL', labelEn: 'NORMAL (Routine Transfer)', labelHi: 'सामान्य (नियमित जाँच)', labelMr: 'सामान्य (नियमित तपासणी)', color: '#16A34A' },
   ];
 
   return (
@@ -187,7 +189,9 @@ export default function CreateReferralScreen() {
 
         {/* Priority Selector */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{lang === 'hi' ? 'रेफरल प्राथमिकता' : 'Referral Priority'} *</Text>
+          <Text style={styles.cardTitle}>
+            {lang === 'mr' ? 'रेफरल प्राधान्य' : lang === 'hi' ? 'रेफरल प्राथमिकता' : 'Referral Priority'} *
+          </Text>
           <View style={{ gap: 8 }}>
             {PRIORITY_OPTIONS.map((opt) => (
               <TouchableOpacity
@@ -200,7 +204,7 @@ export default function CreateReferralScreen() {
               >
                 <View style={[styles.priorityDot, { backgroundColor: opt.color }]} />
                 <Text style={[styles.priorityCardText, priority === opt.key && { color: opt.color, fontWeight: '800' }]}>
-                  {lang === 'hi' ? opt.labelHi : opt.labelEn}
+                  {lang === 'mr' ? opt.labelMr : lang === 'hi' ? opt.labelHi : opt.labelEn}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -209,7 +213,9 @@ export default function CreateReferralScreen() {
 
         {/* Destination Facility */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{lang === 'hi' ? 'गंतव्य अस्पताल / PHC' : 'Destination Hospital / PHC'} *</Text>
+          <Text style={styles.cardTitle}>
+            {lang === 'mr' ? 'गंतव्य रुग्णालय / PHC' : lang === 'hi' ? 'गंतव्य अस्पताल / PHC' : 'Destination Hospital / PHC'} *
+          </Text>
           <View style={{ gap: 8 }}>
             {FACILITIES.map((f) => (
               <TouchableOpacity
@@ -237,11 +243,19 @@ export default function CreateReferralScreen() {
 
         {/* Reason / Clinical Notes */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{lang === 'hi' ? 'रेफरल का कारण / लक्षण' : 'Reason for Referral / Symptoms'} *</Text>
+          <Text style={styles.cardTitle}>
+            {lang === 'mr' ? 'रेफरलचे कारण / लक्षणे' : lang === 'hi' ? 'रेफरल का कारण / लक्षण' : 'Reason for Referral / Symptoms'} *
+          </Text>
           <TextInput
             style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
             multiline
-            placeholder={lang === 'hi' ? 'कारण एवं लक्षण विस्तार से लिखें…' : 'Enter clinical reason, symptoms, or emergency observations…'}
+            placeholder={
+              lang === 'mr'
+                ? 'कारण व लक्षणे सविस्तर लिहा…'
+                : lang === 'hi'
+                ? 'कारण एवं लक्षण विस्तार से लिखें…'
+                : 'Enter clinical reason, symptoms, or emergency observations…'
+            }
             value={reason}
             onChangeText={setReason}
             placeholderTextColor={colors.inkFaint}
@@ -281,7 +295,13 @@ export default function CreateReferralScreen() {
           activeOpacity={0.85}
         >
           <Text style={styles.submitBtnText}>
-            {isSubmitting ? 'Transmitting…' : (lang === 'hi' ? 'डिजिटल रेफरल भेजें (Works Offline ✓)' : 'Transmit Digital Referral (Works Offline ✓)')}
+            {isSubmitting
+              ? 'Transmitting…'
+              : lang === 'mr'
+              ? 'डिजिटल रेफरल पाठवा (Works Offline ✓)'
+              : lang === 'hi'
+              ? 'डिजिटल रेफरल भेजें (Works Offline ✓)'
+              : 'Transmit Digital Referral (Works Offline ✓)'}
           </Text>
         </TouchableOpacity>
 

@@ -14,19 +14,20 @@ export default function DoctorLayout() {
   );
   const isDoctor = activeRoles.includes('DOCTOR');
   const doctorStatus = userProfile?.roleVerificationStatus?.DOCTOR || verificationStatus;
-  const isAuthorizedDoctor = isAuthenticated && isDoctor && doctorStatus === 'APPROVED';
+  const isApproved = doctorStatus === 'APPROVED' || doctorStatus === 'VERIFIED';
+  const isAuthorizedDoctor = isAuthenticated && isDoctor && isApproved;
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/');
     } else if (!isDoctor) {
       router.replace('/(patient)/home');
-    } else if (doctorStatus !== 'APPROVED') {
+    } else if (!isApproved) {
       router.replace('/doctor-login');
     } else if (role !== 'DOCTOR') {
       useAppStore.getState().setRole('DOCTOR');
     }
-  }, [isAuthenticated, isDoctor, doctorStatus, role]);
+  }, [isAuthenticated, isDoctor, isApproved, role]);
 
   if (!isAuthorizedDoctor) {
     return null;

@@ -72,7 +72,10 @@ export class AppointmentService {
         appt.date === data.date &&
         appt.status !== "CANCELLED"
       ) {
-        throw new AppError(409, "DUPLICATE_BOOKING", "Patient already has an active appointment with this doctor on this date.");
+        return {
+          ...appt,
+          isExisting: true,
+        } as any;
       }
     }
 
@@ -96,6 +99,22 @@ export class AppointmentService {
     };
 
     dataStore.appointments.set(appointmentId, newAppointment);
+
+    // Update doctor's live queue counters so doctor console and searches update immediately
+    const queue = queueService.getOrCreateQueue(data.doctorId, data.date);
+    if (doctor) {
+      doctor.queueLength = queue.waitingCount;
+      doctor.servingToken = queue.servingToken;
+      doctor.estimatedWaitMinutes = queue.waitingCount * 8;
+      dataStore.doctors.set(data.doctorId, doctor);
+      if (firestore && process.env.NODE_ENV !== "test") {
+        firestore.collection("doctors").doc(data.doctorId).set({
+          queueLength: doctor.queueLength,
+          servingToken: doctor.servingToken,
+          estimatedWaitMinutes: doctor.estimatedWaitMinutes,
+        }, { merge: true }).catch(() => {});
+      }
+    }
 
     if (firestore && process.env.NODE_ENV !== "test") {
       try {

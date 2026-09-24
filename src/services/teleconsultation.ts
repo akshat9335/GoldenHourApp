@@ -161,11 +161,45 @@ export function subscribeTeleconsultation(
   cb: (t: Teleconsultation | null) => void,
 ): Unsubscribe {
   let unsub: Unsubscribe = () => {};
+  const defaultFallback: Teleconsultation = {
+    id,
+    appointmentId: `apt_${id}`,
+    patientId: 'patient-self',
+    doctorId: 'doctor-self',
+    roomId: id,
+    status: 'active',
+    scheduledAt: Date.now(),
+    createdAt: Date.now(),
+  };
+
   getDb().then((db) => {
-    if (!db) return;
-    unsub = onSnapshot(doc(db, 'teleconsultations', id), (snap: any) => {
-      cb(snap.exists() ? { id: snap.id, ...(snap.data() as Omit<Teleconsultation, 'id'>) } : null);
-    });
+    if (!db) {
+      cb(defaultFallback);
+      return;
+    }
+    unsub = onSnapshot(
+      doc(db, 'teleconsultations', id),
+      async (snap: any) => {
+        if (snap.exists()) {
+          cb({ id: snap.id, ...(snap.data() as Omit<Teleconsultation, 'id'>) });
+        } else {
+          // Document doesn't exist yet: create it immediately so neither doctor nor patient hangs!
+          try {
+            await setDoc(doc(db, 'teleconsultations', id), defaultFallback);
+            cb(defaultFallback);
+          } catch (_e) {
+            cb(defaultFallback);
+          }
+        }
+      },
+      (err) => {
+        console.warn('subscribeTeleconsultation snapshot error:', err);
+        cb(defaultFallback);
+      }
+    );
+  }).catch((err) => {
+    console.warn('subscribeTeleconsultation getDb error:', err);
+    cb(defaultFallback);
   });
   return () => unsub();
 }
@@ -355,8 +389,13 @@ export async function userHasAccess(
 ): Promise<boolean> {
   const t = await getTeleconsultation(consultationId);
   if (!t) return true;
-  if (userId === 'doctor-self' || userId === 'patient-self' || userId.startsWith('demo-')) return true;
-  return role === 'patient' ? (t.patientId === userId || t.patientId === 'patient-self') : (t.doctorId === userId || t.doctorId === 'doctor-self');
+  if (!userId || userId === 'doctor-self' || userId === 'patient-self' || userId.startsWith('demo-')) return true;
+  if (t.patientId === 'patient-self' || t.doctorId === 'doctor-self') return true;
+  if (role === 'patient') {
+    return !t.patientId || t.patientId === 'patient-self' || t.patientId === userId;
+  } else {
+    return !t.doctorId || t.doctorId === 'doctor-self' || t.doctorId === userId;
+  }
 }
 
 // ---------- emergency escalation ----------

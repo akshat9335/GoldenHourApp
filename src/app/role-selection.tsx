@@ -12,7 +12,7 @@ const ROLES: Array<{ role: Role; label: string; sub: string; icon: IconName; hre
   { role: 'hospital', label: 'Hospital Staff', sub: 'Coordinate incoming patients', icon: 'hospital', href: '/hospital-login' },
   { role: 'ambulance', label: 'Ambulance Crew', sub: 'Respond to dispatches', icon: 'ambulance', href: '/driver-login' },
   { role: 'doctor', label: 'Doctor', sub: 'Manage consultations & queue', icon: 'doctor', href: '/doctor-login' },
-  { role: 'FRONTLINE_WORKER', label: 'ASHA / ANM Frontline Worker', sub: 'Register & refer rural patients', icon: 'profile', href: '/(worker)/dashboard', accent: '#15803D' },
+  { role: 'FRONTLINE_WORKER', label: 'ASHA / ANM Frontline Worker', sub: 'Register & refer rural patients', icon: 'profile', href: '/asha-login', accent: '#15803D' },
   { role: 'ADMIN', label: 'Administrator Console', sub: 'Verify credentials, doctors & fleet', icon: 'idCard', href: '/admin-dashboard', accent: '#DC2626' },
 ];
 
@@ -29,7 +29,7 @@ export default function RoleSelection() {
           const iconColor = r.accent ?? colors.red;
           const iconBg = isASHA ? '#F0FDF4' : isAdmin ? '#FEF2F2' : colors.redGlow;
           return (
-            <Card key={r.role} style={[styles.card, isASHA && styles.ashaCard]}>
+            <Card key={r.role} style={styles.card}>
               <TouchableOpacity
                 style={styles.rowTouchable}
                 onPress={() => {
@@ -44,11 +44,6 @@ export default function RoleSelection() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.roleLabel}>{r.label}</Text>
                   <Text style={styles.roleSub}>{r.sub}</Text>
-                  {isASHA && (
-                    <View style={styles.ashaBadge}>
-                      <Text style={styles.ashaBadgeText}>🌾 Works Offline • Hindi/English</Text>
-                    </View>
-                  )}
                 </View>
                 <Icon name="chevR" color={colors.inkFaint} />
               </TouchableOpacity>
@@ -68,16 +63,4 @@ const styles = StyleSheet.create({
   iconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.redGlow, alignItems: 'center', justifyContent: 'center' },
   roleLabel: { fontWeight: '700', fontSize: 14, color: colors.ink },
   roleSub: { fontSize: 11.5, color: colors.inkFaint, marginTop: 2 },
-  ashaCard: { borderWidth: 1.5, borderColor: '#86EFAC' },
-  ashaBadge: {
-    marginTop: 5,
-    alignSelf: 'flex-start',
-    backgroundColor: '#F0FDF4',
-    borderColor: '#86EFAC',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  ashaBadgeText: { fontSize: 10, color: '#15803D', fontWeight: '700' },
 });

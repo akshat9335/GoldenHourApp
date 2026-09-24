@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { Stack } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { VideoPanel } from './VideoPanel';
@@ -103,6 +103,8 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
     };
   }, [consult, error, selfRole]);
 
+  const [activeTab, setActiveTab] = useState<'video' | 'chat' | 'clinical'>('video');
+
   const onToggleMic = () => {
     // WebRTCPeer toggles its own tracks; here we mirror state for UI.
     setMicOn((v) => !v);
@@ -130,46 +132,102 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
   return (
     <>
       <Stack.Screen options={{ title: 'Teleconsultation', headerShown: true }} />
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.statusLine}>
-          Status: <Text style={{ fontWeight: '700' }}>{consult.status}</Text>{' '}
-          · Room: {consult.roomId}
-        </Text>
-        <View style={styles.mediaRow}>
-          <View style={{ flex: 2, height: 320 }}>
-            <VideoPanel
-              localLabel={`${selfRole} (you)`}
-              remoteLabel={selfRole === 'doctor' ? 'Patient' : 'Doctor'}
-              localStream={localStream}
-              remoteStream={remoteStream}
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.headerCard}>
+          <Text style={styles.statusLine}>
+            Status: <Text style={{ fontWeight: '700', color: colors.success }}>{consult.status.toUpperCase()}</Text>{' '}
+            · Room: {consult.roomId}
+          </Text>
+          <Text style={styles.roleSub}>
+            Logged in as: <Text style={{ fontWeight: '700' }}>{selfRole.toUpperCase()}</Text> ({selfId})
+          </Text>
+        </View>
+
+        {/* Tab Switcher */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'video' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('video')}
+          >
+            <Text style={[styles.tabText, activeTab === 'video' && styles.tabTextActive]}>
+              📹 Video Call
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'chat' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('chat')}
+          >
+            <Text style={[styles.tabText, activeTab === 'chat' && styles.tabTextActive]}>
+              💬 Live Chat
+            </Text>
+          </TouchableOpacity>
+
+          {selfRole === 'doctor' && (
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === 'clinical' && styles.tabBtnActive]}
+              onPress={() => setActiveTab('clinical')}
+            >
+              <Text style={[styles.tabText, activeTab === 'clinical' && styles.tabTextActive]}>
+                📝 Rx & Notes
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Tab 1: Video */}
+        {activeTab === 'video' && (
+          <View style={styles.tabContent}>
+            <View style={{ height: 320, width: '100%', marginBottom: 12 }}>
+              <VideoPanel
+                localLabel={`${selfRole} (you)`}
+                remoteLabel={selfRole === 'doctor' ? 'Patient' : 'Doctor'}
+                localStream={localStream}
+                remoteStream={remoteStream}
+              />
+            </View>
+            <CallControls
+              micOn={micOn} camOn={camOn}
+              onToggleMic={onToggleMic} onToggleCam={onToggleCam}
+              onEnd={onEnd} onEscalate={onEscalate}
+              isDoctor={selfRole === 'doctor'}
             />
           </View>
-          <View style={{ flex: 1, height: 320, marginLeft: 10 }}>
+        )}
+
+        {/* Tab 2: Chat */}
+        {activeTab === 'chat' && (
+          <View style={[styles.tabContent, { height: 460 }]}>
             <ChatPanel
               consultationId={consultationId}
               selfId={selfId}
               selfRole={selfRole}
             />
           </View>
-        </View>
-        <CallControls
-          micOn={micOn} camOn={camOn}
-          onToggleMic={onToggleMic} onToggleCam={onToggleCam}
-          onEnd={onEnd} onEscalate={onEscalate}
-          isDoctor={selfRole === 'doctor'}
-        />
-        {selfRole === 'doctor' && (
-          <>
-            <View style={styles.section}><DoctorNotes
-              consultationId={consultationId} doctorId={selfId}
-            /></View>
-            <View style={styles.section}><PrescriptionForm
-              consultationId={consultationId} doctorId={selfId}
-              patientId={consult.patientId}
-            /></View>
-          </>
         )}
-        <View style={styles.section}><ConsultationSummary consultationId={consultationId} /></View>
+
+        {/* Tab 3: Clinical (Doctor Only) */}
+        {activeTab === 'clinical' && selfRole === 'doctor' && (
+          <View style={styles.tabContent}>
+            <View style={styles.section}>
+              <DoctorNotes
+                consultationId={consultationId}
+                doctorId={selfId}
+              />
+            </View>
+            <View style={styles.section}>
+              <PrescriptionForm
+                consultationId={consultationId}
+                doctorId={selfId}
+                patientId={consult.patientId}
+              />
+            </View>
+          </View>
+        )}
+
+        <View style={styles.section}>
+          <ConsultationSummary consultationId={consultationId} />
+        </View>
       </ScrollView>
     </>
   );
@@ -177,8 +235,46 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
 
 const styles = StyleSheet.create({
   scroll: { padding: 12, backgroundColor: colors.bg, gap: 12 },
-  statusLine: { color: colors.inkSoft, fontSize: 12 },
-  mediaRow: { flexDirection: 'row' },
+  headerCard: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  statusLine: { color: colors.inkSoft, fontSize: 13 },
+  roleSub: { color: colors.inkFaint, fontSize: 11, marginTop: 3 },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    padding: 3,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  tabBtnActive: {
+    backgroundColor: '#fff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.inkFaint,
+  },
+  tabTextActive: {
+    color: colors.blue,
+    fontWeight: '700',
+  },
+  tabContent: {
+    width: '100%',
+  },
   section: { marginTop: 12 },
   err: { color: colors.red, padding: 20 },
 });

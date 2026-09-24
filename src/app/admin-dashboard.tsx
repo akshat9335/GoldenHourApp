@@ -10,7 +10,7 @@ import { Screen, TopBar, Button, Card, Pill, Chip, HTitle, Banner, Icon, Divider
 import { api } from '@/services/api';
 import { authService } from '@/services/auth';
 
-type Tab = 'PENDING_DOCTORS' | 'ACTIVE_DOCTORS' | 'HOSPITALS' | 'AMBULANCES' | 'ALL';
+type Tab = 'PENDING_DOCTORS' | 'ACTIVE_DOCTORS' | 'HOSPITALS' | 'AMBULANCES' | 'WORKERS' | 'ALL';
 type AdminState = 'LOGIN' | 'NOT_AUTHORIZED' | 'DASHBOARD';
 
 interface ApplicationItem {
@@ -180,8 +180,9 @@ export default function AdminDashboard() {
     const roleUpper = (item.role || '').toUpperCase();
     const isHospital = roleUpper === 'HOSPITAL';
     const isDriver = roleUpper === 'AMBULANCE_DRIVER';
-    const roleLabel = isHospital ? 'Hospital' : isDriver ? 'Ambulance Driver' : 'Doctor';
-    const namePrefix = isHospital || isDriver ? '' : 'Dr. ';
+    const isWorker = roleUpper === 'FRONTLINE_WORKER' || roleUpper === 'ASHA';
+    const roleLabel = isHospital ? 'Hospital' : isDriver ? 'Ambulance Driver' : isWorker ? 'ASHA / ANM Worker' : 'Doctor';
+    const namePrefix = isHospital || isDriver || isWorker ? '' : 'Dr. ';
 
     let title = decision === 'APPROVED' ? `Approve ${roleLabel}` : `Reject ${roleLabel}`;
     let message = `Are you sure you want to ${decision === 'APPROVED' ? 'APPROVE' : 'REJECT'} ${namePrefix}${item.name}'s registration?`;
@@ -205,6 +206,8 @@ export default function AdminDashboard() {
               await api.admin.verifyApplication('HOSPITAL', item.id, decision);
             } else if (isDriver) {
               await api.admin.verifyApplication('AMBULANCE_DRIVER', item.id, decision);
+            } else if (isWorker) {
+              await api.admin.verifyApplication('FRONTLINE_WORKER', item.id, decision);
             } else {
               await api.admin.verifyDoctor(item.id, decision);
             }
@@ -257,6 +260,127 @@ export default function AdminDashboard() {
   const allDrivers = applications.filter(
     a => (a.role || '').toUpperCase() === 'AMBULANCE_DRIVER'
   );
+
+  const pendingWorkers = applications.filter(
+    a => ((a.role || '').toUpperCase() === 'FRONTLINE_WORKER' || (a.role || '').toUpperCase() === 'ASHA') && (a.verificationStatus || '').toUpperCase() === 'PENDING'
+  );
+  const approvedWorkers = applications.filter(
+    a => ((a.role || '').toUpperCase() === 'FRONTLINE_WORKER' || (a.role || '').toUpperCase() === 'ASHA') && (a.verificationStatus || '').toUpperCase() === 'APPROVED'
+  );
+  const allWorkers = applications.filter(
+    a => (a.role || '').toUpperCase() === 'FRONTLINE_WORKER' || (a.role || '').toUpperCase() === 'ASHA'
+  );
+
+  const renderWorkerCard = (app: ApplicationItem) => {
+    const status = (app.verificationStatus || '').toUpperCase();
+    const isPending = status === 'PENDING';
+    const isApproved = status === 'APPROVED';
+    const isRejected = status === 'REJECTED';
+    const isBusy = actionInProgress === app.id;
+
+    return (
+      <Card key={app.id} style={styles.appCard}>
+        <View style={styles.cardHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.docName}>{app.name}</Text>
+            <Text style={styles.docSpec}>
+              {app.details?.workerType === 'ANM' ? '💉 Auxiliary Nurse Midwife (ANM)' : '🌾 ASHA Community Worker'}
+            </Text>
+          </View>
+          <Pill
+            color={
+              isApproved
+                ? 'success'
+                : isRejected
+                ? 'red'
+                : 'amber'
+            }
+          >
+            {isApproved ? 'VERIFIED ACTIVE' : app.verificationStatus}
+          </Pill>
+        </View>
+        <Divider />
+        <View style={styles.detailsGrid}>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Assigned PHC</Text>
+            <Text style={styles.detailValue}>{app.details?.assignedPhc || 'Prayagraj Rural PHC'}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Village / Ward</Text>
+            <Text style={styles.detailValue}>{app.details?.village || 'General Area'}</Text>
+          </View>
+        </View>
+        {app.details?.regNumber ? (
+          <View style={{ marginTop: 8 }}>
+            <Text style={styles.detailLabel}>Govt Worker Reg No.</Text>
+            <Text style={styles.detailValue}>{app.details.regNumber}</Text>
+          </View>
+        ) : null}
+        {app.email ? (
+          <View style={{ marginTop: 8 }}>
+            <Text style={styles.detailLabel}>Contact Email</Text>
+            <Text style={styles.detailValue}>{app.email}</Text>
+          </View>
+        ) : null}
+        {app.phone ? (
+          <View style={{ marginTop: 8 }}>
+            <Text style={styles.detailLabel}>Phone</Text>
+            <Text style={styles.detailValue}>{app.phone}</Text>
+          </View>
+        ) : null}
+
+        {/* Pending Actions */}
+        {isPending && (
+          <View style={styles.actionRow}>
+            <Button
+              title={isBusy ? 'Processing...' : 'Approve Worker'}
+              onPress={() => handleDecision(app, 'APPROVED')}
+              disabled={isBusy}
+              style={{ flex: 1, backgroundColor: colors.success, marginRight: 8 }}
+            />
+            <Button
+              title="Reject"
+              variant="secondary"
+              onPress={() => handleDecision(app, 'REJECTED')}
+              disabled={isBusy}
+              style={{ flex: 1 }}
+            />
+          </View>
+        )}
+
+        {/* Active Worker: Option to Revoke */}
+        {isApproved && (
+          <TouchableOpacity
+            style={styles.revokeButton}
+            onPress={() => handleDecision(app, 'REJECTED', true)}
+            disabled={isBusy}
+            activeOpacity={0.7}
+          >
+            {isBusy ? (
+              <ActivityIndicator size="small" color="#DC2626" />
+            ) : (
+              <>
+                <Text style={styles.revokeIcon}>🚫</Text>
+                <Text style={styles.revokeButtonText}>Revoke / Remove Worker</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Rejected Worker: Option to Re-Approve */}
+        {isRejected && (
+          <View style={{ marginTop: 12 }}>
+            <Button
+              title={isBusy ? 'Processing...' : 'Re-Approve Worker'}
+              onPress={() => handleDecision(app, 'APPROVED')}
+              disabled={isBusy}
+              style={{ backgroundColor: colors.success }}
+            />
+          </View>
+        )}
+      </Card>
+    );
+  };
 
   const renderDoctorCard = (app: ApplicationItem) => {
     const status = (app.verificationStatus || '').toUpperCase();
@@ -672,6 +796,12 @@ export default function AdminDashboard() {
           />
           <View style={{ width: 8 }} />
           <Chip
+            label={`ASHA / Workers (${pendingWorkers.length > 0 ? `${pendingWorkers.length} new` : allWorkers.length})`}
+            selected={activeTab === 'WORKERS'}
+            onPress={() => setActiveTab('WORKERS')}
+          />
+          <View style={{ width: 8 }} />
+          <Chip
             label={`All Reviews (${applications.length})`}
             selected={activeTab === 'ALL'}
             onPress={() => setActiveTab('ALL')}
@@ -752,6 +882,7 @@ export default function AdminDashboard() {
                 const r = (app.role || '').toUpperCase();
                 if (r === 'HOSPITAL') return renderHospitalCard(app);
                 if (r === 'AMBULANCE_DRIVER') return renderDriverCard(app);
+                if (r === 'FRONTLINE_WORKER' || r === 'ASHA') return renderWorkerCard(app);
                 return renderDoctorCard(app);
               })
             )}
@@ -806,6 +937,32 @@ export default function AdminDashboard() {
               </Card>
             ) : (
               allDrivers.map(drv => renderDriverCard(drv))
+            )}
+          </View>
+        )}
+
+        {/* ASHA / Frontline Workers Tab */}
+        {!loading && activeTab === 'WORKERS' && (
+          <View>
+            <View style={styles.sectionHeader}>
+              <HTitle size={16}>ASHA & ANM Frontline Workers</HTitle>
+              <Pill color={pendingWorkers.length > 0 ? 'amber' : 'success'}>
+                {pendingWorkers.length > 0
+                  ? `${pendingWorkers.length} Action Required`
+                  : `${approvedWorkers.length} Active`}
+              </Pill>
+            </View>
+
+            {allWorkers.length === 0 ? (
+              <Card style={styles.emptyCard}>
+                <Text style={{ fontSize: 32 }}>🌾</Text>
+                <Text style={styles.emptyTitle}>No Frontline Worker Applications</Text>
+                <Text style={styles.emptySub}>
+                  When an ASHA or ANM worker registers with their PHC and government ID, their application will appear here for review and verification.
+                </Text>
+              </Card>
+            ) : (
+              allWorkers.map(w => renderWorkerCard(w))
             )}
           </View>
         )}

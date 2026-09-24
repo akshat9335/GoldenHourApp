@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Chip, Button, Divider, LabelEyebrow } from '@/components/ui';
@@ -34,6 +34,21 @@ export default function Booking() {
         ? new Date(Date.now() + 86400000).toISOString().split('T')[0]
         : new Date(Date.now() + 172800000).toISOString().split('T')[0];
 
+    // Check client-side first
+    const existingClientAppt = useAppStore.getState().bookedAppointments.find(
+      (a) => a.doctorId === selectedDoctorId && a.date === bookingDate && a.status !== 'CANCELLED'
+    );
+    if (existingClientAppt) {
+      setUserToken(existingClientAppt.tokenNumber);
+      setLoading(false);
+      Alert.alert(
+        'Existing Appointment',
+        `You already have Token #${existingClientAppt.tokenNumber} booked with ${doctor?.name || 'this doctor'} for ${date}. Redirecting to live queue.`
+      );
+      router.push('/(patient)/consult-doctor/live-queue');
+      return;
+    }
+
     try {
       const res: any = await api.appointments.book({
         doctorId: selectedDoctorId,
@@ -42,6 +57,18 @@ export default function Booking() {
         patientName,
         patientId,
       });
+
+      if (res?.isExisting) {
+        const tokenNum = res.tokenNumber;
+        setUserToken(tokenNum);
+        Alert.alert(
+          'Existing Appointment',
+          `You already have an active appointment (Token #${tokenNum}) with ${doctor?.name || 'this doctor'} on this date. Redirecting to live queue.`
+        );
+        router.push('/(patient)/consult-doctor/live-queue');
+        return;
+      }
+
       const tokenNum = res?.tokenNumber || (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
       setUserToken(tokenNum);
       useAppStore.getState().addBookedAppointment({
@@ -54,8 +81,16 @@ export default function Booking() {
         tokenNumber: tokenNum,
         status: 'CONFIRMED',
       });
-    } catch (_err) {
-      // Offline fallback
+      router.push('/(patient)/consult-doctor/booking-confirmed');
+    } catch (_err: any) {
+      // If error indicates already booked, don't generate duplicate offline token
+      if (_err?.response?.status === 409 || _err?.message?.includes('409') || _err?.message?.includes('already')) {
+        Alert.alert('Notice', _err?.response?.data?.message || 'An appointment is already booked for this date.');
+        router.push('/(patient)/consult-doctor/live-queue');
+        return;
+      }
+
+      // Offline fallback only for genuine network issues
       const fallbackToken = (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
       setUserToken(fallbackToken);
       useAppStore.getState().addBookedAppointment({
@@ -68,9 +103,9 @@ export default function Booking() {
         tokenNumber: fallbackToken,
         status: 'CONFIRMED',
       });
+      router.push('/(patient)/consult-doctor/booking-confirmed');
     } finally {
       setLoading(false);
-      router.push('/(patient)/consult-doctor/booking-confirmed');
     }
   }
 
