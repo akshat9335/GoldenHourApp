@@ -27,13 +27,13 @@ export default function HospitalDashboard() {
     emergencyCapacity: 5,
   });
 
-  const loadData = useCallback(async () => {
+  // Load hospital profile and capacity once on mount or manual refresh
+  const loadStaticInfo = useCallback(async () => {
     try {
-      const profilePromise = api.hospitals.getProfile().catch(() => null);
-      const capPromise = api.hospitals.getCapacity().catch(() => null);
-      const reqPromise = api.hospitals.getRequests().catch(() => null);
-
-      const [profileRes, capRes, reqsRes]: any = await Promise.all([profilePromise, capPromise, reqPromise]);
+      const [profileRes, capRes]: any = await Promise.all([
+        api.hospitals.getProfile().catch(() => null),
+        api.hospitals.getCapacity().catch(() => null),
+      ]);
 
       if (profileRes) {
         const data = profileRes?.data || profileRes;
@@ -43,14 +43,16 @@ export default function HospitalDashboard() {
         }
         const hasValidLoc = data?.location && typeof data.location.latitude === 'number' && data.location.latitude !== 0;
         if (!hasValidLoc) {
-          const fresh = await acquireFreshLocation(2500);
-          if (fresh && fresh.latitude !== 28.6139) {
-            api.hospitals.updateProfile({
-              location: fresh,
-              latitude: fresh.latitude,
-              longitude: fresh.longitude,
-            }).catch(() => {});
-          }
+          // Acquire location once asynchronously in background without blocking
+          acquireFreshLocation(2000).then((fresh) => {
+            if (fresh && fresh.latitude !== 28.6139) {
+              api.hospitals.updateProfile({
+                location: fresh,
+                latitude: fresh.latitude,
+                longitude: fresh.longitude,
+              }).catch(() => {});
+            }
+          }).catch(() => {});
         }
       }
 
@@ -66,7 +68,13 @@ export default function HospitalDashboard() {
           });
         }
       }
+    } catch {}
+  }, []);
 
+  // Poll ONLY incoming emergency requests in the recurring loop
+  const pollEmergencyRequests = useCallback(async () => {
+    try {
+      const reqsRes: any = await api.hospitals.getRequests().catch(() => null);
       if (reqsRes) {
         const items = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
         const pending = items.filter((d: any) => {
@@ -126,13 +134,19 @@ export default function HospitalDashboard() {
     }
   }, []);
 
+  const loadData = useCallback(() => {
+    loadStaticInfo();
+    pollEmergencyRequests();
+  }, [loadStaticInfo, pollEmergencyRequests]);
+
   useEffect(() => {
-    loadData();
+    loadStaticInfo();
+    pollEmergencyRequests();
     const timer = setInterval(() => {
-      loadData();
-    }, 3500);
+      pollEmergencyRequests();
+    }, 4000);
     return () => clearInterval(timer);
-  }, [loadData]);
+  }, [loadStaticInfo, pollEmergencyRequests]);
 
   const handleRefresh = () => {
     setRefreshing(true);

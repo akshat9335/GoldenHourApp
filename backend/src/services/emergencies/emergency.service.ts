@@ -713,19 +713,20 @@ export async function getEmergencyById(
 
   // 4. Smart Auto-Escalation Check:
   // If emergency is still waiting for hospital acceptance (REPORTED / HOSPITAL_SEARCH),
-  // and alertedAt was more than 45 seconds ago, auto-escalate to next hospital candidate!
+  // and alertedAt was more than 60 seconds ago, auto-escalate to next hospital candidate!
   if (
     (emergency.status === "REPORTED" || emergency.status === "HOSPITAL_SEARCH") &&
     !emergency.assignedHospitalId &&
+    !(emergency as any).fallbackMode &&
     (emergency as any).alertedAt
   ) {
     const alertedTime = new Date((emergency as any).alertedAt).getTime();
     const elapsedMs = Date.now() - alertedTime;
-    if (elapsedMs > 45000) {
+    if (elapsedMs > 60000) {
       try {
         const escalated = await escalateEmergencyToNextHospital(
           emergency.id,
-          "Hospital response timeout (45s) without acceptance",
+          "Hospital response timeout (60s) without acceptance",
         );
         if (escalated) {
           Object.assign(emergency, escalated);

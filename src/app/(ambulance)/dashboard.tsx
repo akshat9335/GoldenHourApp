@@ -28,29 +28,36 @@ export default function AmbulanceDashboard() {
   const isLinkedToHospital = !!rawHospital && rawHospital !== 'Independent Fleet' && rawHospital !== 'Emergency Response Fleet';
   const hospitalAffiliation = isLinkedToHospital ? rawHospital : 'Independent / Golden Hour 108 Fleet';
 
-  const loadDashboardData = useCallback(async () => {
+  // 1. Fetch static driver profile and completed mission history once on mount / refresh
+  const loadDriverProfile = useCallback(async () => {
     try {
-      // 1. Fetch user profile
       const profPromise = api.users.getProfile().catch(() => null);
-
-      // 2. Fetch trip history to compute trip count & check active trip
       const tripsPromise = api.ambulances.getTripHistory().catch(() => []);
-
-      // 3. Fetch pending ambulance requests if on duty
-      const reqsPromise = onDuty ? api.ambulances.getRequests().catch(() => []) : Promise.resolve([]);
-
-      const [profRes, tripsRes, reqsRes]: any = await Promise.all([
-        profPromise,
-        tripsPromise,
-        reqsPromise,
-      ]);
+      const [profRes, tripsRes]: any = await Promise.all([profPromise, tripsPromise]);
 
       if (profRes) {
         useAppStore.getState().setUserProfile(profRes);
       }
 
-        if (Array.isArray(tripsRes)) {
+      if (Array.isArray(tripsRes)) {
         setTripCount(tripsRes.length);
+        const finished = tripsRes.filter((t: any) => String(t.status || '').toUpperCase() === 'COMPLETED');
+        finished.sort((a: any, b: any) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0).getTime() - new Date(a.completedAt || a.updatedAt || a.createdAt || 0).getTime());
+        setCompletedMissions(finished);
+      }
+    } catch (err) {
+      console.warn('Driver profile load error:', err);
+    }
+  }, []);
+
+  // 2. Poll only pending requests and active in-progress trip
+  const pollActiveAndRequests = useCallback(async () => {
+    try {
+      const reqsPromise = onDuty ? api.ambulances.getRequests().catch(() => []) : Promise.resolve([]);
+      const tripsPromise = api.ambulances.getTripHistory().catch(() => []);
+      const [reqsRes, tripsRes]: any = await Promise.all([reqsPromise, tripsPromise]);
+
+      if (Array.isArray(tripsRes)) {
         const inProgress = tripsRes.find((t: any) => {
           const s = String(t.status || '').toUpperCase();
           return (
@@ -66,10 +73,6 @@ export default function AmbulanceDashboard() {
           );
         });
 
-        const finished = tripsRes.filter((t: any) => String(t.status || '').toUpperCase() === 'COMPLETED');
-        finished.sort((a: any, b: any) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0).getTime() - new Date(a.completedAt || a.updatedAt || a.createdAt || 0).getTime());
-        setCompletedMissions(finished);
-
         if (inProgress) {
           setActiveTrip(inProgress);
           setActiveTripId(inProgress.id || inProgress._id);
@@ -83,42 +86,52 @@ export default function AmbulanceDashboard() {
         setRequests(reqsRes);
       }
     } catch (err) {
-      console.warn('Dashboard data load error:', err);
+      console.warn('Dashboard poll error:', err);
     } finally {
       setLoadingRequests(false);
       setRefreshing(false);
     }
   }, [onDuty, setActiveTripId, setEmergencyId]);
 
+  const loadDashboardData = useCallback(() => {
+    loadDriverProfile();
+    pollActiveAndRequests();
+  }, [loadDriverProfile, pollActiveAndRequests]);
+
   useEffect(() => {
     loadDashboardData();
     const interval = setInterval(() => {
-      loadDashboardData();
-    }, 3500);
+      pollActiveAndRequests();
+    }, 4000);
     return () => clearInterval(interval);
-  }, [loadDashboardData]);
+  }, [loadDashboardData, pollActiveAndRequests]);
 
   useEffect(() => {
     api.ambulances.updateAvailability(onDuty ? 'AVAILABLE' : 'OFFLINE').catch(() => {});
   }, [onDuty]);
 
-  // Dynamic Driver Live Telemetry Stream
+  // Dynamic Driver Live Telemetry Stream (throttled to at most once every 8 seconds)
   useEffect(() => {
     if (!onDuty) return;
 
     let sub: any = null;
     let isMounted = true;
+    let lastUploadTime = 0;
 
     const startDriverTracking = async () => {
       try {
         sub = await watchDeviceLocation((coords) => {
           if (!isMounted) return;
           useAppStore.getState().setLastKnownLocation(coords);
-          api.location.updateLocation({
-            lat: coords.latitude,
-            lng: coords.longitude,
-            role: 'AMBULANCE_DRIVER',
-          }).catch(() => {});
+          const now = Date.now();
+          if (now - lastUploadTime > 8000) {
+            lastUploadTime = now;
+            api.location.updateLocation({
+              lat: coords.latitude,
+              lng: coords.longitude,
+              role: 'AMBULANCE_DRIVER',
+            }).catch(() => {});
+          }
         });
       } catch {}
     };
@@ -133,7 +146,8 @@ export default function AmbulanceDashboard() {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    loadDashboardData();
+    loadDriverProfile();
+    pollActiveAndRequests();
   };
 
   const handleRequestPress = (req: any) => {

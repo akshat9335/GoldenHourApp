@@ -92,13 +92,20 @@ export default function Active() {
         if (mounted && emg) {
           setEmergency(emg);
           const statusKey = String(emg.tripStatus || emg.status || '').toUpperCase();
+          if (statusKey === 'CANCELLED' || emg.status === 'CANCELLED') {
+            if (timer) clearInterval(timer);
+            resetEmergencySession();
+            router.replace('/(patient)/home');
+            return;
+          }
           if (statusKey === 'COMPLETED' || emg.status === 'COMPLETED' || emg.tripStatus === 'COMPLETED') {
             if (timer) clearInterval(timer);
             router.replace('/(patient)/emergency/completed');
             return;
           }
           const stepIndex = BACKEND_STEP_MAP[statusKey] ?? BACKEND_STEP_MAP[String(emg.status || '').toUpperCase()];
-          if (stepIndex !== undefined && stepIndex !== ambStatus) {
+          // Only advance forward to prevent out-of-order network responses from flickering backward
+          if (stepIndex !== undefined && stepIndex > ambStatus) {
             setAmbStatus(stepIndex);
             if (stepIndex >= AMB_STEPS.length - 1) {
               if (timer) clearInterval(timer);
