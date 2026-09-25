@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, Modal } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, Modal, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Pill, Divider, Icon, LabelEyebrow, openExternalMapPreview } from '@/components/ui';
@@ -141,7 +141,18 @@ export default function HospitalRequestDetail() {
 
   return (
     <Screen>
-      <TopBar title="Incoming Patient" />
+      <TopBar
+        title="Incoming Patient"
+        onPressBack={() => router.replace('/(hospital)/dashboard')}
+        right={
+          <TouchableOpacity
+            style={{ paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#F3F4F6', borderRadius: 8 }}
+            onPress={() => router.replace('/(hospital)/dashboard')}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.ink }}>Dashboard</Text>
+          </TouchableOpacity>
+        }
+      />
 
       <LabelEyebrow>PATIENT INFORMATION</LabelEyebrow>
       <Card style={styles.card}>
@@ -394,15 +405,56 @@ export default function HospitalRequestDetail() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Icon name="ambulance" color={colors.red} size={22} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.dispatchOptionTitle}>Dispatch Affiliated Hospital Fleet</Text>
+                  <Text style={styles.dispatchOptionTitle}>Broadcast to Hospital Fleet (Fastest)</Text>
                   <Text style={styles.dispatchOptionDesc}>
                     {drivers.length > 0
-                      ? `${drivers.length} unit(s) on-call · First available unit assigned`
+                      ? `Alerts all ${drivers.length} registered on-call pilot(s)`
                       : 'Hospital Rapid Response ALS Unit (Priority dispatch)'}
                   </Text>
                 </View>
               </View>
             </TouchableOpacity>
+
+            {/* Optional Specific Driver Selection */}
+            {drivers.length > 0 && (
+              <View style={{ marginVertical: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft, textTransform: 'uppercase', marginBottom: 6 }}>
+                  Or Assign Specific Pilot ({drivers.length})
+                </Text>
+                <ScrollView style={{ maxHeight: 160 }} showsVerticalScrollIndicator={false}>
+                  {drivers.map((drv: any) => {
+                    const drvId = drv.uid || drv.id;
+                    const drvName = drv.name || drv.driverName || 'Ambulance Pilot';
+                    const drvPhone = drv.phone || drv.contactNumber;
+                    const vehicle = drv.vehicleNumber || drv.ambulanceId || 'Emergency Unit';
+                    const isAvail = drv.availability === 'AVAILABLE' || !drv.availability;
+                    return (
+                      <TouchableOpacity
+                        key={drvId}
+                        style={[styles.driverRowCard, !isAvail && { opacity: 0.6 }]}
+                        onPress={() => handleAccept('AFFILIATED', drvId)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>{drvName}</Text>
+                            <Pill color={isAvail ? 'success' : 'amber'}>
+                              {isAvail ? 'AVAILABLE' : 'ON DUTY'}
+                            </Pill>
+                          </View>
+                          <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 2 }}>
+                            Unit: {vehicle} {drvPhone ? `· 📞 ${drvPhone}` : ''}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 11.5, fontWeight: '700', color: colors.red }}>
+                          Assign →
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.dispatchOptionBtn, { borderColor: '#3B82F640', backgroundColor: '#EFF6FF' }]}
@@ -601,5 +653,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.inkFaint,
+  },
+  driverRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
   },
 });
