@@ -79,7 +79,7 @@ export default function RegisterPatient() {
       const netState = await NetInfo.fetch();
       if (netState.isConnected) {
         try {
-          const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'http://localhost:5000';
+          const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com';
           const res = await fetch(`${baseUrl}/api/worker/patients`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },

@@ -6,7 +6,7 @@ import Constants from 'expo-constants';
  */
 
 export function getApiBaseUrl(): string {
-  return process.env.EXPO_PUBLIC_API_URL || 'https://goldenhour-live.loca.lt';
+  return process.env.EXPO_PUBLIC_API_URL || 'https://goldenhourapp.onrender.com';
 }
 
 function resolveApiBaseUrl(): string {

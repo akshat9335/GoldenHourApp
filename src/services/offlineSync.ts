@@ -53,7 +53,7 @@ export async function enqueueOfflineAction(
 export async function processOfflineQueue(
   apiBaseUrl?: string,
 ): Promise<{ success: number; failed: number }> {
-  const baseUrl = apiBaseUrl || (getApiBaseUrl ? getApiBaseUrl() : 'http://localhost:5000');
+  const baseUrl = apiBaseUrl || (getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com');
   try {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
     if (!raw) return { success: 0, failed: 0 };

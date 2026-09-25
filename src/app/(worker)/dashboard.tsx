@@ -115,7 +115,7 @@ export default function WorkerDashboard() {
 
       // If online, fetch fresh list from backend
       try {
-        const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'http://localhost:5000';
+        const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com';
         const res = await fetch(`${baseUrl}/api/worker/patients`, {
           headers: { 'Bypass-Tunnel-Reminder': 'true' },
         });

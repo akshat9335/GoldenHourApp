@@ -103,7 +103,7 @@ export default function PatientDetailScreen() {
 
       // 2. Fetch fresh from backend if reachable
       try {
-        const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'http://localhost:5000';
+        const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com';
         const res = await fetch(`${baseUrl}/api/worker/patients/${patientId}`, {
           headers: { 'Bypass-Tunnel-Reminder': 'true' },
         });
