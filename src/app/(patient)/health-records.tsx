@@ -17,7 +17,7 @@ import { useAppStore } from '@/store/useAppStore';
 
 export default function PatientHealthRecords() {
   const userProfile = useAppStore((s) => s.userProfile);
-  const patientId = userProfile?.uid || 'demo-patient';
+  const patientId = userProfile?.uid || (userProfile as any)?.id || 'patient-1';
 
   const [records, setRecords] = useState<any[]>([]);
   const [referrals, setReferrals] = useState<any[]>([]);

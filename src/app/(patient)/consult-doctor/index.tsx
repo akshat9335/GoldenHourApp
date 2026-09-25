@@ -222,10 +222,16 @@ export default function ConsultDoctor() {
                         <Text style={{ fontSize: 11, color: colors.inkFaint }}>Token #{apt.tokenNumber}</Text>
                       </View>
                     </View>
-                    <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.line }}>
-                      <Text style={{ fontSize: 12, color: colors.success, fontWeight: '600' }}>
-                        ✓ Health record & prescription recorded by doctor
+                    <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 12, color: colors.success, fontWeight: '600', flex: 1 }}>
+                        ✓ Health record & prescription recorded
                       </Text>
+                      <Pressable
+                        onPress={() => router.push('/(patient)/health-records' as any)}
+                        style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colors.blueBg, borderRadius: 6 }}
+                      >
+                        <Text style={{ fontSize: 11, color: colors.blue, fontWeight: '700' }}>View Rx →</Text>
+                      </Pressable>
                     </View>
                   </Card>
                 );
