@@ -16,7 +16,7 @@ import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { enqueueOfflineAction } from '@/services/offlineSync';
-import { getApiBaseUrl } from '@/services/api';
+import { api, getApiBaseUrl } from '@/services/api';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const REFERRALS_KEY = '@golden_hour_community_referrals';
@@ -114,12 +114,7 @@ export default function CreateReferralScreen() {
 
       // 3. If online, fire directly
       try {
-        const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com';
-        await fetch(`${baseUrl}/api/worker/referrals`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
-          body: JSON.stringify(payload),
-        });
+        await api.worker.createReferral(payload);
       } catch {
         // Queue will auto-sync
       }

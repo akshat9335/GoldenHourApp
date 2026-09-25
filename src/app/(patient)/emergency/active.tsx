@@ -180,7 +180,9 @@ export default function Active() {
   const hospitalSub = hasHospitalAccepted
     ? 'Trauma Desk Standing By'
     : (emergency as any)?.escalationMessage || 'Broadcasting triage to nearest emergency ER';
-  const hospitalPhone = hasHospitalAccepted ? emergency?.assignedHospitalPhone || null : null;
+  const hospitalPhone = hasHospitalAccepted
+    ? (emergency?.assignedHospitalPhone || (emergency as any)?.hospitalPhone || '108')
+    : null;
 
   const ambulancePlate = hasAmbulanceAssigned
     ? emergency?.assignedAmbulanceId || 'Unit Dispatched'
@@ -192,7 +194,9 @@ export default function Active() {
     : ambStatus === 1
     ? 'Hospital assigning nearest ambulance'
     : 'Awaiting hospital assignment';
-  const driverPhone = hasAmbulanceAssigned ? emergency?.assignedDriverPhone : null;
+  const driverPhone = hasAmbulanceAssigned
+    ? (emergency?.assignedDriverPhone || (emergency as any)?.driverPhone)
+    : null;
 
   const etaText =
     ambStatus === 0
@@ -296,7 +300,7 @@ export default function Active() {
           {driverPhone ? (
             <TouchableOpacity
               style={styles.pairCallBtn}
-              onPress={() => Linking.openURL(`tel:${driverPhone}`)}
+              onPress={() => Linking.openURL(`tel:${String(driverPhone).replace(/[^0-9+]/g, '')}`)}
               activeOpacity={0.8}
             >
               <Text style={styles.pairCallText}>📞 Call Pilot</Text>
@@ -318,7 +322,7 @@ export default function Active() {
             {hospitalPhone ? (
               <TouchableOpacity
                 style={[styles.pairCallBtn, { flex: 1 }]}
-                onPress={() => Linking.openURL(`tel:${hospitalPhone}`)}
+                onPress={() => Linking.openURL(`tel:${String(hospitalPhone).replace(/[^0-9+]/g, '')}`)}
                 activeOpacity={0.8}
               >
                 <Text style={styles.pairCallText}>📞 Call</Text>

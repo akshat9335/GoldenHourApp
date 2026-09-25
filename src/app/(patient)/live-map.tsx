@@ -320,10 +320,13 @@ export default function LiveMap() {
                       : 'Hospital assigning nearest responding unit'}
                   </Text>
                 </View>
-                {emergency?.assignedDriverPhone ? (
+                {(emergency?.assignedDriverPhone || (emergency as any)?.driverPhone) ? (
                   <TouchableOpacity
                     style={styles.callBtn}
-                    onPress={() => Linking.openURL(`tel:${emergency.assignedDriverPhone}`)}
+                    onPress={() => {
+                      const p = emergency?.assignedDriverPhone || (emergency as any)?.driverPhone;
+                      Linking.openURL(`tel:${String(p).replace(/[^0-9+]/g, '')}`);
+                    }}
                     activeOpacity={0.8}
                   >
                     <Text style={styles.callBtnText}>📞 Call</Text>
@@ -369,10 +372,13 @@ export default function LiveMap() {
                         <Text style={[styles.callBtnText, { color: colors.blue }]}>📍 Pin</Text>
                       </TouchableOpacity>
                     ) : null}
-                    {emergency?.assignedHospitalPhone ? (
+                    {(emergency?.assignedHospitalPhone || (emergency as any)?.hospitalPhone || '108') ? (
                       <TouchableOpacity
                         style={styles.callBtn}
-                        onPress={() => Linking.openURL(`tel:${emergency.assignedHospitalPhone}`)}
+                        onPress={() => {
+                          const p = emergency?.assignedHospitalPhone || (emergency as any)?.hospitalPhone || '108';
+                          Linking.openURL(`tel:${String(p).replace(/[^0-9+]/g, '')}`);
+                        }}
                         activeOpacity={0.8}
                       >
                         <Text style={styles.callBtnText}>📞 Call</Text>

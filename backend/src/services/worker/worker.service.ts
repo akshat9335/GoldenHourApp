@@ -55,11 +55,12 @@ export async function getWorkerPatients(workerUid: string): Promise<CommunityPat
       const snap = await firestore
         .collection(PATIENTS_COL)
         .where("workerUid", "==", workerUid)
-        .orderBy("createdAt", "desc")
         .get();
 
       if (!snap.empty) {
-        return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as CommunityPatient));
+        const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as CommunityPatient));
+        docs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        return docs;
       }
     } catch (err) {
       console.warn("[WorkerService] Firestore get patients failed, falling back to memory:", err);

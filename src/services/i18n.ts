@@ -30,6 +30,8 @@ try {
   supportedLang = 'en';
 }
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 if (!i18n.isInitialized) {
   i18n
     .use(initReactI18next)
@@ -42,6 +44,15 @@ if (!i18n.isInitialized) {
         escapeValue: false, // React already escapes
       },
     });
+
+  // Restore user's saved language preference if previously set
+  AsyncStorage.getItem('@app_language')
+    .then((saved) => {
+      if (saved && (saved === 'en' || saved === 'hi' || saved === 'mr')) {
+        i18n.changeLanguage(saved);
+      }
+    })
+    .catch(() => {});
 }
 
 export default i18n;

@@ -273,27 +273,35 @@ export default function HospitalRequestDetail() {
               <Text style={styles.vitalsInboundVal}>Pulse: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.pulse} bpm</Text></Text>
               <Text style={styles.vitalsInboundVal}>SpO2: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.spO2}%</Text></Text>
               <Text style={styles.vitalsInboundVal}>BP: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.bp}</Text></Text>
+              {detail.vitals.bloodSugar ? (
+                <Text style={styles.vitalsInboundVal}>Sugar: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.bloodSugar} mg/dL</Text></Text>
+              ) : null}
             </View>
           </View>
         ) : null}
 
-        {/* 3-Way Direct Contact Buttons */}
         {/* 3-Way Direct Contact & Live Route Buttons */}
         <View style={styles.ambActionRow}>
-          {detail?.assignedDriverPhone ? (
+          {(detail?.assignedDriverPhone || detail?.driverPhone || detail?.assignedDriverContact) ? (
             <TouchableOpacity
               style={styles.actionBtnBlue}
-              onPress={() => Linking.openURL(`tel:${detail.assignedDriverPhone}`)}
+              onPress={() => {
+                const p = detail?.assignedDriverPhone || detail?.driverPhone || detail?.assignedDriverContact;
+                Linking.openURL(`tel:${String(p).replace(/[^0-9+]/g, '')}`);
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.actionBtnTextBlue}>📞 Call Pilot</Text>
             </TouchableOpacity>
           ) : null}
 
-          {detail?.patientPhone ? (
+          {(detail?.patientPhone || detail?.phone || detail?.contactPhone || detail?.userPhone) ? (
             <TouchableOpacity
               style={styles.actionBtnGreen}
-              onPress={() => Linking.openURL(`tel:${detail.patientPhone}`)}
+              onPress={() => {
+                const p = detail?.patientPhone || detail?.phone || detail?.contactPhone || detail?.userPhone;
+                Linking.openURL(`tel:${String(p).replace(/[^0-9+]/g, '')}`);
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.actionBtnTextGreen}>📞 Call Patient</Text>

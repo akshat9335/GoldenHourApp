@@ -365,8 +365,8 @@ export default function HospitalDashboard() {
 
               const driverName = item.assignedDriverName || 'Assigned Pilot';
               const vehicle = item.assignedAmbulanceId || 'Ambulance';
-              const driverPhone = item.assignedDriverPhone;
-              const patientPhone = item.patientPhone;
+              const driverPhone = item.assignedDriverPhone || item.driverPhone || item.driverContact;
+              const patientPhone = item.patientPhone || item.phone || item.contactPhone || item.userPhone;
 
               return (
                 <Card key={item.requestId || item.id || idx} style={styles.inboundCard}>
@@ -451,7 +451,7 @@ export default function HospitalDashboard() {
             {admittedPatients.map((item, idx) => {
               const driverName = item.assignedDriverName || item.driverName || 'Pilot';
               const vehicle = item.assignedAmbulanceId || item.ambulanceId || '108';
-              const patientPhone = item.patientPhone || item.contactPhone;
+              const patientPhone = item.patientPhone || item.contactPhone || item.phone || item.userPhone;
               return (
                 <Card key={item.requestId || item.id || idx} style={styles.admittedCard}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

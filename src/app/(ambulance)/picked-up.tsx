@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Banner, Icon, Pill } from '@/components/ui';
@@ -21,6 +21,20 @@ export default function PickedUp() {
   const [pulse, setPulse] = useState('86');
   const [spO2, setSpO2] = useState('98');
   const [bp, setBp] = useState('120/80');
+  const [bloodSugar, setBloodSugar] = useState('110');
+
+  const adjustPulse = (delta: number) => {
+    setPulse((p) => String(Math.max(30, Math.min(220, (parseInt(p) || 80) + delta))));
+    setVitalsSent(false);
+  };
+  const adjustSpO2 = (delta: number) => {
+    setSpO2((s) => String(Math.max(50, Math.min(100, (parseInt(s) || 98) + delta))));
+    setVitalsSent(false);
+  };
+  const adjustSugar = (delta: number) => {
+    setBloodSugar((s) => String(Math.max(30, Math.min(500, (parseInt(s) || 110) + delta))));
+    setVitalsSent(false);
+  };
 
   useEffect(() => {
     if (params.tripId && !useAppStore.getState().activeTripId) {
@@ -116,10 +130,15 @@ export default function PickedUp() {
     if (emergencyId) {
       try {
         await api.emergencies.update(emergencyId, {
-          vitals: { pulse: Number(pulse) || 86, spO2: Number(spO2) || 98, bp: bp || '120/80' },
+          vitals: {
+            pulse: Number(pulse) || 86,
+            spO2: Number(spO2) || 98,
+            bp: bp || '120/80',
+            bloodSugar: Number(bloodSugar) || 110,
+          },
         });
         setVitalsSent(true);
-        Alert.alert('Vitals Transmitted', 'Patient vitals successfully streamed to Hospital ER Desk.');
+        Alert.alert('Vitals Transmitted', `Patient vitals (BP ${bp}, Sugar ${bloodSugar} mg/dL, Pulse ${pulse} bpm, SpO2 ${spO2}%) successfully streamed to Hospital ER Desk.`);
       } catch (_e) {
         setVitalsSent(true);
       }
@@ -127,7 +146,7 @@ export default function PickedUp() {
   };
 
   const patientName = emergency?.patientName || 'Patient Onboard';
-  const patientPhone = emergency?.patientPhone;
+  const patientPhone = emergency?.patientPhone || (emergency as any)?.contactPhone || (emergency as any)?.userPhone || (emergency as any)?.phone;
   const hospitalPhone = (emergency as any)?.assignedHospitalPhone || (emergency as any)?.hospitalPhone || '108';
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
   const hLat = (emergency as any)?.assignedHospitalLocation?.latitude ?? (lastKnownLocation?.latitude ? lastKnownLocation.latitude + 0.012 : 25.4358);
@@ -214,20 +233,94 @@ export default function PickedUp() {
           <Pill color="success">ONBOARD</Pill>
         </View>
 
-        {/* Vitals Telemetry Row */}
-        <View style={styles.vitalsRow}>
-          <View style={styles.vitalBox}>
-            <Text style={styles.vitalLabel}>PULSE</Text>
-            <Text style={styles.vitalVal}>{pulse} bpm</Text>
+        {/* Vitals Telemetry Row - Pulse, SpO2, Sugar, BP */}
+        <View style={styles.vitalsGrid}>
+          {/* Pulse */}
+          <View style={styles.vitalBoxInteractive}>
+            <Text style={styles.vitalLabel}>PULSE (BPM)</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity style={styles.stepBtn} onPress={() => adjustPulse(-2)} activeOpacity={0.7}>
+                <Text style={styles.stepBtnText}>−</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.vitalInput}
+                keyboardType="numeric"
+                value={pulse}
+                onChangeText={(v) => { setPulse(v); setVitalsSent(false); }}
+              />
+              <TouchableOpacity style={styles.stepBtn} onPress={() => adjustPulse(2)} activeOpacity={0.7}>
+                <Text style={styles.stepBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.vitalBox}>
-            <Text style={styles.vitalLabel}>SpO2</Text>
-            <Text style={styles.vitalVal}>{spO2}%</Text>
+
+          {/* SpO2 */}
+          <View style={styles.vitalBoxInteractive}>
+            <Text style={styles.vitalLabel}>SpO2 (%)</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity style={styles.stepBtn} onPress={() => adjustSpO2(-1)} activeOpacity={0.7}>
+                <Text style={styles.stepBtnText}>−</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.vitalInput}
+                keyboardType="numeric"
+                value={spO2}
+                onChangeText={(v) => { setSpO2(v); setVitalsSent(false); }}
+              />
+              <TouchableOpacity style={styles.stepBtn} onPress={() => adjustSpO2(1)} activeOpacity={0.7}>
+                <Text style={styles.stepBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.vitalBox}>
-            <Text style={styles.vitalLabel}>BP</Text>
-            <Text style={styles.vitalVal}>{bp}</Text>
+        </View>
+
+        <View style={[styles.vitalsGrid, { marginTop: 8 }]}>
+          {/* Blood Sugar */}
+          <View style={styles.vitalBoxInteractive}>
+            <Text style={styles.vitalLabel}>SUGAR (MG/DL)</Text>
+            <View style={styles.stepperRow}>
+              <TouchableOpacity style={styles.stepBtn} onPress={() => adjustSugar(-5)} activeOpacity={0.7}>
+                <Text style={styles.stepBtnText}>−</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.vitalInput}
+                keyboardType="numeric"
+                value={bloodSugar}
+                onChangeText={(v) => { setBloodSugar(v); setVitalsSent(false); }}
+              />
+              <TouchableOpacity style={styles.stepBtn} onPress={() => adjustSugar(5)} activeOpacity={0.7}>
+                <Text style={styles.stepBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {/* Blood Pressure (BP) */}
+          <View style={styles.vitalBoxInteractive}>
+            <Text style={styles.vitalLabel}>BP (SYS/DIA)</Text>
+            <TextInput
+              style={[styles.vitalInput, { width: '100%', marginTop: 2 }]}
+              value={bp}
+              onChangeText={(v) => { setBp(v); setVitalsSent(false); }}
+              placeholder="120/80"
+            />
+          </View>
+        </View>
+
+        {/* Quick BP Presets */}
+        <View style={styles.bpPresetRow}>
+          <Text style={{ fontSize: 10, color: colors.inkFaint, fontWeight: '700' }}>BP Presets:</Text>
+          {['110/70', '120/80', '140/90', '160/100'].map((preset) => (
+            <TouchableOpacity
+              key={preset}
+              style={[styles.presetChip, bp === preset && styles.presetChipActive]}
+              onPress={() => { setBp(preset); setVitalsSent(false); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.presetChipText, bp === preset && styles.presetChipTextActive]}>
+                {preset}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         <TouchableOpacity
@@ -342,5 +435,79 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     color: colors.blue,
+  },
+  vitalsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
+  },
+  vitalBoxInteractive: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    gap: 4,
+  },
+  stepBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  stepBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.ink,
+    lineHeight: 18,
+  },
+  vitalInput: {
+    flex: 1,
+    textAlign: 'center',
+    fontWeight: '800',
+    fontSize: 14,
+    color: colors.ink,
+    paddingVertical: 2,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 6,
+  },
+  bpPresetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 2,
+  },
+  presetChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  presetChipActive: {
+    backgroundColor: '#FEF2F2',
+    borderColor: colors.red,
+  },
+  presetChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.inkSoft,
+  },
+  presetChipTextActive: {
+    color: colors.red,
   },
 });

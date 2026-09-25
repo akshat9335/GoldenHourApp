@@ -364,6 +364,26 @@ export const api = {
     deleteMedicine: (id: string) =>
       request(`/medicines/${id}`, { method: 'DELETE' }),
   },
+
+  // ASHA & Frontline Health Worker
+  worker: {
+    getStats: (workerUid?: string) =>
+      request(`/worker/stats${workerUid ? `?workerUid=${encodeURIComponent(workerUid)}` : ''}`),
+    getPatients: (workerUid?: string) =>
+      request(`/worker/patients${workerUid ? `?workerUid=${encodeURIComponent(workerUid)}` : ''}`),
+    getPatientDetail: (id: string) =>
+      request(`/worker/patients/${id}`),
+    registerPatient: (data: any) =>
+      request('/worker/patients', { method: 'POST', body: JSON.stringify(data) }),
+    recordVisit: (data: any) =>
+      request('/worker/visits', { method: 'POST', body: JSON.stringify(data) }),
+    createReferral: (data: any) =>
+      request('/worker/referrals', { method: 'POST', body: JSON.stringify(data) }),
+    getReferrals: (workerUid?: string) =>
+      request(`/worker/referrals${workerUid ? `?workerUid=${encodeURIComponent(workerUid)}` : ''}`),
+    syncBatch: (visits: any[], workerUid?: string) =>
+      request('/worker/sync', { method: 'POST', body: JSON.stringify({ visits, workerUid }) }),
+  },
 };
 
 export default api;

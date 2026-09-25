@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -14,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
-import { getApiBaseUrl } from '@/services/api';
+import { api, getApiBaseUrl } from '@/services/api';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const VISITS_KEY = '@golden_hour_community_visits';
@@ -103,17 +104,11 @@ export default function PatientDetailScreen() {
 
       // 2. Fetch fresh from backend if reachable
       try {
-        const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com';
-        const res = await fetch(`${baseUrl}/api/worker/patients/${patientId}`, {
-          headers: { 'Bypass-Tunnel-Reminder': 'true' },
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data?.patient) {
-            setPatient(json.data.patient);
-            if (json.data.visits?.length) setVisits(json.data.visits);
-            if (json.data.referrals?.length) setReferrals(json.data.referrals);
-          }
+        const data: any = await api.worker.getPatientDetail(patientId);
+        if (data?.patient) {
+          setPatient(data.patient);
+          if (data.visits?.length) setVisits(data.visits);
+          if (data.referrals?.length) setReferrals(data.referrals);
         }
       } catch {
         // Offline - use cached
@@ -194,7 +189,19 @@ export default function PatientDetailScreen() {
           <View style={styles.detailGrid}>
             <View style={styles.gridItem}>
               <Text style={styles.gridLabel}>{lang === 'hi' ? 'फ़ोन नंबर' : 'Phone'}</Text>
-              <Text style={styles.gridVal}>{patient.phone || (lang === 'hi' ? 'फ़ोन नहीं है' : 'No Phone')}</Text>
+              {patient.phone ? (
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}
+                  onPress={() => Linking.openURL(`tel:${patient.phone.replace(/[^0-9+]/g, '')}`)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.gridVal, { color: colors.blue, fontWeight: '700', textDecorationLine: 'underline', marginTop: 0 }]}>
+                    📞 {patient.phone}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.gridVal}>{lang === 'hi' ? 'फ़ोन नहीं है' : 'No Phone'}</Text>
+              )}
             </View>
             <View style={styles.gridItem}>
               <Text style={styles.gridLabel}>{t('asha.bloodGroup')}</Text>

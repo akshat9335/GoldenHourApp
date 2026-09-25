@@ -9,7 +9,8 @@ import '@/services/i18n'; // Ensure i18n is initialized for all worker screens
 export default function WorkerLayout() {
   const role = useAppStore((s) => s.role);
 
-  if (role !== 'FRONTLINE_WORKER') {
+  const roleUpper = (role || '').toUpperCase();
+  if (roleUpper !== 'FRONTLINE_WORKER' && roleUpper !== 'ASHA' && roleUpper !== 'WORKER') {
     return <Redirect href={'/asha-login' as any} />;
   }
 

@@ -16,7 +16,7 @@ import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { processOfflineQueue, getPendingCount } from '@/services/offlineSync';
-import { getApiBaseUrl } from '@/services/api';
+import { api, getApiBaseUrl } from '@/services/api';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const REFERRALS_KEY = '@golden_hour_community_referrals';
@@ -115,16 +115,11 @@ export default function WorkerDashboard() {
 
       // If online, fetch fresh list from backend
       try {
-        const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com';
-        const res = await fetch(`${baseUrl}/api/worker/patients`, {
-          headers: { 'Bypass-Tunnel-Reminder': 'true' },
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (Array.isArray(json.data) && json.data.length > 0) {
-            setPatients(json.data);
-            await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(json.data));
-          }
+        const res: any = await api.worker.getPatients();
+        const list = Array.isArray(res) ? res : res?.data;
+        if (Array.isArray(list) && list.length > 0) {
+          setPatients(list);
+          await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(list));
         }
       } catch {
         // Use local cache

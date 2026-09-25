@@ -119,9 +119,9 @@ export default function NavigatePatient() {
   const ambLng = Number(lastKnownLocation?.longitude) || Number((pLng - 0.005).toFixed(6));
 
   const patientName = emergency?.patientName || 'Emergency Patient';
-  const patientPhone = emergency?.patientPhone;
-  const hospitalName = emergency?.assignedHospitalName || 'Assigned Hospital ER';
-  const hospitalPhone = emergency?.assignedHospitalPhone;
+  const patientPhone = emergency?.patientPhone || (emergency as any)?.contactPhone || (emergency as any)?.userPhone || (emergency as any)?.phone;
+  const hospitalName = emergency?.assignedHospitalName || (emergency as any)?.hospitalName || 'Assigned Hospital ER';
+  const hospitalPhone = emergency?.assignedHospitalPhone || (emergency as any)?.hospitalPhone || '108';
 
   // Real-time distance and ETA calculation
   const dLat = (pLat - ambLat) * (Math.PI / 180);

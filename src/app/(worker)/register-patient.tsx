@@ -17,7 +17,7 @@ import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { enqueueOfflineAction } from '@/services/offlineSync';
-import { getApiBaseUrl } from '@/services/api';
+import { api, getApiBaseUrl } from '@/services/api';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 
@@ -79,13 +79,7 @@ export default function RegisterPatient() {
       const netState = await NetInfo.fetch();
       if (netState.isConnected) {
         try {
-          const baseUrl = getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com';
-          const res = await fetch(`${baseUrl}/api/worker/patients`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
-            body: JSON.stringify(patient),
-          });
-          if (!res.ok) throw new Error('Server error');
+          await api.worker.registerPatient(patient);
         } catch {
           await enqueueOfflineAction('/api/worker/patients', 'POST', patient);
         }
