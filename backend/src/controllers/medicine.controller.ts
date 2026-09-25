@@ -49,6 +49,42 @@ export class MedicineController {
       next(err);
     }
   }
+
+  public async addMedicine(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { hospitalId, medicineName, category, dosageForm, quantity, stockStatus } = req.body;
+      const targetHospitalId = hospitalId || req.user?.uid;
+      if (!targetHospitalId || !medicineName) {
+        throw new AppError(400, "MISSING_FIELDS", "hospitalId and medicineName are required.");
+      }
+
+      const item = await medicineService.addMedicine({
+        hospitalId: targetHospitalId,
+        medicineName,
+        category,
+        dosageForm,
+        quantity: quantity !== undefined ? Number(quantity) : 50,
+        stockStatus: stockStatus || "AVAILABLE",
+      });
+
+      sendSuccess(res, item, `Added medicine '${medicineName}' successfully`, 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public async deleteMedicine(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id;
+      if (!id) {
+        throw new AppError(400, "MISSING_ID", "Medicine item ID is required.");
+      }
+      await medicineService.deleteMedicine(id);
+      sendSuccess(res, { id }, `Medicine '${id}' removed from inventory`);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 export const medicineController = new MedicineController();

@@ -34,6 +34,7 @@ export async function getAmbulanceRequests(
   assertFirebaseReady();
 
   let driverHospId: string | null = null;
+  let driverPhone: string | null = null;
   let isIndependent = true;
 
   if (driverUid && firestore) {
@@ -42,8 +43,23 @@ export async function getAmbulanceRequests(
       if (driverDoc.exists) {
         const dData = driverDoc.data();
         driverHospId = dData?.hospitalId || null;
+        driverPhone = dData?.phone || null;
         const hospName = String(dData?.hospitalName || "").toLowerCase();
         isIndependent = !driverHospId || hospName.includes("independent") || driverHospId === "independent";
+      }
+
+      // Also check user profile doc for hospital affiliation
+      if (!driverHospId) {
+        const userDoc = await firestore.collection("users").doc(driverUid).get();
+        if (userDoc.exists) {
+          const uData = userDoc.data();
+          driverHospId = uData?.hospitalId || uData?.assignedHospitalId || null;
+          if (!driverPhone) driverPhone = uData?.phone || null;
+          const uHospName = String(uData?.hospitalName || "").toLowerCase();
+          if (driverHospId && !uHospName.includes("independent")) {
+            isIndependent = false;
+          }
+        }
       }
     } catch {}
   }
@@ -57,7 +73,7 @@ export async function getAmbulanceRequests(
   return requests
     .filter((req) => {
       const st = String(req.status || "").toUpperCase();
-      // Exclude terminal/closed emergencies
+      // Strictly exclude terminal/closed/completed emergencies from incoming active requests
       if (
         st === "COMPLETED" ||
         st === "CANCELLED" ||
@@ -66,9 +82,15 @@ export async function getAmbulanceRequests(
       ) {
         return false;
       }
-      // 1. Only show emergencies strictly awaiting an ambulance dispatch
+
+      // If already assigned to another driver, exclude
+      if (req.assignedDriverId && driverUid && req.assignedDriverId !== driverUid) {
+        return false;
+      }
+
+      // Only show emergencies strictly awaiting an ambulance dispatch
       const isAwaitingDispatch =
-        (st === "HOSPITAL_ACCEPTED" || st === "AMBULANCE_SEARCH") &&
+        (st === "HOSPITAL_ACCEPTED" || st === "AMBULANCE_SEARCH" || st === "PENDING" || st === "SEARCHING") &&
         !req.assignedDriverId &&
         !req.assignedAmbulanceId;
 
@@ -76,17 +98,26 @@ export async function getAmbulanceRequests(
         return false;
       }
 
-      // If targeted to a specific driver, only that driver can see it
-      if (req.targetDriverId && driverUid && req.targetDriverId !== driverUid) {
-        return false;
-      }
-
-      // If hospital chose AFFILIATED dispatch, only show to targeted driver or hospital's affiliated fleet
+      // If hospital dispatched to AFFILIATED fleet:
       if (req.dispatchMode === "AFFILIATED") {
-        if (req.targetDriverId && driverUid) {
-          if (req.targetDriverId !== driverUid) return false;
-        } else if (driverHospId && req.assignedHospitalId) {
-          if (req.assignedHospitalId !== driverHospId) return false;
+        // 1. Direct target match
+        if (req.targetDriverId && driverUid && req.targetDriverId === driverUid) {
+          return true;
+        }
+        // 2. Affiliated hospital fleet match (all on-duty drivers belonging to this hospital)
+        if (driverHospId && req.assignedHospitalId && driverHospId === req.assignedHospitalId) {
+          return true;
+        }
+        // 3. If targetDriverId was set to a manual fleet entry, check if driver's phone matches
+        if (req.targetDriverId && driverPhone) {
+          // If this driver belongs to the hospital or has matching phone
+          if (driverHospId && req.assignedHospitalId && driverHospId === req.assignedHospitalId) {
+            return true;
+          }
+        }
+        // If driver belongs to a DIFFERENT hospital, exclude
+        if (driverHospId && req.assignedHospitalId && driverHospId !== req.assignedHospitalId) {
+          return false;
         }
       }
 

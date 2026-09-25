@@ -259,31 +259,94 @@ export async function cancelTeleconsultation(id: string): Promise<void> {
 
 // ---------- chat ----------
 
+const localMessageStore = new Map<string, ChatMessage[]>();
+const messageListeners = new Map<string, Set<(rows: ChatMessage[]) => void>>();
+
 export function subscribeMessages(
   consultationId: string,
   cb: (rows: ChatMessage[]) => void,
 ): Unsubscribe {
+  if (!messageListeners.has(consultationId)) {
+    messageListeners.set(consultationId, new Set());
+  }
+  messageListeners.get(consultationId)!.add(cb);
+
+  // Deliver any current cached messages immediately
+  const cached = localMessageStore.get(consultationId) || [];
+  if (cached.length > 0) {
+    cb(cached);
+  }
+
   let unsub: Unsubscribe = () => {};
   getDb().then((db) => {
     if (!db) return;
-    const col = collection(db, 'teleconsultations', consultationId, 'messages');
-    unsub = onSnapshot(query(col, orderBy('createdAt', 'asc')), (qs: any) =>
-      cb(qs.docs.map((d: any) => ({ id: d.id, ...(d.data() as Omit<ChatMessage, 'id'>) }))),
-    );
+    try {
+      const col = collection(db, 'teleconsultations', consultationId, 'messages');
+      unsub = onSnapshot(
+        query(col, orderBy('createdAt', 'asc')),
+        (qs: any) => {
+          const remoteMsgs: ChatMessage[] = qs.docs.map((d: any) => ({
+            id: d.id,
+            ...(d.data() as Omit<ChatMessage, 'id'>),
+          }));
+
+          // Merge remote with any pending local messages
+          const existing = localMessageStore.get(consultationId) || [];
+          const combinedMap = new Map<string, ChatMessage>();
+          for (const m of existing) combinedMap.set(m.id, m);
+          for (const m of remoteMsgs) combinedMap.set(m.id, m);
+
+          const merged = Array.from(combinedMap.values()).sort((a, b) => a.createdAt - b.createdAt);
+          localMessageStore.set(consultationId, merged);
+
+          const listeners = messageListeners.get(consultationId);
+          if (listeners) {
+            listeners.forEach((fn) => fn(merged));
+          }
+        },
+        (err) => {
+          console.warn('[teleconsultation] Firestore chat snapshot warn:', err);
+        }
+      );
+    } catch (e) {
+      console.warn('[teleconsultation] Firestore subscribeMessages error:', e);
+    }
   });
-  return () => unsub();
+
+  return () => {
+    unsub();
+    messageListeners.get(consultationId)?.delete(cb);
+  };
 }
 
 export async function sendMessage(
   consultationId: string,
   msg: { senderId: string; senderRole: SenderRole; message: string },
 ): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await addDoc(collection(db, 'teleconsultations', consultationId, 'messages'), {
+  const newMsg: ChatMessage = {
+    id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     ...msg,
     createdAt: Date.now(),
-  });
+  };
+
+  // 1. Optimistic append & notify listeners instantly
+  const existing = localMessageStore.get(consultationId) || [];
+  const updated = [...existing, newMsg];
+  localMessageStore.set(consultationId, updated);
+  messageListeners.get(consultationId)?.forEach((fn) => fn(updated));
+
+  // 2. Persist to Firestore
+  try {
+    const db = await getDb();
+    if (db) {
+      await addDoc(collection(db, 'teleconsultations', consultationId, 'messages'), {
+        ...msg,
+        createdAt: newMsg.createdAt,
+      });
+    }
+  } catch (err) {
+    console.warn('[teleconsultation] sendMessage Firestore persist warn:', err);
+  }
 }
 
 // ---------- doctor notes ----------

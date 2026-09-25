@@ -387,8 +387,7 @@ export default function HospitalRequestDetail() {
             <TouchableOpacity
               style={styles.dispatchOptionBtn}
               onPress={() => {
-                const firstDriver = drivers[0];
-                handleAccept('AFFILIATED', firstDriver?.driverId || firstDriver?.id);
+                handleAccept('AFFILIATED');
               }}
               activeOpacity={0.85}
             >

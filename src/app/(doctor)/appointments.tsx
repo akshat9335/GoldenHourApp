@@ -98,13 +98,18 @@ export default function DoctorAppointments() {
                 <Pill color={tabColor[a.status]}>{a.status.toUpperCase()}</Pill>
               </View>
               <Text style={styles.sub}>Token #{a.token} · {a.date}, {a.time}</Text>
-              {a.status !== 'cancelled' && (
+              {a.status === 'upcoming' && (
                 <View style={{ marginTop: 10 }}>
                   <Button
                     title="📹 Start Video Consultation"
                     variant="blue"
                     onPress={() => router.push(`/(doctor)/teleconsultation/tc_${a.token || a.id}` as any)}
                   />
+                </View>
+              )}
+              {a.status === 'completed' && (
+                <View style={{ marginTop: 8, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: colors.successBg, borderRadius: 6 }}>
+                  <Text style={{ color: colors.success, fontWeight: '600', fontSize: 13 }}>✓ Consultation Completed</Text>
                 </View>
               )}
             </Card>

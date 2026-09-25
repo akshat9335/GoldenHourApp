@@ -11,13 +11,15 @@ export default function LiveQueue() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
   const selectedDoctor = useAppStore((s) => s.selectedDoctor);
   const userToken = useAppStore((s) => s.userToken);
+  const setUserToken = useAppStore((s) => s.setUserToken);
   const servingToken = useAppStore((s) => s.servingToken);
   const advanceServingToken = useAppStore((s) => s.advanceServingToken);
   const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
 
   const myToken = userToken ?? (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
-  const patientsAhead = Math.max(myToken - servingToken - 1, 0);
-  const isMyTurn = servingToken >= myToken;
+  const isCompleted = servingToken > myToken;
+  const isMyTurn = servingToken === myToken;
+  const patientsAhead = Math.max(myToken - servingToken, 0);
 
   useEffect(() => {
     let mounted = true;
@@ -55,8 +57,13 @@ export default function LiveQueue() {
     }
   };
 
+  const handleFinish = () => {
+    setUserToken(null);
+    router.replace('/(patient)/consult-doctor' as any);
+  };
+
   const steps = [
-    `Token ${servingToken - 1} → Completed`,
+    `Token ${Math.max(servingToken - 1, 0)} → Completed`,
     `Token ${servingToken} → Serving`,
     ...Array.from({ length: Math.max(myToken - servingToken - 1, 0) }, (_, i) => `Token ${servingToken + i + 1} → Waiting`),
     `Token ${myToken} → Your Token`,
@@ -68,10 +75,12 @@ export default function LiveQueue() {
         <TopBar title="Live Queue" />
 
         <Card style={styles.tokenCard}>
-          {isMyTurn ? (
+          {isCompleted ? (
+            <Pill color="success">CONSULTATION COMPLETED</Pill>
+          ) : isMyTurn ? (
             <Pill color="success">YOUR TURN — PLEASE PROCEED</Pill>
           ) : (
-            <Pill color="blue">WAITING</Pill>
+            <Pill color="blue">WAITING IN QUEUE</Pill>
           )}
           <View style={styles.tokenRow}>
             <View style={{ alignItems: 'center', flex: 1 }}>
@@ -85,8 +94,14 @@ export default function LiveQueue() {
             </View>
           </View>
           <View style={styles.rowMeta}>
-            <Text style={styles.metaText}>{patientsAhead} patients ahead</Text>
-            <Text style={styles.metaText}>~{Math.max(patientsAhead * 8, 0)} min wait</Text>
+            {isCompleted ? (
+              <Text style={[styles.metaText, { color: colors.success }]}>Your consultation has finished</Text>
+            ) : (
+              <>
+                <Text style={styles.metaText}>{patientsAhead} patients ahead</Text>
+                <Text style={styles.metaText}>~{Math.max(patientsAhead * 8, 0)} min wait</Text>
+              </>
+            )}
           </View>
         </Card>
 
@@ -95,18 +110,27 @@ export default function LiveQueue() {
           <Stepper steps={steps} currentIndex={Math.max(steps.length - 2, 0)} />
         </Card>
 
-        <Button
-          title="📹 Join Teleconsultation Room"
-          style={{ marginTop: 14, backgroundColor: colors.blue }}
-          onPress={() => router.push(`/(patient)/teleconsultation/tc_${myToken}` as any)}
-        />
-
-        {isMyTurn ? (
+        {!isCompleted && (
           <Button
-            title="Mark Consultation Completed"
+            title="📹 Join Teleconsultation Room"
+            style={{ marginTop: 14, backgroundColor: colors.blue }}
+            onPress={() => router.push(`/(patient)/teleconsultation/tc_${myToken}` as any)}
+          />
+        )}
+
+        {isCompleted ? (
+          <Button
+            title="✓ Return to Consultations"
+            variant="primary"
+            style={{ marginTop: 12, backgroundColor: colors.success }}
+            onPress={handleFinish}
+          />
+        ) : isMyTurn ? (
+          <Button
+            title="Done / Return Home"
             variant="secondary"
             style={{ marginTop: 10 }}
-            onPress={() => router.replace('/(patient)/consult-doctor' as any)}
+            onPress={handleFinish}
           />
         ) : (
           <Button

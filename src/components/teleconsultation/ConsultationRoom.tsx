@@ -184,6 +184,7 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
                 remoteLabel={selfRole === 'doctor' ? 'Patient' : 'Doctor'}
                 localStream={localStream}
                 remoteStream={remoteStream}
+                isConnected={consult.status === 'active' || !!consult.roomId}
               />
             </View>
             <CallControls

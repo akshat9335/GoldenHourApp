@@ -359,6 +359,10 @@ export const api = {
     getHospitalInventory: (hospitalId: string) => request(`/medicines/hospital/${hospitalId}`),
     updateStock: (data: { hospitalId: string; medicineName: string; stockStatus: string; quantity?: number }) =>
       request('/medicines/update-stock', { method: 'POST', body: JSON.stringify(data) }),
+    addMedicine: (data: { hospitalId: string; medicineName: string; category?: string; dosageForm?: string; quantity?: number; stockStatus?: string }) =>
+      request('/medicines/add', { method: 'POST', body: JSON.stringify(data) }),
+    deleteMedicine: (id: string) =>
+      request(`/medicines/${id}`, { method: 'DELETE' }),
   },
 };
 

@@ -21,6 +21,7 @@ export default function AmbulanceDashboard() {
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTrip, setActiveTrip] = useState<any | null>(null);
+  const [dashboardTab, setDashboardTab] = useState<'active' | 'history'>('active');
 
   const vehiclePlate = userProfile?.ambulanceId || (userProfile as any)?.vehiclePlateNumber || 'Unit UP-70-AMB';
   const driverName = (userProfile as any)?.driverName || userProfile?.name || 'Crew Pilot';
@@ -379,153 +380,212 @@ export default function AmbulanceDashboard() {
         </View>
       </Card>
 
-      <View style={{ height: 14 }} />
-
-      {/* Active Trip Banner if ongoing */}
-      {activeTrip && (
-        <Card style={styles.activeTripCard}>
-          <View style={styles.rowTop}>
-            <Pill color="amber">MISSION IN PROGRESS</Pill>
-            <Text style={styles.activeTripStatus}>{String(activeTrip.status).replace(/_/g, ' ')}</Text>
-          </View>
-          <Text style={styles.activeTripEmergency}>
-            Emergency ID: {activeTrip.emergencyId?.slice(-6)?.toUpperCase() || 'ACTIVE'}
+      {/* Tab Switcher: Active Dispatches vs Mission History */}
+      <View style={{ flexDirection: 'row', backgroundColor: '#E2E8F0', borderRadius: 10, padding: 3, marginVertical: 12 }}>
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            paddingVertical: 9,
+            alignItems: 'center',
+            borderRadius: 8,
+            backgroundColor: dashboardTab === 'active' ? '#FFFFFF' : 'transparent',
+          }}
+          onPress={() => setDashboardTab('active')}
+          activeOpacity={0.8}
+        >
+          <Text style={{ fontSize: 13, fontWeight: '700', color: dashboardTab === 'active' ? colors.red : colors.inkSoft }}>
+            🚨 Active Dispatches {requests.length > 0 ? `(${requests.length})` : ''}
           </Text>
-          <View style={{ gap: 8, marginTop: 10 }}>
-            <TouchableOpacity
-              style={styles.liveUpdateBtn}
-              onPress={handleResumeTrip}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.liveUpdateBtnText}>📡 Live Updates & Route</Text>
-            </TouchableOpacity>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            paddingVertical: 9,
+            alignItems: 'center',
+            borderRadius: 8,
+            backgroundColor: dashboardTab === 'history' ? '#FFFFFF' : 'transparent',
+          }}
+          onPress={() => setDashboardTab('history')}
+          activeOpacity={0.8}
+        >
+          <Text style={{ fontSize: 13, fontWeight: '700', color: dashboardTab === 'history' ? colors.blue : colors.inkSoft }}>
+            📋 Mission History ({completedMissions.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TouchableOpacity
-                style={[styles.resumeBtn, { flex: 1.3, marginTop: 0 }]}
-                onPress={handleResumeTrip}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.resumeBtnText}>Resume Mission →</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.endMissionBtn}
-                onPress={handleEndMission}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.endMissionBtnText}>End Mission</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Card>
-      )}
-
-      {/* Incoming Requests Feed or Standby */}
-      {onDuty ? (
-        requests.length > 0 ? (
-          <>
-            <View style={styles.queueHeader}>
-              <Text style={styles.queueCount}>
-                {requests.length} Incoming Dispatch {requests.length === 1 ? 'Alert' : 'Alerts'}
-              </Text>
-              <TouchableOpacity onPress={handleClearAllRequests} style={styles.clearBtn} hitSlop={8}>
-                <Text style={styles.clearBtnText}>Clear All</Text>
-              </TouchableOpacity>
-            </View>
-            {requests.map((req, idx) => {
-              const sev = String(req.severity || 'HIGH').toUpperCase();
-              const pillColor = (sev === 'CRITICAL' || sev === 'HIGH' ? 'red' : 'amber') as 'red' | 'amber';
-              const locationStr = req.locationAddress
-                ? `${req.locationAddress} (${req.location?.latitude?.toFixed(4)}, ${req.location?.longitude?.toFixed(4)})`
-                : req.location
-                ? `${req.location.latitude?.toFixed(4)}°N, ${req.location.longitude?.toFixed(4)}°E`
-                : 'GPS Shared';
-
-              return (
-                <Card key={req.id || idx} style={styles.requestCard}>
-                  <View style={styles.rowTop}>
-                    <Pill color={pillColor}>DISPATCH · {sev}</Pill>
-                    <Text style={styles.dist}>
-                      {req.incidentType || 'TRAUMA ALERT'}
-                    </Text>
-                  </View>
-                  <Text style={styles.pickup}>Pickup: {locationStr}</Text>
-                  {req.assignedHospitalName ? (
-                    <Text style={styles.hospTag}>
-                      🏥 Dispatched by: {req.assignedHospitalName}
-                    </Text>
-                  ) : null}
-                  {req.description ? (
-                    <Text style={styles.descText} numberOfLines={2}>
-                      {req.description}
-                    </Text>
-                  ) : null}
-
-                  <View style={styles.requestActionRow}>
-                    <TouchableOpacity
-                      style={styles.directAcceptBtn}
-                      onPress={() => handleDirectAccept(req)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.directAcceptText}>✓ Confirm & Accept Trip</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.reviewBtn}
-                      onPress={() => handleRequestPress(req)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.reviewBtnText}>Review →</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.dismissBtn}
-                      onPress={() => handleDismissRequest(req)}
-                      activeOpacity={0.8}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.dismissBtnText}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                </Card>
-              );
-            })}
-          </>
-        ) : (
-          <Card style={styles.standbyCard}>
-            <View style={styles.standbyDotRow}>
-              <View style={styles.pulseDot} />
-              <Text style={styles.standbyTitle}>Emergency Dispatch · Standby</Text>
-            </View>
-            <Text style={styles.standbySub}>
-              No pending emergency requests in your quadrant. Your unit is broadcast as available to 108 network.
-            </Text>
-          </Card>
-        )
-      ) : (
-        <Card style={styles.offlineCard}>
-          <Text style={styles.offlineTitle}>Crew is Currently Offline</Text>
-          <Text style={styles.offlineSub}>Toggle ON DUTY above to receive emergency dispatch alerts.</Text>
-        </Card>
-      )}
-
-      {completedMissions.length > 0 && (
-        <View style={{ marginBottom: 16 }}>
-          <LabelEyebrow>COMPLETED RESCUE MISSIONS ({completedMissions.length})</LabelEyebrow>
-          {completedMissions.slice(0, 5).map((trip: any, idx: number) => (
-            <Card key={trip.id || trip._id || idx} style={{ padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#86EFAC', backgroundColor: '#F0FDF4' }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>
-                  Mission #{String(trip.id || trip._id || idx).slice(-6).toUpperCase()} · {trip.incidentType || 'Emergency Rescue'}
-                </Text>
-                <Pill color="success">COMPLETED</Pill>
+      {dashboardTab === 'active' ? (
+        <>
+          {/* Active Trip Banner if ongoing */}
+          {activeTrip && (
+            <Card style={styles.activeTripCard}>
+              <View style={styles.rowTop}>
+                <Pill color="amber">MISSION IN PROGRESS</Pill>
+                <Text style={styles.activeTripStatus}>{String(activeTrip.status).replace(/_/g, ' ')}</Text>
               </View>
-              <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 4 }}>
-                Hospital: {trip.hospitalName || 'Emergency ER'} · Patient Handed Over Safely
+              <Text style={styles.activeTripEmergency}>
+                Emergency ID: {activeTrip.emergencyId?.slice(-6)?.toUpperCase() || 'ACTIVE'}
+              </Text>
+              <View style={{ gap: 8, marginTop: 10 }}>
+                <TouchableOpacity
+                  style={styles.liveUpdateBtn}
+                  onPress={handleResumeTrip}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.liveUpdateBtnText}>📡 Live Updates & Route</Text>
+                </TouchableOpacity>
+
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.resumeBtn, { flex: 1.3, marginTop: 0 }]}
+                    onPress={handleResumeTrip}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.resumeBtnText}>Resume Mission →</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.endMissionBtn}
+                    onPress={handleEndMission}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.endMissionBtnText}>End Mission</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Card>
+          )}
+
+          {/* Incoming Requests Feed or Standby */}
+          {onDuty ? (
+            requests.length > 0 ? (
+              <>
+                <View style={styles.queueHeader}>
+                  <Text style={styles.queueCount}>
+                    {requests.length} Incoming Dispatch {requests.length === 1 ? 'Alert' : 'Alerts'}
+                  </Text>
+                  <TouchableOpacity onPress={handleClearAllRequests} style={styles.clearBtn} hitSlop={8}>
+                    <Text style={styles.clearBtnText}>Clear All</Text>
+                  </TouchableOpacity>
+                </View>
+                {requests.map((req, idx) => {
+                  const sev = String(req.severity || 'HIGH').toUpperCase();
+                  const pillColor = (sev === 'CRITICAL' || sev === 'HIGH' ? 'red' : 'amber') as 'red' | 'amber';
+                  const locationStr = req.locationAddress
+                    ? `${req.locationAddress} (${req.location?.latitude?.toFixed(4)}, ${req.location?.longitude?.toFixed(4)})`
+                    : req.location
+                    ? `${req.location.latitude?.toFixed(4)}°N, ${req.location.longitude?.toFixed(4)}°E`
+                    : 'GPS Shared';
+
+                  return (
+                    <Card key={req.id || idx} style={styles.requestCard}>
+                      <View style={styles.rowTop}>
+                        <Pill color={pillColor}>DISPATCH · {sev}</Pill>
+                        <Text style={styles.dist}>
+                          {req.incidentType || 'TRAUMA ALERT'}
+                        </Text>
+                      </View>
+                      <Text style={styles.pickup}>Pickup: {locationStr}</Text>
+                      {req.assignedHospitalName ? (
+                        <Text style={styles.hospTag}>
+                          🏥 Dispatched by: {req.assignedHospitalName}
+                        </Text>
+                      ) : null}
+                      {req.description ? (
+                        <Text style={styles.descText} numberOfLines={2}>
+                          {req.description}
+                        </Text>
+                      ) : null}
+
+                      <View style={styles.requestActionRow}>
+                        <TouchableOpacity
+                          style={styles.directAcceptBtn}
+                          onPress={() => handleDirectAccept(req)}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.directAcceptText}>✓ Confirm & Accept Trip</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.reviewBtn}
+                          onPress={() => handleRequestPress(req)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.reviewBtnText}>Review →</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.dismissBtn}
+                          onPress={() => handleDismissRequest(req)}
+                          activeOpacity={0.8}
+                          hitSlop={8}
+                        >
+                          <Text style={styles.dismissBtnText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </Card>
+                  );
+                })}
+              </>
+            ) : (
+              <Card style={styles.standbyCard}>
+                <View style={styles.standbyDotRow}>
+                  <View style={styles.pulseDot} />
+                  <Text style={styles.standbyTitle}>Emergency Dispatch · Standby</Text>
+                </View>
+                <Text style={styles.standbySub}>
+                  No pending emergency requests in your quadrant. Your unit is broadcast as available to 108 network.
+                </Text>
+              </Card>
+            )
+          ) : (
+            <Card style={styles.offlineCard}>
+              <Text style={styles.offlineTitle}>Crew is Currently Offline</Text>
+              <Text style={styles.offlineSub}>Toggle ON DUTY above to receive emergency dispatch alerts.</Text>
+            </Card>
+          )}
+        </>
+      ) : (
+        /* History Tab */
+        <View style={{ marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <LabelEyebrow>COMPLETED RESCUE MISSIONS ({completedMissions.length})</LabelEyebrow>
+          </View>
+          {completedMissions.length === 0 ? (
+            <Card style={{ padding: 24, alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+              <Text style={{ fontSize: 28, marginBottom: 8 }}>📋</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.ink }}>No Mission History Yet</Text>
+              <Text style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 4 }}>
+                Completed emergency trips and hospital handovers for this crew will appear here.
               </Text>
             </Card>
-          ))}
+          ) : (
+            completedMissions.map((trip: any, idx: number) => {
+              const dateStr = trip.completedAt || trip.updatedAt || trip.createdAt;
+              const formattedDate = dateStr ? new Date(dateStr).toLocaleString() : 'Recent shift';
+              return (
+                <Card key={trip.id || trip._id || idx} style={{ padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#86EFAC', backgroundColor: '#F0FDF4' }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 13.5, fontWeight: '800', color: colors.ink }}>
+                      Mission #{String(trip.id || trip._id || idx).slice(-6).toUpperCase()} · {trip.incidentType || 'Emergency Rescue'}
+                    </Text>
+                    <Pill color="success">COMPLETED</Pill>
+                  </View>
+                  <Text style={{ fontSize: 12, color: colors.inkSoft, marginTop: 6, fontWeight: '600' }}>
+                    🏥 Handed over at: {trip.hospitalName || 'Emergency ER Center'}
+                  </Text>
+                  {trip.pickupAddress ? (
+                    <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 2 }}>
+                      📍 Origin: {trip.pickupAddress}
+                    </Text>
+                  ) : null}
+                  <Text style={{ fontSize: 10.5, color: '#15803D', marginTop: 6, fontWeight: '600' }}>
+                    ✓ Safely Completed · {formattedDate}
+                  </Text>
+                </Card>
+              );
+            })
+          )}
         </View>
       )}
 

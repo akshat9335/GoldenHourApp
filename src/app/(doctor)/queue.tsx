@@ -250,6 +250,22 @@ export default function DoctorQueue() {
         }
       }
 
+      const apptId = currentAppt?.appointmentId || currentAppt?.id;
+      if (apptId) {
+        try {
+          await api.appointments.complete(apptId);
+        } catch (completeErr) {
+          console.warn('Appointment complete error:', completeErr);
+        }
+        setAppointments((prev) =>
+          prev.map((a) =>
+            (a.appointmentId || a.id) === apptId
+              ? { ...a, status: 'COMPLETED' }
+              : a
+          )
+        );
+      }
+
       setModalVisible(false);
       Alert.alert(
         'Consultation Completed',

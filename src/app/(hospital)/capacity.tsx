@@ -1,5 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+} from 'react-native';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, LabelEyebrow, HospitalNav, Button, Icon } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
@@ -29,9 +40,20 @@ export default function HospitalCapacity() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Medicine Inventory (Phase 6)
-  const hospitalId = userProfile?.uid || 'hosp-srn-prayagraj';
+  // Medicine Inventory
+  const rawHospId = userProfile?.hospitalId || userProfile?.assignedHospitalId || userProfile?.uid;
+  const hospitalId = rawHospId
+    ? (rawHospId.startsWith('hosp-') ? rawHospId : `hosp-${rawHospId}`)
+    : 'hosp-srn-prayagraj';
   const [medicines, setMedicines] = useState<any[]>([]);
+  const [loadingMedicines, setLoadingMedicines] = useState(true);
+  const [addMedModalVisible, setAddMedModalVisible] = useState(false);
+  const [newMedName, setNewMedName] = useState('');
+  const [newMedCategory, setNewMedCategory] = useState('Emergency / Resuscitation');
+  const [newMedDosage, setNewMedDosage] = useState('1 Ampoule');
+  const [newMedQty, setNewMedQty] = useState('50');
+  const [newMedStatus, setNewMedStatus] = useState('AVAILABLE');
+  const [submittingMed, setSubmittingMed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -71,15 +93,19 @@ export default function HospitalCapacity() {
       })
       .catch(() => {});
 
-    // 3. Fetch emergency medicine stock (Phase 6)
+    // 3. Fetch emergency medicine stock
+    setLoadingMedicines(true);
     api.medicines
       .getHospitalInventory(hospitalId)
       .then((res: any) => {
         if (!mounted) return;
         const list = Array.isArray(res) ? res : (res?.data || []);
-        if (list.length > 0) setMedicines(list);
+        setMedicines(list);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setLoadingMedicines(false);
+      });
 
     return () => {
       mounted = false;
@@ -140,6 +166,54 @@ export default function HospitalCapacity() {
     } catch (_err) {
       // Revert if error
     }
+  };
+
+  const handleAddMedicine = async () => {
+    if (!newMedName.trim()) {
+      Alert.alert('Medicine Name Required', 'Please enter the medicine name.');
+      return;
+    }
+    setSubmittingMed(true);
+    try {
+      const res: any = await api.medicines.addMedicine({
+        hospitalId,
+        medicineName: newMedName.trim(),
+        category: newMedCategory.trim(),
+        dosageForm: newMedDosage.trim(),
+        quantity: parseInt(newMedQty) || 50,
+        stockStatus: newMedStatus,
+      });
+      const created = res?.data || res;
+      setMedicines((prev) => [created, ...prev.filter((m) => m.medicineName !== newMedName.trim())]);
+      setAddMedModalVisible(false);
+      setNewMedName('');
+      Alert.alert('Medicine Added', `${newMedName.trim()} registered to hospital inventory.`);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to add medicine.');
+    } finally {
+      setSubmittingMed(false);
+    }
+  };
+
+  const handleDeleteMedicine = (med: any) => {
+    Alert.alert(
+      'Remove Medicine?',
+      `Are you sure you want to remove ${med.medicineName} from hospital stock?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const medId = med.id || `${hospitalId}_${med.medicineName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            setMedicines((prev) => prev.filter((m) => (m.id || m.medicineName) !== (med.id || med.medicineName)));
+            try {
+              await api.medicines.deleteMedicine(medId);
+            } catch {}
+          },
+        },
+      ]
+    );
   };
 
   const handleSave = async () => {
@@ -313,15 +387,39 @@ export default function HospitalCapacity() {
           </View>
         </Card>
 
-        {/* Emergency Medicines Inventory (Phase 6) */}
-        <LabelEyebrow>EMERGENCY MEDICINE INVENTORY (PHASE 6)</LabelEyebrow>
+        {/* Emergency Medicines Inventory */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, marginBottom: 6 }}>
+          <LabelEyebrow>EMERGENCY MEDICINE INVENTORY</LabelEyebrow>
+          <TouchableOpacity
+            onPress={() => setAddMedModalVisible(true)}
+            style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: colors.blue }}
+            hitSlop={8}
+          >
+            <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#fff' }}>+ Add Medicine</Text>
+          </TouchableOpacity>
+        </View>
+
         <Card style={{ padding: 4, marginBottom: 14 }}>
-          {medicines.length === 0 ? (
-            <View style={{ padding: 16, alignItems: 'center' }}>
-              <Text style={{ fontSize: 12, color: colors.inkFaint }}>Loading hospital medicine stock...</Text>
+          {loadingMedicines ? (
+            <View style={{ padding: 22, alignItems: 'center' }}>
+              <ActivityIndicator color={colors.blue} />
+              <Text style={{ fontSize: 12, color: colors.inkFaint, marginTop: 8 }}>Fetching medicine inventory...</Text>
+            </View>
+          ) : medicines.length === 0 ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.ink }}>No registered medicines yet</Text>
+              <Text style={{ fontSize: 11.5, color: colors.inkFaint, textAlign: 'center', marginVertical: 6 }}>
+                Register critical emergency pharmaceuticals and resuscitation stocks for this hospital center.
+              </Text>
+              <TouchableOpacity
+                onPress={() => setAddMedModalVisible(true)}
+                style={{ backgroundColor: colors.blue, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, marginTop: 6 }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>+ Add Emergency Medicine</Text>
+              </TouchableOpacity>
             </View>
           ) : (
-            medicines.slice(0, 8).map((med, idx) => {
+            medicines.map((med, idx) => {
               const pillColor =
                 med.stockStatus === 'AVAILABLE'
                   ? 'success'
@@ -330,21 +428,30 @@ export default function HospitalCapacity() {
                   : 'red';
               return (
                 <React.Fragment key={med.id || idx}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 }}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>{med.medicineName}</Text>
-                      <Text style={{ fontSize: 10.5, color: colors.inkFaint, marginTop: 2 }}>
-                        {med.category} · Qty: {med.quantity}
+                      <Text style={{ fontSize: 13.5, fontWeight: '700', color: colors.ink }}>{med.medicineName}</Text>
+                      <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 2 }}>
+                        {med.category} · Qty: {med.quantity} {med.dosageForm ? `(${med.dosageForm})` : ''}
                       </Text>
                     </View>
-                    <Pressable
-                      onPress={() => handleToggleMedicine(med.medicineName, med.stockStatus)}
-                      hitSlop={8}
-                    >
-                      <Pill color={pillColor}>{med.stockStatus.replace('_', ' ')} ▾</Pill>
-                    </Pressable>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Pressable
+                        onPress={() => handleToggleMedicine(med.medicineName, med.stockStatus)}
+                        hitSlop={8}
+                      >
+                        <Pill color={pillColor}>{String(med.stockStatus || 'AVAILABLE').replace('_', ' ')} ▾</Pill>
+                      </Pressable>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteMedicine(med)}
+                        hitSlop={8}
+                        style={{ padding: 6 }}
+                      >
+                        <Text style={{ fontSize: 14, color: colors.inkFaint, fontWeight: '700' }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  {idx < Math.min(medicines.length, 8) - 1 && <View style={{ height: 1, backgroundColor: colors.line }} />}
+                  {idx < medicines.length - 1 && <View style={{ height: 1, backgroundColor: colors.line }} />}
                 </React.Fragment>
               );
             })
@@ -359,6 +466,92 @@ export default function HospitalCapacity() {
             disabled={saving}
           />
         </View>
+
+        {/* Add Medicine Modal */}
+        <Modal
+          visible={addMedModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setAddMedModalVisible(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20, maxHeight: '85%' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <Text style={{ fontSize: 17, fontWeight: '800', color: colors.ink }}>Register Medicine Stock</Text>
+                <TouchableOpacity onPress={() => setAddMedModalVisible(false)}>
+                  <Text style={{ fontSize: 18, color: colors.inkFaint }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.inkSoft, marginBottom: 4 }}>MEDICINE NAME *</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 14 }}
+                placeholder="e.g. Paracetamol 650mg, Atropine 0.6mg"
+                value={newMedName}
+                onChangeText={setNewMedName}
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.inkSoft, marginBottom: 4 }}>CATEGORY</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 14 }}
+                placeholder="e.g. Emergency / Resuscitation, Cardiac, Antibiotic"
+                value={newMedCategory}
+                onChangeText={setNewMedCategory}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.inkSoft, marginBottom: 4 }}>DOSAGE FORM</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: 10, fontSize: 14 }}
+                    placeholder="e.g. Tablet, Ampoule, IV Bag"
+                    value={newMedDosage}
+                    onChangeText={setNewMedDosage}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.inkSoft, marginBottom: 4 }}>QUANTITY</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 8, padding: 10, fontSize: 14 }}
+                    placeholder="50"
+                    keyboardType="numeric"
+                    value={newMedQty}
+                    onChangeText={setNewMedQty}
+                  />
+                </View>
+              </View>
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.inkSoft, marginBottom: 6 }}>STOCK STATUS</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+                {(['AVAILABLE', 'LOW_STOCK', 'OUT_OF_STOCK'] as const).map((st) => (
+                  <TouchableOpacity
+                    key={st}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 8,
+                      alignItems: 'center',
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: newMedStatus === st ? colors.blue : colors.line,
+                      backgroundColor: newMedStatus === st ? '#EFF6FF' : '#F8FAFC',
+                    }}
+                    onPress={() => setNewMedStatus(st)}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: newMedStatus === st ? colors.blue : colors.inkSoft }}>
+                      {st.replace(/_/g, ' ')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Button
+                title={submittingMed ? 'Adding...' : 'Save to Hospital Inventory'}
+                onPress={handleAddMedicine}
+                disabled={submittingMed}
+              />
+            </View>
+          </View>
+        </Modal>
       </Screen>
       <HospitalNav active="/(hospital)/capacity" />
     </View>
