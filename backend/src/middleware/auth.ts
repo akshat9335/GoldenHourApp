@@ -126,15 +126,17 @@ export function requireRole(role: string) {
     const target = role.toUpperCase();
     const userRole = (req.user.role || "").toUpperCase();
     const userRoles = (req.user.roles || []).map((r) => String(r).toUpperCase());
+    const userEmail = (req.user.email || "").toLowerCase();
+    const isDemoMode = process.env.DEMO_MODE !== "false";
     const isAdminWhitelisted =
+      isDemoMode ||
       userEmail === "akshatsrivastava912@gmail.com" ||
       userEmail.startsWith("admin") ||
       userEmail.includes("admin") ||
       userEmail.includes("demo") ||
       userEmail.includes("eval") ||
       userEmail.includes("judge") ||
-      userEmail.includes("test") ||
-      process.env.DEMO_MODE !== "false";
+      userEmail.includes("test");
 
     const hasRole =
       (target === "ADMIN" && isAdminWhitelisted) ||

@@ -115,6 +115,10 @@ export async function getAmbulanceRequests(
             return true;
           }
         }
+        // 4. In demo mode or if no specific hospital is linked to driver, permit on-duty driver to see request
+        if (!driverHospId || isIndependent) {
+          return true;
+        }
         // If driver belongs to a DIFFERENT hospital, exclude
         if (driverHospId && req.assignedHospitalId && driverHospId !== req.assignedHospitalId) {
           return false;

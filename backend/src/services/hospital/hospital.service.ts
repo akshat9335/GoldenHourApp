@@ -1275,6 +1275,29 @@ export async function markHospitalPatientArrived(
   uid: string,
   requestId: string,
 ) {
+  // Guard against premature arrival if ambulance is still en route to patient
+  try {
+    const { requestData } = await getOwnedEmergencyRequest(uid, requestId, false);
+    const emergencyId = requestData.emergencyId || requestData.accidentId || requestId;
+    if (firestore && emergencyId) {
+      const tripsSnap = await firestore.collection("trips").where("emergencyId", "==", emergencyId).get();
+      for (const tripDoc of tripsSnap.docs) {
+        const tripData = tripDoc.data() || {};
+        const tStatus = String(tripData.status || "").toUpperCase();
+        // If ambulance is still on the way to the patient, guard against premature arrival
+        if (tStatus === "ASSIGNED" || tStatus === "EN_ROUTE_TO_PATIENT" || tStatus === "AT_PATIENT" || tStatus === "EN_ROUTE") {
+          throw new AppError(
+            400,
+            "AMBULANCE_EN_ROUTE",
+            "Ambulance is currently en route to the patient. Patient arrival will be confirmed once the ambulance brings the patient to the hospital."
+          );
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+  }
+
   return transitionHospitalRequest(uid, requestId, "PATIENT ARRIVED");
 }
 
