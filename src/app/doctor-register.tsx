@@ -188,7 +188,13 @@ export default function DoctorRegister() {
           placeholder="+91 98765 43210"
           keyboardType="phone-pad"
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(v) => {
+            let clean = v;
+            if (clean && !clean.startsWith('+91') && !clean.startsWith('+')) {
+              clean = '+91 ' + clean;
+            }
+            setPhone(clean);
+          }}
         />
       </InputGroup>
       <InputGroup label="Specialization">
@@ -207,9 +213,10 @@ export default function DoctorRegister() {
       </InputGroup>
       <InputGroup label="Medical Registration Number">
         <Input
-          placeholder="State Medical Council Reg. No."
+          placeholder="e.g. MCI-2024-54321"
           value={medicalRegNo}
           onChangeText={setMedicalRegNo}
+          autoCapitalize="characters"
         />
       </InputGroup>
       <InputGroup label="Clinic Name">

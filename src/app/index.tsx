@@ -5,6 +5,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { Icon } from '@/components/ui';
 import { authService } from '@/services/auth';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export default function Splash() {
   const [checking, setChecking] = useState(true);
 
@@ -26,9 +28,19 @@ export default function Splash() {
     async function checkSession() {
       try {
         await authService.restoreSession();
+        // Silent early backend warmup ping to prevent cold start
+        fetch('https://goldenhourapp.onrender.com/api/health').catch(() => {});
+        const hasSeenOnboarding = await AsyncStorage.getItem('@has_seen_onboarding');
+        if (isMounted) {
+          setChecking(false);
+          if (hasSeenOnboarding === 'true') {
+            router.replace('/role-selection');
+          } else {
+            router.replace('/onboarding');
+          }
+        }
       } catch (err) {
         console.warn('[Splash] Error restoring session:', err);
-      } finally {
         if (isMounted) {
           setChecking(false);
           router.replace('/role-selection');
@@ -39,7 +51,7 @@ export default function Splash() {
     // Give a short splash display before auto-transitioning
     const timer = setTimeout(() => {
       checkSession();
-    }, 1000);
+    }, 1200);
 
     return () => {
       isMounted = false;

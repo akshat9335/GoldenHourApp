@@ -4,6 +4,8 @@ import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Button, Icon, IconName } from '@/components/ui';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const SLIDES: Array<{ title: string; desc: string; icon: IconName }> = [
   { title: 'One button. Immediate help.', desc: 'Hold the SOS button and Golden Hour alerts an AI assistant, ambulance, and hospital — instantly.', icon: 'ambulance' },
   { title: 'AI that understands emergencies', desc: "Describe what's happening. Our AI assesses severity and recommends the right response before help arrives.", icon: 'ai' },
@@ -14,9 +16,19 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
   const s = SLIDES[step];
 
+  const finish = async () => {
+    try {
+      await AsyncStorage.setItem('@has_seen_onboarding', 'true');
+    } catch {}
+    router.replace('/role-selection');
+  };
+
   const next = () => {
-    if (step === SLIDES.length - 1) router.replace('/role-selection');
-    else setStep(step + 1);
+    if (step === SLIDES.length - 1) {
+      finish();
+    } else {
+      setStep(step + 1);
+    }
   };
 
   return (
@@ -36,7 +48,7 @@ export default function Onboarding() {
           ))}
         </View>
         <Button title={step === SLIDES.length - 1 ? 'Get Started' : 'Next'} onPress={next} />
-        {step < SLIDES.length - 1 && <Button title="Skip" variant="ghost" onPress={() => router.replace('/role-selection')} />}
+        {step < SLIDES.length - 1 && <Button title="Skip" variant="ghost" onPress={finish} />}
       </View>
     </View>
   );

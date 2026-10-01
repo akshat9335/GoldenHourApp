@@ -47,11 +47,11 @@ export default function HospitalLogin() {
       }
 
       // Hydrate official hospital facility name
-      const officialName = session.profile?.hospitalName || session.profile?.name || 'Emergency Trauma Center';
+      const officialName = session.profile?.hospitalName || 'Emergency Trauma Center';
       useAppStore.getState().setUserProfile({
         ...session.profile,
         hospitalName: officialName,
-        name: officialName,
+        name: session.profile?.name || officialName,
       });
 
       useAppStore.getState().setRole('HOSPITAL');
@@ -67,6 +67,30 @@ export default function HospitalLogin() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDemoHospital = () => {
+    useAppStore.getState().setRole('HOSPITAL');
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile({
+      uid: 'hosp-demo-apollo',
+      name: 'Dr. Apollo Desk Admin',
+      hospitalName: 'Apollo Multi-Specialty Hospital',
+      email: 'er.command@apollohospitals.com',
+      phone: '+91 532 246 0108',
+      role: 'HOSPITAL',
+      roles: ['HOSPITAL'],
+      verificationStatus: 'APPROVED',
+      isPhoneVerified: true,
+      hasCompletedProfile: true,
+      totalBeds: 50,
+      availableBeds: 18,
+      icuBeds: 12,
+      availableIcuBeds: 4,
+    } as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
+    router.replace('/(hospital)/dashboard');
   };
 
   return (
@@ -99,6 +123,13 @@ export default function HospitalLogin() {
         title={loading ? "Verifying Hospital Credentials…" : "Sign In with Google"}
         onPress={handleGoogleSignIn}
         disabled={loading}
+      />
+
+      <Button
+        title="⚡ 1-Click Demo Access (Apollo ER Desk)"
+        variant="secondary"
+        style={{ marginTop: 12, borderColor: '#16A34A', borderWidth: 1 }}
+        onPress={handleDemoHospital}
       />
 
       <Button

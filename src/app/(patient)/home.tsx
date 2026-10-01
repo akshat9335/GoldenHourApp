@@ -76,7 +76,12 @@ export default function PatientHome() {
     }
   }, [emergencyId, resetEmergencySession]);
 
-  const displayName = userProfile?.name || 'Golden Hour User';
+  const displayName =
+    userProfile?.displayName ||
+    (userProfile?.hospitalName && userProfile?.name === userProfile?.hospitalName
+      ? 'Golden Hour User'
+      : userProfile?.name) ||
+    'Golden Hour User';
   const firstName = displayName.split(' ')[0] || 'User';
   const initials = displayName
     .split(' ')

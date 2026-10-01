@@ -81,7 +81,7 @@ export default function HospitalRegister() {
     await authService.register({
       role: 'HOSPITAL',
       hospitalName: name.trim(),
-      name: name.trim(),
+      name: userProfile?.name || googleAccount?.name || name.trim(),
       email: targetEmail,
       phone: phone.trim() || undefined,
       hospitalRegNumber: regNo.trim(),
@@ -250,6 +250,7 @@ export default function HospitalRegister() {
             placeholder="e.g. HOSP-REG-2026-092"
             value={regNo}
             onChangeText={setRegNo}
+            autoCapitalize="characters"
           />
         </InputGroup>
 
@@ -262,7 +263,13 @@ export default function HospitalRegister() {
             placeholder="e.g. +91 11 2345 6789"
             keyboardType="phone-pad"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(v) => {
+              let clean = v;
+              if (clean && !clean.startsWith('+91') && !clean.startsWith('+')) {
+                clean = '+91 ' + clean;
+              }
+              setPhone(clean);
+            }}
           />
         </InputGroup>
 

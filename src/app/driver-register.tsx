@@ -192,7 +192,13 @@ export default function DriverRegister() {
           placeholder="e.g. +91 98765 43210"
           keyboardType="phone-pad"
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(v) => {
+            let clean = v;
+            if (clean && !clean.startsWith('+91') && !clean.startsWith('+')) {
+              clean = '+91 ' + clean;
+            }
+            setPhone(clean);
+          }}
         />
       </InputGroup>
       <InputGroup
@@ -204,6 +210,7 @@ export default function DriverRegister() {
           placeholder="e.g. DL-0420110023456"
           value={driverId}
           onChangeText={setDriverId}
+          autoCapitalize="characters"
         />
       </InputGroup>
       <InputGroup

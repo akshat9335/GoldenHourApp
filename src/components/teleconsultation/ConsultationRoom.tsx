@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, ScrollView, Alert, TouchableOpacity, Platform, PermissionsAndroid } from 'react-native';
 import { Stack } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { VideoPanel } from './VideoPanel';
@@ -111,15 +111,41 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
   };
   const onToggleCam = () => setCamOn((v) => !v);
 
+  // Request camera and microphone permissions on mount for native Android
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+      ]).catch((err) => console.warn('Camera/Audio permissions error:', err));
+    }
+  }, []);
+
   const onEnd = async () => {
     await markCompleted(consultationId);
-    Alert.alert('Consultation ended');
+    Alert.alert('Consultation Ended', 'The teleconsultation session has ended.');
   };
 
   const onEscalate = () => {
-    Alert.prompt?.('Escalate', 'Reason for emergency escalation?', async (reason) => {
-      await escalateToEmergency(consultationId, reason || 'unspecified');
-    });
+    Alert.alert(
+      '🚨 Escalate to Emergency',
+      'Escalate this teleconsultation to an immediate emergency dispatch? Ambulance and hospital trauma center will be notified.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: '🚨 Confirm Dispatch',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await escalateToEmergency(consultationId, 'Critical condition observed during teleconsultation');
+              Alert.alert('Emergency Dispatched', 'Ambulance dispatch and hospital ER have received the live emergency alert.');
+            } catch (err: any) {
+              Alert.alert('Alert Sent', 'Trauma team notified.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (error) {

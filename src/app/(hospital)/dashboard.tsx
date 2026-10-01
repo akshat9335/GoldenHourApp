@@ -271,10 +271,10 @@ export default function HospitalDashboard() {
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <TouchableOpacity
               style={styles.switchBtn}
-              onPress={handleAccountOptions}
+              onPress={() => router.replace('/role-selection')}
               hitSlop={8}
             >
-              <Text style={styles.switchBtnText}>Switch</Text>
+              <Text style={styles.switchBtnText}>‹ Switch Role</Text>
             </TouchableOpacity>
             <Pressable style={styles.bellBtn} onPress={() => router.push('/notifications')}>
               <Icon name="bell" />

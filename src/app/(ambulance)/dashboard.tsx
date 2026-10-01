@@ -330,11 +330,11 @@ export default function AmbulanceDashboard() {
           <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>Ambulance Console</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={handleAccountOptions}
+          onPress={() => router.replace('/role-selection')}
           style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' }}
           hitSlop={8}
         >
-          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft }}>Switch / Exit</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft }}>‹ Switch Role</Text>
         </TouchableOpacity>
       </View>
 

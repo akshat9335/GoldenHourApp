@@ -488,4 +488,15 @@ export async function escalateToEmergency(
     createdAt: serverTimestamp(),
   });
   await batch.commit();
+
+  // Trigger canonical emergency SOS so Hospital and Ambulance dashboards immediately pick it up live
+  try {
+    const { triggerCanonicalEmergencySOS } = await import('@/services/emergency');
+    await triggerCanonicalEmergencySOS({
+      incidentType: 'CRITICAL_TELECONSULTATION',
+      description: `Teleconsultation Escalation: ${reason}`,
+    });
+  } catch (sosErr) {
+    console.warn('triggerCanonicalEmergencySOS error during escalation:', sosErr);
+  }
 }

@@ -61,6 +61,30 @@ export default function DriverLogin() {
     }
   };
 
+  const handleDemoDriver = () => {
+    useAppStore.getState().setRole('AMBULANCE_DRIVER');
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile({
+      uid: 'driver-demo-ramesh',
+      name: 'Pilot Ramesh Kumar',
+      driverName: 'Pilot Ramesh Kumar',
+      email: 'ramesh.als108@goldenhour.org',
+      phone: '+91 98765 77889',
+      role: 'AMBULANCE_DRIVER',
+      roles: ['AMBULANCE_DRIVER'],
+      ambulanceId: 'Unit UP-70-AMB-108',
+      vehiclePlateNumber: 'UP-70-AMB-108',
+      ambulanceType: 'Advanced Life Support (ALS)',
+      hospitalName: 'Apollo ER Emergency Response Fleet',
+      verificationStatus: 'APPROVED',
+      isPhoneVerified: true,
+      hasCompletedProfile: true,
+    } as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
+    router.replace('/(ambulance)/dashboard');
+  };
+
   return (
     <Screen center>
       <Pressable
@@ -91,6 +115,13 @@ export default function DriverLogin() {
         title={loading ? "Verifying Driver Credentials…" : "Sign In with Google"}
         onPress={handleGoogleSignIn}
         disabled={loading}
+      />
+
+      <Button
+        title="⚡ 1-Click Demo Access (Pilot Ramesh - ALS)"
+        variant="secondary"
+        style={{ marginTop: 12, borderColor: '#16A34A', borderWidth: 1 }}
+        onPress={handleDemoDriver}
       />
 
       <Button

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Image, StyleSheet, Platform, PermissionsAndroid } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, radii } from '@/constants/theme';
 import { Card } from './Atoms';
@@ -71,9 +71,25 @@ export function VoiceInput({
   const [editing, setEditing] = useState(false);
   const recognizerRef = React.useRef<any>(null);
 
-  const toggleRecord = () => {
+  const toggleRecord = async () => {
     if (state === 'idle') {
       setState('recording');
+
+      if (Platform.OS === 'android') {
+        try {
+          await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            {
+              title: 'Microphone Permission',
+              message: 'Golden Hour needs access to your microphone to record your voice note.',
+              buttonPositive: 'Grant Permission',
+              buttonNegative: 'Cancel',
+            }
+          );
+        } catch (e) {
+          console.warn('Microphone permission request error:', e);
+        }
+      }
 
       if (typeof window !== 'undefined') {
         const SpeechRecognition =

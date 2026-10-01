@@ -10,6 +10,8 @@ import {
   Animated,
   Easing,
   Alert,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { colors } from '@/constants/theme';
@@ -81,9 +83,25 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
     };
   }, [visible]);
 
-  const startListening = () => {
+  const startListening = async () => {
     setIsListening(true);
     setTriageResult(null);
+
+    if (Platform.OS === 'android') {
+      try {
+        await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Microphone Permission',
+            message: 'Golden Hour needs access to your microphone for Voice SOS and Emergency Triage.',
+            buttonPositive: 'Grant Permission',
+            buttonNegative: 'Cancel',
+          }
+        );
+      } catch (e) {
+        console.warn('Microphone permission request error:', e);
+      }
+    }
 
     if (typeof window !== 'undefined') {
       const SpeechRecognition =

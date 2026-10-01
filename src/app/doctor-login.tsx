@@ -61,6 +61,32 @@ export default function DoctorLogin() {
     }
   };
 
+  const handleDemoDoctor = () => {
+    useAppStore.getState().setRole('DOCTOR');
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile({
+      uid: 'doc-demo-1',
+      name: 'Dr. Ananya Sharma',
+      doctorName: 'Dr. Ananya Sharma',
+      email: 'dr.ananya@aiims.edu',
+      phone: '+91 98765 67890',
+      role: 'DOCTOR',
+      roles: ['DOCTOR'],
+      specialty: 'Trauma & Emergency Specialist',
+      specialization: 'Trauma & Emergency Specialist',
+      qualification: 'MBBS, MS, FACS',
+      licenseNumber: 'MCI-2024-54321',
+      clinicName: 'AIIMS Emergency Trauma Bay',
+      clinicAddress: 'Central Trauma Building, ER Desk 4',
+      verificationStatus: 'APPROVED',
+      isPhoneVerified: true,
+      hasCompletedProfile: true,
+    } as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
+    router.replace('/(doctor)/dashboard');
+  };
+
   return (
     <Screen center>
       <Pressable
@@ -91,6 +117,13 @@ export default function DoctorLogin() {
         title={loading ? "Verifying Doctor Credentials…" : "Sign In with Google"}
         onPress={handleGoogleSignIn}
         disabled={loading}
+      />
+
+      <Button
+        title="⚡ 1-Click Demo Access (Dr. Ananya Sharma)"
+        variant="secondary"
+        style={{ marginTop: 12, borderColor: '#16A34A', borderWidth: 1 }}
+        onPress={handleDemoDoctor}
       />
 
       <Button

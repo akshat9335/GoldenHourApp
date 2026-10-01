@@ -118,9 +118,14 @@ export default function DoctorDashboard() {
             <Text style={styles.greeting}>Good Morning,</Text>
             <HTitle size={17}>{doctorName}</HTitle>
           </View>
-          <Pressable style={styles.bellBtn} onPress={() => router.push('/(doctor)/notifications')}>
-            <Icon name="bell" />
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Pressable style={styles.switchRoleBtn} onPress={() => router.replace('/role-selection')}>
+              <Text style={styles.switchRoleText}>‹ Switch Role</Text>
+            </Pressable>
+            <Pressable style={styles.bellBtn} onPress={() => router.push('/(doctor)/notifications')}>
+              <Icon name="bell" />
+            </Pressable>
+          </View>
         </View>
 
         <LabelEyebrow>TODAY'S SUMMARY</LabelEyebrow>
@@ -182,6 +187,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   greeting: { fontSize: 11.5, color: colors.inkFaint },
   bellBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  switchRoleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: colors.line },
+  switchRoleText: { fontSize: 11.5, fontWeight: '700', color: colors.inkSoft },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
   stat: { width: '47%', padding: 12, alignItems: 'center' },
   statNum: { fontWeight: '800', fontSize: 18, color: colors.ink },
