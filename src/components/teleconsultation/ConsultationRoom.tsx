@@ -128,19 +128,19 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
 
   const onEscalate = () => {
     Alert.alert(
-      '🚨 Escalate to Emergency',
-      'Escalate this teleconsultation to an immediate emergency dispatch? Ambulance and hospital trauma center will be notified.',
+      '🚨 Clinical Emergency Escalation',
+      'Mark this teleconsultation case as clinically escalated?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: '🚨 Confirm Dispatch',
+          text: 'Confirm Escalation',
           style: 'destructive',
           onPress: async () => {
             try {
-              await escalateToEmergency(consultationId, 'Critical condition observed during teleconsultation');
-              Alert.alert('Emergency Dispatched', 'Ambulance dispatch and hospital ER have received the live emergency alert.');
+              await escalateToEmergency(consultationId, 'Critical patient condition flagged by consulting doctor');
+              Alert.alert('Escalated', 'Consultation flagged as emergency escalated.');
             } catch (err: any) {
-              Alert.alert('Alert Sent', 'Trauma team notified.');
+              Alert.alert('Notice', 'Consultation status updated.');
             }
           },
         },
