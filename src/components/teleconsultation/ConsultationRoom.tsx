@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, ScrollView, Alert, TouchableOpacity, Platform, PermissionsAndroid } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { VideoPanel } from './VideoPanel';
 import { CallControls } from './CallControls';
@@ -101,7 +101,7 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
       peer.close();
       (peer as unknown as { _unsubSig?: () => void })._unsubSig?.();
     };
-  }, [consult, error, selfRole]);
+  }, [consult?.roomId, error, selfRole]);
 
   const [activeTab, setActiveTab] = useState<'video' | 'chat' | 'clinical'>('video');
 
@@ -123,7 +123,9 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
 
   const onEnd = async () => {
     await markCompleted(consultationId);
-    Alert.alert('Consultation Ended', 'The teleconsultation session has ended.');
+    Alert.alert('Consultation Ended', 'The teleconsultation session has ended.', [
+      { text: 'OK', onPress: () => router.back() }
+    ]);
   };
 
   const onEscalate = () => {
