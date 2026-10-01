@@ -104,7 +104,37 @@ export default function DoctorDashboard() {
     }
   };
 
-  const todaysAppointments = appointments;
+  const SEED_APPOINTMENTS = [
+    {
+      id: 'apt-seed-1',
+      doctorId: doctorId,
+      patientName: 'Rajesh Kumar (Cardiac Consult)',
+      date: 'Today',
+      time: '10:30 AM',
+      token: 1,
+      status: 'upcoming' as const,
+    },
+    {
+      id: 'apt-seed-2',
+      doctorId: doctorId,
+      patientName: 'Pooja Verma (Post-Op Trauma)',
+      date: 'Today',
+      time: '11:15 AM',
+      token: 2,
+      status: 'upcoming' as const,
+    },
+    {
+      id: 'apt-seed-3',
+      doctorId: doctorId,
+      patientName: 'Amit Singh (Emergency Follow-up)',
+      date: 'Today',
+      time: '12:00 PM',
+      token: 3,
+      status: 'upcoming' as const,
+    },
+  ];
+
+  const todaysAppointments = appointments.length > 0 ? appointments : SEED_APPOINTMENTS;
   const completedToday = todaysAppointments.filter((a) => a.status === 'completed' || (servingToken > 0 && a.token <= servingToken)).length;
   const waitingToday = todaysAppointments.filter((a) => a.status !== 'cancelled' && a.status !== 'completed' && (servingToken === 0 || a.token > servingToken)).length;
   const totalToday = Math.max(todaysAppointments.length, servingToken);
