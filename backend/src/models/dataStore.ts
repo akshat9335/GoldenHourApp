@@ -191,16 +191,70 @@ class InMemoryDataStore {
     this.doctors.set(doc3.doctorId, doc3);
     this.doctors.set(doc4.doctorId, doc4);
 
-    // Seed Queues (clean initial 0 state)
+    // Seed Queues and realistic appointments
     const today = new Date().toISOString().split("T")[0];
+
+    // Seed Appointments for doc-1 (Dr. Alok Tripathi) with Rahul Patel (patient-demo-1)
+    const apptRahul: Appointment = {
+      appointmentId: "appt-rahul-001",
+      patientId: "patient-demo-1",
+      patientName: "Rahul Patel",
+      doctorId: doc1.doctorId,
+      clinicId: clinicMedanta.clinicId,
+      date: today,
+      timeSlot: "10:30 AM",
+      tokenNumber: 1,
+      status: "COMPLETED",
+      notes: "Cardiology follow-up & BP check",
+      createdAt: new Date(Date.now() - 3600000).toISOString(),
+      updatedAt: new Date(Date.now() - 1800000).toISOString(),
+    };
+
+    const apptPooja: Appointment = {
+      appointmentId: "appt-pooja-002",
+      patientId: "patient-demo-2",
+      patientName: "Pooja Verma",
+      doctorId: doc1.doctorId,
+      clinicId: clinicMedanta.clinicId,
+      date: today,
+      timeSlot: "11:15 AM",
+      tokenNumber: 2,
+      status: "CONFIRMED",
+      notes: "Post-op trauma checkup",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const apptAmit: Appointment = {
+      appointmentId: "appt-amit-003",
+      patientId: "patient-demo-3",
+      patientName: "Amit Singh",
+      doctorId: doc1.doctorId,
+      clinicId: clinicMedanta.clinicId,
+      date: today,
+      timeSlot: "12:00 PM",
+      tokenNumber: 3,
+      status: "CONFIRMED",
+      notes: "Emergency follow-up",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.appointments.set(apptRahul.appointmentId, apptRahul);
+    this.appointments.set(apptPooja.appointmentId, apptPooja);
+    this.appointments.set(apptAmit.appointmentId, apptAmit);
+
     this.queues.set(`${doc1.doctorId}_${today}`, {
       doctorId: doc1.doctorId,
       date: today,
-      servingToken: 0,
-      totalTokensIssued: 0,
+      servingToken: 1,
+      totalTokensIssued: 3,
       avgConsultationMinutes: 10,
-      waitingCount: 0,
+      waitingCount: 2,
     });
+    doc1.servingToken = 1;
+    doc1.queueLength = 2;
+    doc1.estimatedWaitMinutes = 16;
 
     this.queues.set(`${doc2.doctorId}_${today}`, {
       doctorId: doc2.doctorId,

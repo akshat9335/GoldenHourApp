@@ -196,15 +196,21 @@ export default function DoctorDashboard() {
               <Text style={{ fontSize: 13, color: colors.inkFaint }}>No appointments booked for today yet.</Text>
             </View>
           ) : (
-            todaysAppointments.map((a) => (
-              <View key={a.id} style={styles.aptRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.aptName}>{a.patientName}</Text>
-                  <Text style={styles.aptSub}>Token #{a.token} · {a.time}</Text>
+            todaysAppointments.map((a) => {
+              const isCompleted = a.status === 'completed' || (servingToken > 0 && a.token <= servingToken);
+              const displayStatus = isCompleted ? 'completed' : a.status;
+              return (
+                <View key={a.id} style={styles.aptRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.aptName}>{a.patientName}</Text>
+                    <Text style={styles.aptSub}>Token #{a.token} · {a.time}</Text>
+                  </View>
+                  <Pill color={displayStatus === 'completed' ? 'success' : displayStatus === 'cancelled' ? 'red' : 'blue'}>
+                    {displayStatus.toUpperCase()}
+                  </Pill>
                 </View>
-                <Pill color={a.status === 'completed' ? 'success' : a.status === 'cancelled' ? 'red' : 'blue'}>{a.status.toUpperCase()}</Pill>
-              </View>
-            ))
+              );
+            })
           )}
         </Card>
       </Screen>

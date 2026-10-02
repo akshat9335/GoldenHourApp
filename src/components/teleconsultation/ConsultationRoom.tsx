@@ -43,10 +43,17 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
 
   // 2. Subscribe to the consultation record; mark active on first sight.
   useEffect(() => {
+    let hasAlertedEnd = false;
     const unsub = subscribeTeleconsultation(consultationId, (t) => {
       if (t) {
         setConsult(t);
         if (t.status === 'scheduled') markActive(consultationId).catch(() => {});
+        if (t.status === 'completed' && !hasAlertedEnd) {
+          hasAlertedEnd = true;
+          Alert.alert('Consultation Ended', 'The teleconsultation session has ended.', [
+            { text: 'OK', onPress: () => router.back() }
+          ]);
+        }
       }
     });
     return unsub;

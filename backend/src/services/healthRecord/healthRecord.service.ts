@@ -7,6 +7,59 @@ import { appointmentService } from "../doctor/appointment.service";
 class HealthRecordService {
   private inMemoryRecords: Map<string, HealthRecord> = new Map();
 
+  constructor() {
+    this.seedDemoRecords();
+  }
+
+  private seedDemoRecords(): void {
+    const seedRecord: HealthRecord = {
+      id: "rec-rahul-cardio-01",
+      patientId: "patient-demo-1",
+      patientName: "Rahul Patel",
+      doctorId: "doc-1",
+      doctorName: "Dr. Alok Tripathi",
+      doctorSpecialty: "Cardiologist",
+      clinicName: "Medanta OPD & Diagnostic Center, Prayagraj",
+      appointmentId: "appt-rahul-001",
+      tokenNumber: 1,
+      diagnosis: "Mild Angina & Stage-1 Essential Hypertension",
+      notes: "Patient reported episodic retrosternal discomfort during physical exertion. Resting ECG within normal limits. Advised lifestyle modifications, low sodium diet, and regular BP monitoring.",
+      vitals: {
+        bloodPressure: "130/85",
+        heartRate: 78,
+        temperature: "98.4 F",
+        spO2: 99,
+      },
+      prescriptions: [
+        {
+          name: "Amlodipine 5mg",
+          dosage: "1 tablet",
+          frequency: "1-0-0",
+          duration: "30 days",
+          instructions: "Morning after breakfast",
+        },
+        {
+          name: "Aspirin 75mg (Ecosprin)",
+          dosage: "1 tablet",
+          frequency: "0-1-0",
+          duration: "30 days",
+          instructions: "After lunch with water",
+        },
+        {
+          name: "Sorbitrate 5mg",
+          dosage: "1 tablet",
+          frequency: "SOS (as needed)",
+          duration: "10 days",
+          instructions: "Sublingual if acute chest pain occurs",
+        },
+      ],
+      createdAt: new Date(Date.now() - 1800000).toISOString(),
+      updatedAt: new Date(Date.now() - 1800000).toISOString(),
+    };
+
+    this.inMemoryRecords.set(seedRecord.id, seedRecord);
+  }
+
   public async createRecord(data: CreateHealthRecordRequest): Promise<HealthRecord> {
     if (!data.patientId || !data.doctorId || !data.diagnosis) {
       throw new AppError(400, "MISSING_FIELDS", "patientId, doctorId, and diagnosis are required.");
