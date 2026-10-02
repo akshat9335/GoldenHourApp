@@ -63,6 +63,7 @@ export default function DoctorLogin() {
 
   const handleDemoDoctor = () => {
     useAppStore.getState().setRole('DOCTOR');
+    useAppStore.getState().setRoles(['DOCTOR']);
     useAppStore.getState().setVerificationStatus('APPROVED');
     useAppStore.getState().setUserProfile({
       uid: 'doc-demo-1',

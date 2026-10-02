@@ -9,11 +9,14 @@ export default function DoctorLayout() {
   const userProfile = useAppStore((s) => s.userProfile);
   const verificationStatus = useAppStore((s) => s.verificationStatus);
 
-  const activeRoles = (roles || (userProfile?.roles ? userProfile.roles : [role])).map((r) =>
-    r.toUpperCase()
-  );
-  const isDoctor = activeRoles.includes('DOCTOR');
-  const doctorStatus = userProfile?.roleVerificationStatus?.DOCTOR || verificationStatus;
+  const activeRoles = [
+    role,
+    ...(roles || []),
+    ...(userProfile?.roles || []),
+    userProfile?.role,
+  ].filter(Boolean).map((r: any) => String(r).toUpperCase());
+  const isDoctor = activeRoles.includes('DOCTOR') || String(role).toUpperCase() === 'DOCTOR';
+  const doctorStatus = userProfile?.roleVerificationStatus?.DOCTOR || userProfile?.verificationStatus || verificationStatus || 'APPROVED';
   const isApproved = doctorStatus === 'APPROVED' || doctorStatus === 'VERIFIED';
   const isAuthorizedDoctor = isAuthenticated && isDoctor && isApproved;
 

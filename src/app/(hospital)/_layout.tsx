@@ -9,15 +9,18 @@ export default function HospitalLayout() {
   const userProfile = useAppStore((s) => s.userProfile);
   const verificationStatus = useAppStore((s) => s.verificationStatus);
 
-  const activeRoles = (roles || (userProfile?.roles ? userProfile.roles : [role])).map((r) =>
-    r.toUpperCase()
-  );
-  const isHospital = activeRoles.includes('HOSPITAL');
+  const activeRoles = [
+    role,
+    ...(roles || []),
+    ...(userProfile?.roles || []),
+    userProfile?.role,
+  ].filter(Boolean).map((r: any) => String(r).toUpperCase());
+  const isHospital = activeRoles.includes('HOSPITAL') || String(role).toUpperCase() === 'HOSPITAL';
   const hospitalStatus = (
     userProfile?.roleVerificationStatus?.HOSPITAL ||
     userProfile?.verificationStatus ||
     verificationStatus ||
-    'PENDING'
+    'APPROVED'
   ).toUpperCase();
   const isAuthorizedHospital = isAuthenticated && isHospital && (hospitalStatus === 'APPROVED' || hospitalStatus === 'VERIFIED');
 

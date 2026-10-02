@@ -63,6 +63,7 @@ export default function DriverLogin() {
 
   const handleDemoDriver = () => {
     useAppStore.getState().setRole('AMBULANCE_DRIVER');
+    useAppStore.getState().setRoles(['AMBULANCE_DRIVER']);
     useAppStore.getState().setVerificationStatus('APPROVED');
     useAppStore.getState().setUserProfile({
       uid: 'driver-demo-ramesh',

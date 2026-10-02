@@ -76,12 +76,19 @@ export default function PatientHome() {
     }
   }, [emergencyId, resetEmergencySession]);
 
+  const emailPrefix = userProfile?.email ? userProfile.email.split('@')[0] : '';
+  const formattedEmailName = emailPrefix
+    ? emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1).replace(/[0-9._-]+/g, '')
+    : '';
+  const rawName = userProfile?.displayName || userProfile?.patientName || userProfile?.name;
+  const isFacilityName = userProfile?.hospitalName && (rawName === userProfile?.hospitalName || rawName?.toLowerCase().includes('hospital'));
+
   const displayName =
+    userProfile?.patientName ||
     userProfile?.displayName ||
-    (userProfile?.hospitalName && userProfile?.name === userProfile?.hospitalName
-      ? 'Golden Hour User'
-      : userProfile?.name) ||
-    'Golden Hour User';
+    (!isFacilityName && rawName && rawName !== 'Golden Hour User' ? rawName : '') ||
+    formattedEmailName ||
+    'Member';
   const firstName = displayName.split(' ')[0] || 'User';
   const initials = displayName
     .split(' ')

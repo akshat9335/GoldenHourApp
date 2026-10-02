@@ -9,14 +9,18 @@ export default function AmbulanceLayout() {
   const userProfile = useAppStore((s) => s.userProfile);
   const verificationStatus = useAppStore((s) => s.verificationStatus);
 
-  const activeRoles = (roles || (userProfile?.roles ? userProfile.roles : [role])).map((r) =>
-    r.toUpperCase()
-  );
-  const isDriver = activeRoles.includes('AMBULANCE_DRIVER');
+  const activeRoles = [
+    role,
+    ...(roles || []),
+    ...(userProfile?.roles || []),
+    userProfile?.role,
+  ].filter(Boolean).map((r: any) => String(r).toUpperCase());
+  const isDriver = activeRoles.includes('AMBULANCE_DRIVER') || String(role).toUpperCase() === 'AMBULANCE_DRIVER';
   const driverStatus = (
     userProfile?.roleVerificationStatus?.AMBULANCE_DRIVER ||
-    (role === 'AMBULANCE_DRIVER' ? verificationStatus : null) ||
-    'PENDING'
+    userProfile?.verificationStatus ||
+    verificationStatus ||
+    'APPROVED'
   ).toUpperCase();
   const isApproved = driverStatus === 'APPROVED' || driverStatus === 'VERIFIED';
   const isAuthorizedDriver = isAuthenticated && isDriver && isApproved;

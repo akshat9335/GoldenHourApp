@@ -25,8 +25,10 @@ export default function LoginScreen() {
       if (!session.profileExists) {
         // Auto-register smoothly using Google details so user immediately lands on Home screen!
         try {
+          const fallbackEmailName = session.email ? session.email.split('@')[0] : 'User';
+          const capitalizedName = fallbackEmailName.charAt(0).toUpperCase() + fallbackEmailName.slice(1);
           await authService.register({
-            name: session.name || 'Golden Hour User',
+            name: session.name || capitalizedName,
             email: session.email || 'user@goldenhour.org',
             role: 'PATIENT',
           });
@@ -34,6 +36,7 @@ export default function LoginScreen() {
           useAppStore.getState().setProfileExists(true);
         }
         useAppStore.getState().setRole('PATIENT');
+        useAppStore.getState().setRoles(['PATIENT']);
         router.replace('/(patient)/home');
         return;
       }
@@ -41,6 +44,7 @@ export default function LoginScreen() {
       // When logging in via Patient Portal, always enter as PATIENT
       // This ensures Doctors and Hospital staff can also use Golden Hour as patients without being hijacked
       useAppStore.getState().setRole('PATIENT');
+      useAppStore.getState().setRoles(['PATIENT', ...(useAppStore.getState().roles || [])]);
       router.replace('/(patient)/home');
     } catch (err: any) {
       console.warn('[Login] Google sign-in failed:', err);

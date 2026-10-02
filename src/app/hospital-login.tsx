@@ -71,6 +71,7 @@ export default function HospitalLogin() {
 
   const handleDemoHospital = () => {
     useAppStore.getState().setRole('HOSPITAL');
+    useAppStore.getState().setRoles(['HOSPITAL']);
     useAppStore.getState().setVerificationStatus('APPROVED');
     useAppStore.getState().setUserProfile({
       uid: 'hosp-demo-apollo',
