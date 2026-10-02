@@ -6,6 +6,7 @@ import { colors } from '@/constants/theme';
 import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HospitalLogin() {
   const insets = useSafeAreaInsets();
@@ -48,14 +49,17 @@ export default function HospitalLogin() {
 
       // Hydrate official hospital facility name
       const officialName = session.profile?.hospitalName || 'Emergency Trauma Center';
-      useAppStore.getState().setUserProfile({
+      const updatedProfile = {
         ...session.profile,
         hospitalName: officialName,
         name: session.profile?.name || officialName,
-      });
-
+        role: 'HOSPITAL',
+      };
+      useAppStore.getState().setUserProfile(updatedProfile);
       useAppStore.getState().setRole('HOSPITAL');
+      useAppStore.getState().setRoles(Array.from(new Set([...rawRoles, 'HOSPITAL'])) as any);
       useAppStore.getState().setVerificationStatus('APPROVED');
+      AsyncStorage.setItem('gh_user_profile', JSON.stringify(updatedProfile)).catch(() => {});
       router.replace('/(hospital)/dashboard');
       return;
     } catch (err: any) {

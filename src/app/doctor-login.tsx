@@ -47,6 +47,7 @@ export default function DoctorLogin() {
       }
 
       useAppStore.getState().setRole('DOCTOR');
+      useAppStore.getState().setRoles(Array.from(new Set([...userRoles, 'DOCTOR'])) as any);
       useAppStore.getState().setVerificationStatus('APPROVED');
       router.replace('/(doctor)/dashboard');
       return;

@@ -52,6 +52,7 @@ if (isNativeGoogleSigninAvailable()) {
 const STORAGE_TOKEN_KEY = 'gh_auth_token';
 const STORAGE_REFRESH_TOKEN_KEY = 'gh_refresh_token';
 const STORAGE_UID_KEY = 'gh_user_uid';
+const STORAGE_PROFILE_KEY = 'gh_user_profile';
 
 export interface AuthSessionResult {
   uid: string;
@@ -189,6 +190,9 @@ export const authService = {
         store.setProfileExists(true);
         store.setIsDemoMode(false);
 
+        // Cache valid profile locally for zero-latency cold start
+        AsyncStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile)).catch(() => {});
+
         return {
           uid: profile.uid || explicitUid || '',
           email: profile.email || fallbackEmail,
@@ -323,17 +327,90 @@ export const authService = {
    */
   async restoreSession(): Promise<AuthSessionResult | null> {
     const store = useAppStore.getState();
-    store.setAuthLoading(true);
 
     try {
       const storedToken = await AsyncStorage.getItem(STORAGE_TOKEN_KEY);
       const storedRefreshToken = await AsyncStorage.getItem(STORAGE_REFRESH_TOKEN_KEY);
       const storedUid = await AsyncStorage.getItem(STORAGE_UID_KEY);
+      const storedProfileStr = await AsyncStorage.getItem(STORAGE_PROFILE_KEY);
 
       if (!storedToken && !storedRefreshToken) {
         store.setAuthLoading(false);
         return null;
       }
+
+      // Fast-hydrate from local cache immediately (0ms network delay)
+      let cachedSession: AuthSessionResult | null = null;
+      if (storedProfileStr) {
+        try {
+          const cachedProfile = JSON.parse(storedProfileStr);
+          const canonicalRole = (cachedProfile.role || 'PATIENT') as Role;
+          const rawRoles: string[] = cachedProfile.roles && cachedProfile.roles.length > 0
+            ? cachedProfile.roles
+            : (cachedProfile.role ? [cachedProfile.role] : ['PATIENT']);
+          const canonicalRoles = rawRoles.map((r: string) => r.toUpperCase() as Role);
+
+          store.setUserProfile(cachedProfile);
+          store.setRole(canonicalRole);
+          store.setRoles(canonicalRoles);
+          if (cachedProfile.verificationStatus) {
+            store.setVerificationStatus(cachedProfile.verificationStatus);
+          }
+          if (cachedProfile.crisisId) {
+            store.setGoldenHourId(cachedProfile.crisisId);
+          }
+          store.setIsAuthenticated(true);
+          store.setProfileExists(true);
+          store.setIsDemoMode(false);
+
+          if (storedToken) {
+            setAuthToken(storedToken);
+            store.setAuthToken(storedToken);
+          }
+
+          cachedSession = {
+            uid: cachedProfile.uid || storedUid || '',
+            email: cachedProfile.email,
+            name: cachedProfile.patientName || cachedProfile.displayName || cachedProfile.name,
+            role: canonicalRole,
+            verificationStatus: cachedProfile.verificationStatus || 'APPROVED',
+            crisisId: cachedProfile.crisisId,
+            profileExists: true,
+            profile: cachedProfile,
+          };
+        } catch {}
+      }
+
+      // If we have cached profile and token, return immediately so splash screen exits instantly!
+      // Then revalidate profile and refresh token in background.
+      if (cachedSession && storedToken) {
+        store.setAuthLoading(false);
+        (async () => {
+          try {
+            let activeToken = storedToken;
+            let activeRefreshToken = storedRefreshToken;
+            if (storedRefreshToken) {
+              try {
+                const refreshed = await this.refreshIdToken(storedRefreshToken);
+                activeToken = refreshed.idToken;
+                activeRefreshToken = refreshed.refreshToken;
+              } catch {}
+            }
+            if (activeToken) {
+              await this.establishSession(
+                activeToken,
+                activeRefreshToken || undefined,
+                storedUid || undefined
+              );
+            }
+          } catch (e) {
+            console.warn('[auth] Background session revalidation delayed:', e);
+          }
+        })();
+        return cachedSession;
+      }
+
+      store.setAuthLoading(true);
 
       // If refresh token exists, fetch fresh token
       let activeToken = storedToken;
@@ -384,6 +461,7 @@ export const authService = {
       if (profile.crisisId) store.setGoldenHourId(profile.crisisId);
       store.setProfileExists(true);
       store.setIsAuthenticated(true);
+      AsyncStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile)).catch(() => {});
     }
 
     return profile;
@@ -406,6 +484,7 @@ export const authService = {
         if (profile.crisisId) store.setGoldenHourId(profile.crisisId);
         if (profile.trustScore !== undefined) store.setTrustScore(profile.trustScore);
         store.setProfileExists(true);
+        AsyncStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile)).catch(() => {});
         return profile;
       }
     } catch (err) {
@@ -424,6 +503,7 @@ export const authService = {
         STORAGE_TOKEN_KEY,
         STORAGE_REFRESH_TOKEN_KEY,
         STORAGE_UID_KEY,
+        STORAGE_PROFILE_KEY,
       ]);
     } catch {}
 

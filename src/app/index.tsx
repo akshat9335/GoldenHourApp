@@ -25,11 +25,16 @@ export default function Splash() {
   useEffect(() => {
     let isMounted = true;
 
+    // Silent early backend warmup ping to wake Render from sleep immediately
+    fetch('https://goldenhourapp.onrender.com/api/health').catch(() => {});
+
     async function checkSession() {
       try {
-        await authService.restoreSession();
-        // Silent early backend warmup ping to prevent cold start
-        fetch('https://goldenhourapp.onrender.com/api/health').catch(() => {});
+        // Restore session (cached profile restores in <10ms; capped so cold start never freezes)
+        await Promise.race([
+          authService.restoreSession(),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
         const hasSeenOnboarding = await AsyncStorage.getItem('@has_seen_onboarding');
         if (isMounted) {
           setChecking(false);
@@ -48,10 +53,10 @@ export default function Splash() {
       }
     }
 
-    // Give a short splash display before auto-transitioning
+    // Snappy splash screen duration (800ms)
     const timer = setTimeout(() => {
       checkSession();
-    }, 1200);
+    }, 800);
 
     return () => {
       isMounted = false;

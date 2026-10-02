@@ -47,6 +47,7 @@ export default function DriverLogin() {
       }
 
       useAppStore.getState().setRole('AMBULANCE_DRIVER');
+      useAppStore.getState().setRoles(Array.from(new Set([...userRoles, 'AMBULANCE_DRIVER'])) as any);
       useAppStore.getState().setVerificationStatus('APPROVED');
       router.replace('/(ambulance)/dashboard');
       return;
