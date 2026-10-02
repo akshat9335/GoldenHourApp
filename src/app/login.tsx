@@ -59,6 +59,7 @@ export default function LoginScreen() {
 
   const handleDemoPatient = () => {
     useAppStore.getState().setRole('PATIENT');
+    useAppStore.getState().setRoles(['PATIENT']);
     useAppStore.getState().setUserProfile({
       uid: 'patient-demo-1',
       name: 'Rahul Patel',
