@@ -39,6 +39,7 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const activeRecognizerRef = useRef<any>(null);
   const nativeSimTimerRef = useRef<any>(null);
+  const scenarioIndexRef = useRef<number>(0);
 
   // Pulse animation for active microphone
   useEffect(() => {
@@ -69,21 +70,26 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
     };
   }, [isListening]);
 
-  // Cleanly start/stop speech recognizer when modal opens or closes
+  // Cleanly reset speech recognizer when modal opens or closes
   useEffect(() => {
-    if (visible) {
-      // Auto-start listening only when opened via button
-      startListening();
-    } else {
-      stopListening();
-      setTranscript('');
-      setTriageResult(null);
-      setIsAnalyzing(false);
-    }
+    stopListening();
+    setTranscript('');
+    setTriageResult(null);
+    setIsAnalyzing(false);
     return () => {
       stopListening();
     };
   }, [visible]);
+
+  const handleTranscriptChange = (text: string) => {
+    // If user is typing or dictating via Gboard, cancel any background simulation timer immediately
+    if (nativeSimTimerRef.current) {
+      clearTimeout(nativeSimTimerRef.current);
+      nativeSimTimerRef.current = null;
+    }
+    setIsListening(false);
+    setTranscript(text);
+  };
 
   const startListening = async () => {
     setIsListening(true);
@@ -152,12 +158,31 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
         setIsListening(false);
         setTranscript((prev) => {
           if (prev && prev.trim().length > 0) return prev;
-          const samplePhrases = {
-            hi: 'सीने में बहुत तेज दर्द और भारीपन हो रहा है, सांस फूल रही है',
-            mr: 'छातीत खूप तीव्र वेदना होत आहेत आणि धाप लागते आहे',
-            en: 'Severe acute chest pain radiating to left arm with shortness of breath',
-          };
-          return samplePhrases[currentLang] || samplePhrases.en;
+          const emergencyScenarios = [
+            {
+              hi: 'सड़क दुर्घटना में गंभीर चोट लगी है, बहुत खून बह रहा है',
+              en: 'Severe road accident with deep trauma and heavy bleeding',
+              mr: 'रस्ता अपघात झाला आहे, खूप रक्तस्त्राव होत आहे',
+            },
+            {
+              hi: 'सीने में बहुत तेज दर्द और भारीपन हो रहा है, सांस फूल रही है',
+              en: 'Severe acute chest pain radiating to left arm with shortness of breath',
+              mr: 'छातीत खूप तीव्र वेदना होत आहेत आणि धाप लागते आहे',
+            },
+            {
+              hi: 'मरीज अचानक गिरकर बेहोश हो गया है, सांस लेने में तकलीफ है',
+              en: 'Patient collapsed unconscious with severe respiratory distress',
+              mr: 'रुग्ण अचानक बेशुद्ध पडला आहे, श्वास घेण्यास त्रास होत आहे',
+            },
+            {
+              hi: 'तेज बुखार के साथ मरीज को लगातार दौरे और झटके आ रहे हैं',
+              en: 'High fever with continuous convulsions and seizures',
+              mr: 'तीव्र ताप आणि सतत झटके येत आहेत',
+            },
+          ];
+          const choice = emergencyScenarios[scenarioIndexRef.current % emergencyScenarios.length];
+          scenarioIndexRef.current += 1;
+          return choice[currentLang] || choice.en;
         });
       }, 3000);
     }
@@ -327,13 +352,30 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
             <View style={styles.transcriptBox}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={styles.transcriptLabel}>Spoken Transcript / लक्षण:</Text>
-                <Text style={{ fontSize: 10, color: colors.inkFaint }}>Tap to type or use keyboard mic 🎙️</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {transcript.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setTranscript('');
+                        setTriageResult(null);
+                        stopListening();
+                      }}
+                      hitSlop={8}
+                    >
+                      <Text style={{ fontSize: 11, color: colors.red, fontWeight: '700' }}>✕ Clear</Text>
+                    </TouchableOpacity>
+                  )}
+                  <Text style={{ fontSize: 10, color: colors.inkFaint }}>Tap to speak via mic 🎙️</Text>
+                </View>
               </View>
               <TextInput
                 style={styles.transcriptInput}
                 value={transcript}
-                onChangeText={setTranscript}
-                placeholder={isListening ? '🎙️ Listening to voice… speak now' : '(Speak with mic, use keyboard voice, or tap preset)'}
+                onChangeText={handleTranscriptChange}
+                onFocus={() => {
+                  stopListening();
+                }}
+                placeholder={isListening ? '🎙️ Listening to voice… speak now' : '(Tap here to speak using keyboard mic 🎙️ or tap Quick Presets below)'}
                 placeholderTextColor={isListening ? colors.red : colors.inkFaint}
                 multiline
               />
