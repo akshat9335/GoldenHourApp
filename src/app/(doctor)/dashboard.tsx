@@ -14,8 +14,17 @@ export default function DoctorDashboard() {
 
   const [doctorDetails, setDoctorDetails] = useState<any>(null);
   const doctorName = doctorDetails?.name || userProfile?.doctorName || userProfile?.name || 'Dr. Medical Practitioner';
-  const doctorId = doctorDetails?.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
 
+  const normalizeDocId = (raw?: string) => {
+    if (!raw) return 'doc-1';
+    let clean = raw.trim();
+    while (clean.startsWith('doc-doc-')) clean = clean.replace('doc-doc-', 'doc-');
+    if (clean === 'doc-demo-1') return 'doc-1';
+    if (!clean.startsWith('doc-')) return `doc-${clean}`;
+    return clean;
+  };
+
+  const doctorId = normalizeDocId(userProfile?.uid);
   const defaultDoctor = getDoctorById('doc-1');
   const [appointments, setAppointments] = useState<any[]>([]);
 
@@ -23,9 +32,11 @@ export default function DoctorDashboard() {
     let mounted = true;
 
     const loadDoctorData = (resolvedId: string) => {
+      const cleanId = normalizeDocId(resolvedId);
+
       // Fetch live queue
       api.queues
-        .getLiveQueue(resolvedId)
+        .getLiveQueue(cleanId)
         .then((qRes: any) => {
           const q = (qRes && typeof qRes === 'object' && 'servingToken' in qRes) ? qRes : (qRes?.data || qRes);
           if (mounted && q && typeof q.servingToken === 'number') {
@@ -36,7 +47,7 @@ export default function DoctorDashboard() {
 
       // Fetch real appointments
       api.appointments
-        .getDoctorAppointments({ doctorId: resolvedId })
+        .getDoctorAppointments({ doctorId: cleanId })
         .then((apptData: any) => {
           if (mounted && Array.isArray(apptData)) {
             const mapped = apptData.map((a: any) => ({
@@ -61,8 +72,7 @@ export default function DoctorDashboard() {
         const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
         if (mounted && doc && (doc.doctorId || doc.name)) {
           setDoctorDetails(doc);
-          const resolvedId = doc.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
-          loadDoctorData(resolvedId);
+          loadDoctorData(doc.doctorId || doctorId);
         } else {
           loadDoctorData(doctorId);
         }
@@ -72,15 +82,14 @@ export default function DoctorDashboard() {
       });
 
     const pollTimer = setInterval(() => {
-      const activeId = doctorDetails?.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
-      loadDoctorData(activeId);
+      loadDoctorData(doctorId);
     }, 4000);
 
     return () => {
       mounted = false;
       clearInterval(pollTimer);
     };
-  }, [userProfile?.uid, doctorId, doctorDetails?.doctorId]);
+  }, [userProfile?.uid, doctorId]);
 
   const handleCallNext = async () => {
     try {
@@ -108,11 +117,11 @@ export default function DoctorDashboard() {
     {
       id: 'apt-seed-1',
       doctorId: doctorId,
-      patientName: 'Rajesh Kumar (Cardiac Consult)',
+      patientName: 'Rahul Patel (Cardiology Consult)',
       date: 'Today',
       time: '10:30 AM',
       token: 1,
-      status: 'upcoming' as const,
+      status: 'completed' as const,
     },
     {
       id: 'apt-seed-2',
@@ -135,10 +144,14 @@ export default function DoctorDashboard() {
   ];
 
   const todaysAppointments = appointments.length > 0 ? appointments : SEED_APPOINTMENTS;
-  const completedToday = todaysAppointments.filter((a) => a.status === 'completed' || (servingToken > 0 && a.token <= servingToken)).length;
-  const waitingToday = todaysAppointments.filter((a) => a.status !== 'cancelled' && a.status !== 'completed' && (servingToken === 0 || a.token > servingToken)).length;
+  const completedToday = todaysAppointments.filter((a) => a.status === 'completed' || (servingToken > 0 && a.token < servingToken)).length;
+  const activeAppointments = todaysAppointments.filter((a) => {
+    const isDone = a.status === 'completed' || (servingToken > 0 && a.token < servingToken);
+    return !isDone && a.status !== 'cancelled';
+  });
+  const waitingToday = activeAppointments.filter((a) => servingToken === 0 || a.token > servingToken).length;
   const totalToday = Math.max(todaysAppointments.length, servingToken);
-  const remainingToday = Math.max(totalToday - completedToday, 0);
+  const remainingToday = activeAppointments.length;
 
   return (
     <View style={{ flex: 1 }}>
@@ -189,24 +202,29 @@ export default function DoctorDashboard() {
           </View>
         </Card>
 
-        <LabelEyebrow>TODAY'S APPOINTMENTS</LabelEyebrow>
-        <Card style={{ padding: todaysAppointments.length === 0 ? 16 : 4 }}>
-          {todaysAppointments.length === 0 ? (
-            <View style={{ paddingVertical: 12, alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, color: colors.inkFaint }}>No appointments booked for today yet.</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <LabelEyebrow>ACTIVE QUEUE ({activeAppointments.length})</LabelEyebrow>
+          <Pressable onPress={() => router.push('/(doctor)/appointments')}>
+            <Text style={{ fontSize: 11.5, color: colors.blue, fontWeight: '700' }}>History ({completedToday} Done) ›</Text>
+          </Pressable>
+        </View>
+        <Card style={{ padding: activeAppointments.length === 0 ? 16 : 4 }}>
+          {activeAppointments.length === 0 ? (
+            <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.success }}>✓ All active consultations completed</Text>
+              <Text style={{ fontSize: 11.5, color: colors.inkFaint, marginTop: 4 }}>Completed records are saved in Appointments history.</Text>
             </View>
           ) : (
-            todaysAppointments.map((a) => {
-              const isCompleted = a.status === 'completed' || (servingToken > 0 && a.token <= servingToken);
-              const displayStatus = isCompleted ? 'completed' : a.status;
+            activeAppointments.map((a) => {
+              const isServing = a.token === servingToken;
               return (
                 <View key={a.id} style={styles.aptRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.aptName}>{a.patientName}</Text>
                     <Text style={styles.aptSub}>Token #{a.token} · {a.time}</Text>
                   </View>
-                  <Pill color={displayStatus === 'completed' ? 'success' : displayStatus === 'cancelled' ? 'red' : 'blue'}>
-                    {displayStatus.toUpperCase()}
+                  <Pill color={isServing ? 'amber' : 'blue'}>
+                    {isServing ? 'NOW SERVING' : 'WAITING'}
                   </Pill>
                 </View>
               );

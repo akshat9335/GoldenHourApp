@@ -63,8 +63,17 @@ export default function DoctorQueue() {
   const queueStatus = useAppStore((s) => s.queueStatus);
   const setQueueStatus = useAppStore((s) => s.setQueueStatus);
 
-  const doctorId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
-  const doctorName = userProfile?.name || 'Dr. Akshat Srivastava';
+  const normalizeDocId = (raw?: string) => {
+    if (!raw) return 'doc-1';
+    let clean = raw.trim();
+    while (clean.startsWith('doc-doc-')) clean = clean.replace('doc-doc-', 'doc-');
+    if (clean === 'doc-demo-1') return 'doc-1';
+    if (!clean.startsWith('doc-')) return `doc-${clean}`;
+    return clean;
+  };
+
+  const doctorId = normalizeDocId(userProfile?.uid);
+  const doctorName = userProfile?.name || 'Dr. Alok Tripathi';
   const doctorSpecialty = userProfile?.specialty || 'Cardiologist';
 
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -327,29 +336,44 @@ export default function DoctorQueue() {
             <Text style={styles.slotText}>Slot: {currentAppt.timeSlot} · {currentAppt.notes || 'General OPD'}</Text>
           )}
 
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-            <Button
-              title={currentStatus === 'IN_PROGRESS' ? "In Consultation…" : "Start Consultation"}
-              disabled={currentStatus === 'IN_PROGRESS' || servingToken === 0}
-              style={{ flex: 1 }}
-              onPress={handleStart}
-            />
-            <Button title="Skip / No-Show" variant="secondary" style={{ flex: 1 }} onPress={handleSkip} />
-          </View>
+          {currentStatus === 'COMPLETED' ? (
+            <View style={{ marginTop: 12 }}>
+              <View style={{ paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.successBg, borderRadius: 8, marginBottom: 10 }}>
+                <Text style={{ color: colors.success, fontWeight: '700', fontSize: 13 }}>✓ Consultation Completed & Prescription Saved</Text>
+              </View>
+              <Button
+                title="Call Next Patient ›"
+                style={{ backgroundColor: colors.red }}
+                onPress={handleNext}
+              />
+            </View>
+          ) : (
+            <>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+                <Button
+                  title={currentStatus === 'IN_PROGRESS' ? "In Consultation…" : "Start Consultation"}
+                  disabled={currentStatus === 'IN_PROGRESS' || servingToken === 0}
+                  style={{ flex: 1 }}
+                  onPress={handleStart}
+                />
+                <Button title="Skip / No-Show" variant="secondary" style={{ flex: 1 }} onPress={handleSkip} />
+              </View>
 
-          <Button
-            title="Complete & Prescribe"
-            variant="blue"
-            style={{ marginTop: 8 }}
-            onPress={handleOpenConsultModal}
-          />
+              <Button
+                title="Complete & Prescribe"
+                variant="blue"
+                style={{ marginTop: 8 }}
+                onPress={handleOpenConsultModal}
+              />
 
-          {servingToken > 0 && (
-            <Button
-              title="📹 Join Teleconsultation Room"
-              style={{ marginTop: 8, backgroundColor: colors.blue }}
-              onPress={() => router.push(`/(doctor)/teleconsultation/tc_${servingToken}` as any)}
-            />
+              {servingToken > 0 && (
+                <Button
+                  title="📹 Join Teleconsultation Room"
+                  style={{ marginTop: 8, backgroundColor: colors.blue }}
+                  onPress={() => router.push(`/(doctor)/teleconsultation/tc_${servingToken}` as any)}
+                />
+              )}
+            </>
           )}
         </Card>
 
