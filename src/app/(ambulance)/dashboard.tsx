@@ -329,13 +329,22 @@ export default function AmbulanceDashboard() {
           <Text style={{ fontSize: 18, color: colors.ink }}>‹</Text>
           <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>Ambulance Console</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => router.replace('/role-selection')}
-          style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' }}
-          hitSlop={8}
-        >
-          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft }}>‹ Switch Role</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => router.replace('/role-selection')}
+            style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' }}
+            hitSlop={8}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft }}>‹ Switch Role</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleAccountOptions}
+            style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' }}
+            hitSlop={8}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.red }}>🚪 Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Driver Unit Card */}
