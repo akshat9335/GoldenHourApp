@@ -148,22 +148,25 @@ async function getHospitalByOwnerUid(uid: string) {
   if (!hospitalDoc || (typeof hospitalDoc.exists === "boolean" && !hospitalDoc.exists)) {
     const newHospId = userHospId || `hosp-${uid}`;
     const now = new Date();
-    const facilityName = userData?.hospitalName || userData?.name || "Emergency Hospital Facility";
+    const defaultName = (uid === "hosp-demo-apollo" || uid.includes("apollo"))
+      ? "Apollo Multi-Specialty Hospital"
+      : "Emergency Hospital Facility";
+    const facilityName = userData?.hospitalName || userData?.name || defaultName;
     const synthesized = {
       hospitalId: newHospId,
       ownerUid: uid,
       name: facilityName,
-      phone: userData?.phone || null,
-      email: userData?.email || null,
-      address: userData?.clinicAddress || "Emergency Trauma Wing",
+      phone: userData?.phone || "+91-532-2460108",
+      email: userData?.email || "er.command@apollohospitals.com",
+      address: userData?.clinicAddress || "Civil Lines, Prayagraj",
       location: userData?.location || { latitude: 25.4358, longitude: 81.8463 },
       latitude: userData?.location?.latitude || userData?.latitude || 25.4358,
       longitude: userData?.location?.longitude || userData?.longitude || 81.8463,
       verificationStatus: "APPROVED",
-      totalBeds: 25,
+      totalBeds: 50,
       availableBeds: 18,
-      icuBeds: 6,
-      availableIcuBeds: 5,
+      icuBeds: 12,
+      availableIcuBeds: 4,
       emergencyCapacity: 6,
       createdAt: now,
       updatedAt: now,
@@ -180,6 +183,22 @@ async function getHospitalByOwnerUid(uid: string) {
   }
 
   const hospitalData = typeof hospitalDoc.data === "function" ? hospitalDoc.data() : hospitalDoc.data;
+
+  // Enforce consistent Apollo Multi-Specialty Hospital name for demo hospital desk
+  if (uid === "hosp-demo-apollo" || uid.includes("apollo") || hospitalData?.name === "Emergency Hospital Facility") {
+    hospitalData.name = "Apollo Multi-Specialty Hospital";
+    hospitalData.hospitalName = "Apollo Multi-Specialty Hospital";
+    if (firestore && hospitalDoc?.id) {
+      firestore.collection("hospitals").doc(hospitalDoc.id).set({
+        name: "Apollo Multi-Specialty Hospital",
+        hospitalName: "Apollo Multi-Specialty Hospital",
+        totalBeds: 50,
+        availableBeds: 18,
+        icuBeds: 12,
+        availableIcuBeds: 4,
+      }, { merge: true }).catch(() => {});
+    }
+  }
 
   return {
     docId: hospitalDoc.id,
