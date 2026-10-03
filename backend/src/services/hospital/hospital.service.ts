@@ -1259,20 +1259,12 @@ export async function acceptHospitalRequest(
         ? { latitude: Number((patientLoc.latitude + 0.012).toFixed(6)), longitude: Number((patientLoc.longitude + 0.009).toFixed(6)) }
         : null);
 
-  // Find affiliated driver for instant zero-lag ambulance assignment
+  // Direct assignment ONLY if hospital ER desk explicitly picked a specific driver from the list
   let autoAssignedDriver: any = null;
   if (dispatchOptions?.driverId) {
     try {
       const dSnap = await firestore!.collection("drivers").doc(dispatchOptions.driverId).get();
       if (dSnap.exists) autoAssignedDriver = { id: dSnap.id, ...dSnap.data() };
-    } catch {}
-  }
-  if (!autoAssignedDriver) {
-    try {
-      const matched = await getHospitalDrivers(uid);
-      if (matched.length > 0) {
-        autoAssignedDriver = matched[0];
-      }
     } catch {}
   }
 
