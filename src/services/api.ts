@@ -249,6 +249,10 @@ export const api = {
     getDoctorProfile: (id: string) => request(`/doctors/${id}`),
     verifyDoctor: (id: string, status: string) =>
       request(`/doctors/${id}/verify`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    updateAvailability: (availability: 'AVAILABLE' | 'BUSY' | 'OFFLINE') =>
+      request('/doctors/me/availability', { method: 'PATCH', body: JSON.stringify({ availability }) }),
+    closeClinicAndRollover: (targetDate?: string) =>
+      request('/doctors/me/close-and-rollover', { method: 'POST', body: JSON.stringify({ targetDate }) }),
     getClinic: (id: string) => request(`/doctors/${id}/clinic`),
     getRouteToClinic: (id: string, userLat: number, userLng: number) =>
       request(`/doctors/${id}/route?userLat=${userLat}&userLng=${userLng}`),

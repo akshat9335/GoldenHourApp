@@ -55,6 +55,10 @@ export class AppointmentService {
       throw new AppError(400, "DOCTOR_UNAVAILABLE", "Cannot book appointments with rejected doctors.");
     }
 
+    if (doctor.availability === "OFFLINE") {
+      throw new AppError(400, "CLINIC_CLOSED", "Doctor OPD is currently CLOSED. Booking and tokens open only when the doctor opens the clinic.");
+    }
+
     // Check slot duplicate for the same patient & doctor on the same date
     const isWalkIn = (data.timeSlot || "").toLowerCase().includes("walk-in");
     for (const appt of dataStore.appointments.values()) {
@@ -235,6 +239,48 @@ export class AppointmentService {
 
   public async cancelAppointment(appointmentId: string): Promise<Appointment> {
     return this.updateAppointmentStatus(appointmentId, "CANCELLED");
+  }
+
+  /**
+   * Shifts all unserved patients for today to tomorrow's priority queue.
+   */
+  public async rolloverUnservedAppointments(
+    doctorId: string,
+    targetDate?: string
+  ): Promise<{ rolledOverCount: number; targetDate: string }> {
+    const today = new Date().toISOString().split("T")[0];
+    const tomorrow =
+      targetDate || new Date(Date.now() + 86400000).toISOString().split("T")[0];
+
+    const todayAppts = await this.getDoctorAppointments(doctorId, today);
+    const queue = dataStore.queues.get(`${doctorId}_${today}`) || { servingToken: 0 };
+    const serving = queue.servingToken || 0;
+
+    let count = 0;
+    for (const appt of todayAppts) {
+      if (
+        (appt.status === "CONFIRMED" || appt.status === "BOOKED" || appt.status === "WAITING") &&
+        appt.tokenNumber > serving
+      ) {
+        count++;
+        appt.date = tomorrow;
+        appt.notes = (appt.notes ? `${appt.notes} · ` : "") + `[Priority Rollover from ${today}]`;
+        appt.updatedAt = new Date().toISOString();
+        dataStore.appointments.set(appt.appointmentId, appt);
+
+        if (firestore) {
+          try {
+            await firestore.collection("appointments").doc(appt.appointmentId).update({
+              date: tomorrow,
+              notes: appt.notes,
+              updatedAt: appt.updatedAt,
+            });
+          } catch {}
+        }
+      }
+    }
+
+    return { rolledOverCount: count, targetDate: tomorrow };
   }
 }
 

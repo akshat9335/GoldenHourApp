@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { doctorService } from "../services/doctor/doctor.service";
 import { clinicService } from "../services/doctor/clinic.service";
 import { travelService } from "../services/doctor/travel.service";
+import { appointmentService } from "../services/doctor/appointment.service";
 import { sendSuccess } from "../utils/response";
 import { AppError } from "../utils/AppError";
 import { validateCoordinates } from "../utils/geoutils";
@@ -83,6 +84,31 @@ export class DoctorController {
       const doctor = await doctorService.getDoctorByUserId(userId);
       const updated = await doctorService.setAvailability(doctor.doctorId, availability as DoctorAvailability);
       sendSuccess(res, updated, `Availability updated to ${availability}`);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public async closeClinicAndRollover(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = req.user?.uid;
+      const { targetDate } = req.body;
+      if (!userId) {
+        throw new AppError(401, "UNAUTHORIZED", "Authentication required.");
+      }
+
+      const doctor = await doctorService.getDoctorByUserId(userId);
+      // 1. Set doctor availability to OFFLINE
+      await doctorService.setAvailability(doctor.doctorId, "OFFLINE");
+
+      // 2. Rollover unserved patients to target date (tomorrow)
+      const result = await appointmentService.rolloverUnservedAppointments(doctor.doctorId, targetDate);
+
+      sendSuccess(
+        res,
+        result,
+        `Clinic closed. ${result.rolledOverCount} unserved patients shifted to ${result.targetDate} Priority Queue.`
+      );
     } catch (err) {
       next(err);
     }

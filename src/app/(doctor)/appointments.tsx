@@ -8,7 +8,7 @@ import { APPOINTMENTS } from '@/constants/doctorData';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
 
-const TABS = ['Today', 'Upcoming', 'Completed', 'Cancelled'] as const;
+const TABS = ['Today Queue', 'Upcoming', 'Completed', 'Cancelled'] as const;
 
 const tabColor: Record<string, 'blue' | 'success' | 'grey'> = {
   upcoming: 'blue',
@@ -17,7 +17,7 @@ const tabColor: Record<string, 'blue' | 'success' | 'grey'> = {
 };
 
 export default function DoctorAppointments() {
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Today');
+  const [tab, setTab] = useState<(typeof TABS)[number]>('Today Queue');
   const userProfile = useAppStore((s) => s.userProfile);
   const [appointmentsList, setAppointmentsList] = useState<any[]>([]);
 
@@ -73,8 +73,8 @@ export default function DoctorAppointments() {
   }, [userProfile?.uid]);
 
   const list = appointmentsList.filter((a) => {
-    if (tab === 'Today') return a.date === 'Today';
-    if (tab === 'Upcoming') return a.status === 'upcoming';
+    if (tab === 'Today Queue') return a.date === 'Today' && a.status === 'upcoming';
+    if (tab === 'Upcoming') return a.status === 'upcoming' && a.date !== 'Today';
     if (tab === 'Completed') return a.status === 'completed';
     return a.status === 'cancelled';
   });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, DoctorNav, HTitle, LabelEyebrow, Button } from '@/components/ui';
@@ -13,6 +13,8 @@ export default function DoctorDashboard() {
   const advanceServingToken = useAppStore((s) => s.advanceServingToken);
 
   const [doctorDetails, setDoctorDetails] = useState<any>(null);
+  const [isClinicOpen, setIsClinicOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState<'waiting' | 'completed'>('waiting');
   const doctorName = doctorDetails?.name || userProfile?.doctorName || userProfile?.name || 'Dr. Medical Practitioner';
 
   const normalizeDocId = (raw?: string) => {
@@ -72,6 +74,9 @@ export default function DoctorDashboard() {
         const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
         if (mounted && doc && (doc.doctorId || doc.name)) {
           setDoctorDetails(doc);
+          if (doc.availability) {
+            setIsClinicOpen(doc.availability !== 'OFFLINE');
+          }
           loadDoctorData(doc.doctorId || doctorId);
         } else {
           loadDoctorData(doctorId);
@@ -90,6 +95,43 @@ export default function DoctorDashboard() {
       clearInterval(pollTimer);
     };
   }, [userProfile?.uid, doctorId]);
+
+  const handleToggleClinic = async () => {
+    if (isClinicOpen) {
+      const unservedCount = activeAppointments.filter((a) => a.token > servingToken).length;
+      Alert.alert(
+        'Close OPD / End Day',
+        unservedCount > 0
+          ? `You have ${unservedCount} unserved patient(s) waiting in queue. Closing the clinic will automatically roll them over to tomorrow's priority queue. Proceed to close?`
+          : 'Are you sure you want to close OPD and pause new patient token bookings for today?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Close OPD & Rollover',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await api.doctors.closeClinicAndRollover();
+                setIsClinicOpen(false);
+                Alert.alert('OPD Closed', 'Clinic is closed. Unserved patients have been rolled over to tomorrow\'s priority queue.');
+              } catch (err: any) {
+                Alert.alert('Notice', 'Clinic closed for new token bookings.');
+                setIsClinicOpen(false);
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      try {
+        await api.doctors.updateAvailability('AVAILABLE');
+        setIsClinicOpen(true);
+        Alert.alert('OPD Opened', 'Clinic is now OPEN. Patients can book tokens and join the queue.');
+      } catch {
+        setIsClinicOpen(true);
+      }
+    }
+  };
 
   const handleCallNext = async () => {
     try {
@@ -144,13 +186,16 @@ export default function DoctorDashboard() {
   ];
 
   const todaysAppointments = appointments.length > 0 ? appointments : SEED_APPOINTMENTS;
-  const completedToday = todaysAppointments.filter((a) => a.status === 'completed' || (servingToken > 0 && a.token < servingToken)).length;
+  const completedAppointments = todaysAppointments.filter(
+    (a) => a.status === 'completed' || (servingToken > 0 && a.token < servingToken)
+  );
   const activeAppointments = todaysAppointments.filter((a) => {
     const isDone = a.status === 'completed' || (servingToken > 0 && a.token < servingToken);
     return !isDone && a.status !== 'cancelled';
   });
   const waitingToday = activeAppointments.filter((a) => servingToken === 0 || a.token > servingToken).length;
   const totalToday = Math.max(todaysAppointments.length, servingToken);
+  const completedToday = completedAppointments.length;
   const remainingToday = activeAppointments.length;
 
   return (
@@ -169,6 +214,29 @@ export default function DoctorDashboard() {
               <Icon name="bell" />
             </Pressable>
           </View>
+        </View>
+
+        {/* OPD Clinic Status Control */}
+        <View style={styles.clinicStatusBar}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+            <View style={[styles.statusDot, { backgroundColor: isClinicOpen ? colors.success : colors.red }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.clinicStatusTitle}>
+                OPD STATUS: {isClinicOpen ? 'OPEN' : 'CLOSED'}
+              </Text>
+              <Text style={styles.clinicStatusSubtitle}>
+                {isClinicOpen ? 'Accepting patient bookings & tokens' : 'Token booking paused · Rolled over'}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.toggleClinicBtn, { backgroundColor: isClinicOpen ? '#FEE2E2' : '#DCFCE7' }]}
+            onPress={handleToggleClinic}
+          >
+            <Text style={[styles.toggleClinicText, { color: isClinicOpen ? colors.red : colors.success }]}>
+              {isClinicOpen ? 'Close OPD' : 'Open OPD'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <LabelEyebrow>TODAY'S SUMMARY</LabelEyebrow>
@@ -202,35 +270,72 @@ export default function DoctorDashboard() {
           </View>
         </Card>
 
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <LabelEyebrow>ACTIVE QUEUE ({activeAppointments.length})</LabelEyebrow>
-          <Pressable onPress={() => router.push('/(doctor)/appointments')}>
-            <Text style={{ fontSize: 11.5, color: colors.blue, fontWeight: '700' }}>History ({completedToday} Done) ›</Text>
-          </Pressable>
+        {/* Tab switch between Waiting Queue and Completed */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'waiting' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('waiting')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'waiting' && styles.tabButtonTextActive]}>
+              🕒 Waiting Queue ({activeAppointments.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'completed' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('completed')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'completed' && styles.tabButtonTextActive]}>
+              ✅ Completed ({completedAppointments.length})
+            </Text>
+          </TouchableOpacity>
         </View>
-        <Card style={{ padding: activeAppointments.length === 0 ? 16 : 4 }}>
-          {activeAppointments.length === 0 ? (
-            <View style={{ paddingVertical: 14, alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: colors.success }}>✓ All active consultations completed</Text>
-              <Text style={{ fontSize: 11.5, color: colors.inkFaint, marginTop: 4 }}>Completed records are saved in Appointments history.</Text>
-            </View>
-          ) : (
-            activeAppointments.map((a) => {
-              const isServing = a.token === servingToken;
-              return (
+
+        {activeTab === 'waiting' ? (
+          <Card style={{ padding: activeAppointments.length === 0 ? 16 : 4 }}>
+            {activeAppointments.length === 0 ? (
+              <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.success }}>✓ No patients waiting right now</Text>
+                <Text style={{ fontSize: 11.5, color: colors.inkFaint, marginTop: 4 }}>
+                  {isClinicOpen ? 'New tokens booked by patients will appear here.' : 'Clinic is currently closed.'}
+                </Text>
+              </View>
+            ) : (
+              activeAppointments.map((a) => {
+                const isServing = a.token === servingToken;
+                return (
+                  <View key={a.id} style={styles.aptRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.aptName}>{a.patientName}</Text>
+                      <Text style={styles.aptSub}>Token #{a.token} · {a.time}</Text>
+                    </View>
+                    <Pill color={isServing ? 'amber' : 'blue'}>
+                      {isServing ? 'NOW SERVING' : 'WAITING'}
+                    </Pill>
+                  </View>
+                );
+              })
+            )}
+          </Card>
+        ) : (
+          <Card style={{ padding: completedAppointments.length === 0 ? 16 : 4 }}>
+            {completedAppointments.length === 0 ? (
+              <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.inkFaint }}>No consultations completed yet today</Text>
+                <Text style={{ fontSize: 11.5, color: colors.inkFaint, marginTop: 4 }}>Patients marked completed will show here separately.</Text>
+              </View>
+            ) : (
+              completedAppointments.map((a) => (
                 <View key={a.id} style={styles.aptRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.aptName}>{a.patientName}</Text>
                     <Text style={styles.aptSub}>Token #{a.token} · {a.time}</Text>
                   </View>
-                  <Pill color={isServing ? 'amber' : 'blue'}>
-                    {isServing ? 'NOW SERVING' : 'WAITING'}
-                  </Pill>
+                  <Pill color="success">COMPLETED</Pill>
                 </View>
-              );
-            })
-          )}
-        </Card>
+              ))
+            )}
+          </Card>
+        )}
       </Screen>
       <DoctorNav active="/(doctor)/dashboard" />
     </View>
@@ -238,11 +343,28 @@ export default function DoctorDashboard() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   greeting: { fontSize: 11.5, color: colors.inkFaint },
   bellBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   switchRoleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: colors.line },
   switchRoleText: { fontSize: 11.5, fontWeight: '700', color: colors.inkSoft },
+  clinicStatusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    marginBottom: 16,
+  },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  clinicStatusTitle: { fontSize: 12.5, fontWeight: '800', color: colors.ink },
+  clinicStatusSubtitle: { fontSize: 10.5, color: colors.inkFaint, marginTop: 1 },
+  toggleClinicBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  toggleClinicText: { fontSize: 11.5, fontWeight: '800' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
   stat: { width: '47%', padding: 12, alignItems: 'center' },
   statNum: { fontWeight: '800', fontSize: 18, color: colors.ink },
@@ -252,7 +374,37 @@ const styles = StyleSheet.create({
   tokenDivider: { width: 1, height: 44, backgroundColor: colors.line },
   tokenNum: { fontSize: 30, fontWeight: '800', color: colors.red, marginTop: 4 },
   tokenSub: { fontSize: 10.5, color: colors.inkFaint, marginTop: 2 },
-  aptRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 10,
+    gap: 4,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  tabButtonActive: {
+    backgroundColor: '#fff',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  tabButtonText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: colors.inkFaint,
+  },
+  tabButtonTextActive: {
+    color: colors.ink,
+  },
+  aptRow: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
   aptName: { fontWeight: '700', fontSize: 13, color: colors.ink },
   aptSub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
 });
