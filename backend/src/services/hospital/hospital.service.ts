@@ -599,6 +599,15 @@ export async function registerHospital(uid: string, data: HospitalData) {
 export async function getHospitalProfile(uid: string) {
   const hospital = await getHospitalByOwnerUid(uid);
 
+  if (firestore && hospital.docId) {
+    const nowIso = new Date().toISOString();
+    void firestore.collection("hospitals").doc(hospital.docId).set({
+      lastActive: nowIso,
+      isOnline: true,
+      lastHeartbeat: nowIso,
+    }, { merge: true });
+  }
+
   return hospital.data;
 }
 
@@ -823,6 +832,15 @@ export async function getHospitalRequests(uid: string) {
 
   const hospital = await getHospitalByOwnerUid(uid);
   ensureHospitalVerified(hospital.data);
+
+  if (firestore && hospital.docId) {
+    const nowIso = new Date().toISOString();
+    void firestore.collection("hospitals").doc(hospital.docId).set({
+      lastActive: nowIso,
+      isOnline: true,
+      lastHeartbeat: nowIso,
+    }, { merge: true });
+  }
 
   const candidateIds = Array.from(
     new Set(
