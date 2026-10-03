@@ -8,13 +8,24 @@ import LanguageSelector from '@/components/LanguageSelector';
 import { useAppStore } from '@/store/useAppStore';
 import { authService } from '@/services/auth';
 
-const PHCS = [
+const COMMON_PHCS = [
   'Karchhana PHC',
   'Soraon PHC',
   'Chaka Sub-Centre',
   'Phulpur PHC',
   'Mau Aima PHC',
   'Jasra PHC',
+  'Shankargarh CHC',
+  'Bahria PHC',
+  'Koraon CHC',
+  'Naini Urban PHC',
+];
+
+const WORKER_ROLES = [
+  { key: 'ASHA', labelHi: '🌾 आशा कार्यकर्ता', labelMr: '🌾 आशा सेविका', labelEn: '🌾 ASHA Worker' },
+  { key: 'ANM', labelHi: '💉 एएनएम सेविका', labelMr: '💉 एएनएम सेविका', labelEn: '💉 ANM Nurse' },
+  { key: 'ASHA_SANGINI', labelHi: '👩‍⚕️ आशा संगिनी (पर्यवेक्षक)', labelMr: '👩‍⚕️ आशा संगिनी (पर्यवेक्षक)', labelEn: '👩‍⚕️ ASHA Sangini (Supervisor)' },
+  { key: 'OTHER', labelHi: '✏️ अन्य पदवी (Custom)', labelMr: '✏️ इतर पदनाम (Custom)', labelEn: '✏️ Other / Custom' },
 ];
 
 export default function AshaRegister() {
@@ -23,7 +34,6 @@ export default function AshaRegister() {
   const userProfile = useAppStore((s) => s.userProfile);
   const authToken = useAppStore((s) => s.authToken);
 
-
   const [googleAccount, setGoogleAccount] = useState<{ email: string; name?: string } | null>(
     authToken && userProfile?.email ? { email: userProfile.email, name: userProfile.name } : null
   );
@@ -31,9 +41,11 @@ export default function AshaRegister() {
   const [name, setName] = useState(userProfile?.name || '');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState(userProfile?.phone || '');
-  const [workerType, setWorkerType] = useState<'ASHA' | 'ANM'>('ASHA');
-  const [assignedPhc, setAssignedPhc] = useState(PHCS[0]);
-  const [village, setVillage] = useState('Karchhana Rural');
+  const [workerType, setWorkerType] = useState<string>('ASHA');
+  const [customRole, setCustomRole] = useState('');
+  const [assignedPhc, setAssignedPhc] = useState('');
+  const [village, setVillage] = useState('');
+  const [blockOrTehsil, setBlockOrTehsil] = useState('');
   const [regNumber, setRegNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,8 +66,13 @@ export default function AshaRegister() {
   };
 
   const handleSubmit = async () => {
-    if (!name.trim() || !phone.trim() || !regNumber.trim()) {
-      Alert.alert('Required Information', 'Please provide Worker Name, Contact Phone, and Government Registration Number.');
+    if (!name.trim() || !phone.trim() || !regNumber.trim() || !assignedPhc.trim() || !village.trim()) {
+      Alert.alert(
+        lang === 'hi' ? 'आवश्यक जानकारी अधूरी है' : 'Required Information',
+        lang === 'hi'
+          ? 'कृपया कार्यकर्ता का नाम, फोन, पंजीकरण संख्या, PHC/केंद्र और गाँव भरें।'
+          : 'Please provide Worker Name, Contact Phone, Worker Reg No., Assigned PHC, and Village.'
+      );
       return;
     }
 
@@ -82,15 +99,17 @@ export default function AshaRegister() {
       }
 
       const targetEmail = email.trim() || activeGoogleEmail || '';
+      const finalRole = workerType === 'OTHER' && customRole.trim() ? customRole.trim() : workerType;
 
       await authService.register({
         role: 'FRONTLINE_WORKER',
         name: name.trim(),
         email: targetEmail,
         phone: phone.trim(),
-        workerType,
-        assignedPhc,
+        workerType: finalRole,
+        assignedPhc: assignedPhc.trim(),
         village: village.trim(),
+        block: blockOrTehsil.trim() || undefined,
         regNumber: regNumber.trim(),
         licenseNumber: regNumber.trim(),
         verificationStatus: 'PENDING',
@@ -163,23 +182,31 @@ export default function AshaRegister() {
           </Text>
 
           <Text style={styles.fieldLabel}>
-            {lang === 'mr' ? 'भूमिका प्रकार' : lang === 'hi' ? 'कार्यकर्ता प्रकार' : 'WORKER ROLE TYPE'}
+            {lang === 'mr' ? 'भूमिका प्रकार' : lang === 'hi' ? 'कार्यकर्ता पद / प्रकार *' : 'WORKER ROLE TYPE *'}
           </Text>
           <View style={styles.chipsRow}>
-            {(['ASHA', 'ANM'] as const).map((wt) => (
+            {WORKER_ROLES.map((r) => (
               <TouchableOpacity
-                key={wt}
-                style={[styles.roleChip, workerType === wt && styles.roleChipActive]}
-                onPress={() => setWorkerType(wt)}
+                key={r.key}
+                style={[styles.roleChip, workerType === r.key && styles.roleChipActive]}
+                onPress={() => setWorkerType(r.key)}
               >
-                <Text style={[styles.roleChipText, workerType === wt && styles.roleChipTextActive]}>
-                  {wt === 'ASHA'
-                    ? (lang === 'mr' ? '🌾 आशा सेविका' : lang === 'hi' ? '🌾 आशा कार्यकर्ता' : '🌾 ASHA Worker')
-                    : (lang === 'mr' ? '💉 एएनएम सेविका' : lang === 'hi' ? '💉 एएनएम कार्यकर्ता' : '💉 ANM Nurse')}
+                <Text style={[styles.roleChipText, workerType === r.key && styles.roleChipTextActive]}>
+                  {lang === 'mr' ? r.labelMr : lang === 'hi' ? r.labelHi : r.labelEn}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
+
+          {workerType === 'OTHER' && (
+            <InputGroup label={lang === 'hi' ? 'अपनी पदवी / भूमिका लिखें *' : 'Specify Custom Role / Designation *'}>
+              <Input
+                value={customRole}
+                onChangeText={setCustomRole}
+                placeholder={lang === 'hi' ? 'उदा. आंगनवाड़ी कार्यकर्ता / कम्युनिटी हेल्थ ऑफिसर' : 'e.g. Anganwadi Worker / CHO'}
+              />
+            </InputGroup>
+          )}
 
           <InputGroup label={lang === 'mr' ? 'पूर्ण नाव *' : lang === 'hi' ? 'पूरा नाम *' : 'Full Name *'}>
             <Input value={name} onChangeText={setName} placeholder={lang === 'mr' ? 'उदा. सुनिता देवी' : 'e.g. Sunita Devi'} />
@@ -207,9 +234,19 @@ export default function AshaRegister() {
             {lang === 'mr' ? 'नेमणूक आणि क्षेत्र' : lang === 'hi' ? 'कार्यक्षेत्र एवं तैनाती' : 'POSTING & JURISDICTION'}
           </Text>
 
-          <Text style={styles.fieldLabel}>ASSIGNED PHC / SUB-CENTRE</Text>
+          <InputGroup label={lang === 'hi' ? 'प्राथमिक स्वास्थ्य केंद्र (PHC) / उप-केंद्र *' : 'Assigned PHC / Sub-Centre / CHC *'}>
+            <Input
+              value={assignedPhc}
+              onChangeText={setAssignedPhc}
+              placeholder={lang === 'hi' ? 'PHC/CHC का नाम टाइप करें या नीचे से चुनें' : 'Type PHC/CHC name or select below'}
+            />
+          </InputGroup>
+
+          <Text style={[styles.fieldLabel, { marginTop: 4, marginBottom: 8 }]}>
+            {lang === 'hi' ? 'त्वरित सुझाव (टैप करके भरें):' : 'Quick Suggestions (Tap to fill):'}
+          </Text>
           <View style={styles.chipsRow}>
-            {PHCS.map((phc) => (
+            {COMMON_PHCS.map((phc) => (
               <TouchableOpacity
                 key={phc}
                 style={[styles.phcChip, assignedPhc === phc && styles.phcChipActive]}
@@ -222,11 +259,19 @@ export default function AshaRegister() {
             ))}
           </View>
 
-          <InputGroup label="Assigned Village / Ward *">
+          <InputGroup label={lang === 'hi' ? 'आवंटित गाँव / क्षेत्र / वार्ड *' : 'Assigned Village / Area / Ward *'}>
             <Input
               value={village}
               onChangeText={setVillage}
-              placeholder="e.g. Karchhana Rural, Ward 3"
+              placeholder={lang === 'hi' ? 'उदा. करछना देहात, वार्ड 3' : 'e.g. Karchhana Rural, Ward 3'}
+            />
+          </InputGroup>
+
+          <InputGroup label={lang === 'hi' ? 'ब्लॉक / तहसील (वैकल्पिक)' : 'Block / Tehsil (Optional)'}>
+            <Input
+              value={blockOrTehsil}
+              onChangeText={setBlockOrTehsil}
+              placeholder={lang === 'hi' ? 'उदा. करछना / चाका / सोरांव' : 'e.g. Karchhana / Chaka / Soraon'}
             />
           </InputGroup>
         </Card>
