@@ -142,9 +142,25 @@ export default function DoctorQueue() {
     return () => clearInterval(timer);
   }, [doctorId]);
 
-  const currentAppt = appointments.find(
-    (a) => (a.tokenNumber || a.token) === servingToken && (a.status || '').toUpperCase() !== 'CANCELLED'
+  // Prioritize active (non-completed, non-cancelled) appointment matching servingToken
+  const activeAtToken = appointments.find(
+    (a) =>
+      (a.tokenNumber || a.token) === servingToken &&
+      (a.status || '').toUpperCase() !== 'CANCELLED' &&
+      (a.status || '').toUpperCase() !== 'COMPLETED'
   );
+
+  // If servingToken is 0 or no active appointment matches, check latest non-cancelled
+  const currentAppt =
+    servingToken > 0
+      ? (activeAtToken ||
+         appointments.slice().reverse().find(
+           (a) =>
+             (a.tokenNumber || a.token) === servingToken &&
+             (a.status || '').toUpperCase() !== 'CANCELLED'
+         ))
+      : undefined;
+
   const currentPatientName =
     currentAppt?.patientName ||
     (servingToken > 0 ? (appointments.length > 0 ? `Token #${servingToken} (Unassigned)` : 'No Active Patient') : 'No Active Patient');
@@ -315,12 +331,7 @@ export default function DoctorQueue() {
     const unservedCount = waitingAppointments.length;
     const applyResetState = () => {
       useAppStore.setState({ servingToken: 0 });
-      setAppointments((prev) =>
-        prev.map((a) => {
-          const s = (a.status || '').toUpperCase();
-          return s === 'COMPLETED' ? a : { ...a, status: 'CANCELLED' };
-        })
-      );
+      setAppointments([]);
       fetchQueueData();
     };
 
@@ -396,7 +407,33 @@ export default function DoctorQueue() {
             <Text style={styles.slotText}>Slot: {currentAppt.timeSlot} · {currentAppt.notes || 'General OPD'}</Text>
           )}
 
-          {currentStatus === 'COMPLETED' ? (
+          {servingToken === 0 ? (
+            <View style={{ marginTop: 12 }}>
+              <View style={{ paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#f3f4f6', borderRadius: 8, marginBottom: 10 }}>
+                <Text style={{ color: colors.inkFaint, fontWeight: '700', fontSize: 13 }}>
+                  OPD Queue is Idle (Token #0)
+                </Text>
+                {waitingAppointments.length > 0 ? (
+                  <Text style={{ color: colors.ink, fontWeight: '600', fontSize: 12, marginTop: 4 }}>
+                    Next In Line: {waitingAppointments[0].patientName} (Token #{waitingAppointments[0].tokenNumber || waitingAppointments[0].token})
+                  </Text>
+                ) : (
+                  <Text style={{ color: colors.inkFaint, fontSize: 11, marginTop: 4 }}>
+                    No patients currently waiting. Waiting list will refresh automatically.
+                  </Text>
+                )}
+              </View>
+              <Button
+                title={
+                  waitingAppointments.length > 0
+                    ? `Call Next Patient › (${waitingAppointments[0].patientName})`
+                    : "Call Next Patient / Walk-In ›"
+                }
+                style={{ backgroundColor: colors.red }}
+                onPress={handleNext}
+              />
+            </View>
+          ) : currentStatus === 'COMPLETED' ? (
             <View style={{ marginTop: 12 }}>
               <View style={{ paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.successBg, borderRadius: 8, marginBottom: 10 }}>
                 <Text style={{ color: colors.success, fontWeight: '700', fontSize: 13 }}>✓ Consultation Completed & Prescription Saved</Text>

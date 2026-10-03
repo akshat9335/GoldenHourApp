@@ -160,9 +160,7 @@ export default function DoctorDashboard() {
     const unservedCount = activeAppointments.filter((a) => a.token > servingToken).length;
     const applyResetState = () => {
       useAppStore.setState({ servingToken: 0 });
-      setAppointments((prev) =>
-        prev.map((a) => (a.status === 'completed' ? a : { ...a, status: 'cancelled' }))
-      );
+      setAppointments([]);
       loadDoctorData(doctorId);
     };
 
@@ -224,14 +222,13 @@ export default function DoctorDashboard() {
 
   const todaysAppointments = appointments;
   const completedAppointments = todaysAppointments.filter(
-    (a) => a.status === 'completed' || (servingToken > 0 && a.token < servingToken)
+    (a) => a.status === 'completed'
   );
   const activeAppointments = todaysAppointments.filter((a) => {
-    const isDone = a.status === 'completed' || (servingToken > 0 && a.token < servingToken);
-    return !isDone && a.status !== 'cancelled';
+    return a.status !== 'completed' && a.status !== 'cancelled';
   });
   const waitingToday = activeAppointments.filter((a) => servingToken === 0 || a.token > servingToken).length;
-  const totalToday = servingToken > 0 ? Math.max(todaysAppointments.length, servingToken) : todaysAppointments.length;
+  const totalToday = todaysAppointments.filter((a) => a.status !== 'cancelled').length;
   const completedToday = completedAppointments.length;
   const remainingToday = activeAppointments.length;
 
@@ -315,7 +312,9 @@ export default function DoctorDashboard() {
               </LabelEyebrow>
               <Text style={styles.tokenNum}>{servingToken}</Text>
               <Text style={styles.tokenSub}>
-                {lang === 'mr' ? 'रुग्ण #' : lang === 'hi' ? 'मरीज #' : 'Patient #'}{servingToken}
+                {servingToken === 0
+                  ? (lang === 'mr' ? 'कोणीही नाही' : lang === 'hi' ? 'कोई मरीज नहीं' : 'No Active Patient')
+                  : `${lang === 'mr' ? 'रुग्ण #' : lang === 'hi' ? 'मरीज #' : 'Patient #'}${servingToken}`}
               </Text>
             </View>
             <View style={styles.tokenDivider} />
@@ -323,9 +322,13 @@ export default function DoctorDashboard() {
               <LabelEyebrow>
                 {lang === 'mr' ? 'पुढील रुग्ण' : lang === 'hi' ? 'अगला मरीज' : 'NEXT PATIENT'}
               </LabelEyebrow>
-              <Text style={styles.tokenNum}>{servingToken + 1}</Text>
+              <Text style={styles.tokenNum}>
+                {waitingToday > 0 ? (activeAppointments[0]?.token || servingToken + 1) : (servingToken > 0 ? servingToken + 1 : 0)}
+              </Text>
               <Text style={styles.tokenSub}>
-                {lang === 'mr' ? 'टोकन #' : lang === 'hi' ? 'टोकन #' : 'Token #'}{servingToken + 1}
+                {waitingToday > 0
+                  ? `${lang === 'mr' ? 'टोकन #' : lang === 'hi' ? 'टोकन #' : 'Token #'}${activeAppointments[0]?.token || servingToken + 1}`
+                  : (lang === 'mr' ? 'रांग रिकामी' : lang === 'hi' ? 'कोई कतार नहीं' : 'No Queue')}
               </Text>
             </View>
           </View>

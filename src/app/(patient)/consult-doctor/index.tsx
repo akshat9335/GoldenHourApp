@@ -367,9 +367,13 @@ export default function ConsultDoctor() {
 
                 {d.status !== 'closed' && (
                   <View style={styles.queueInfo}>
-                    <Text style={styles.queueText}>Now Serving: {d.servingToken}</Text>
-                    <Text style={styles.queueText}>Current Queue: {d.currentToken}</Text>
-                    <Text style={styles.waitText}>{d.currentToken - d.servingToken} patients ahead · ~{d.estimatedWaitMin} min wait</Text>
+                    <Text style={styles.queueText}>Now Serving: {d.servingToken > 0 ? `Token #${d.servingToken}` : '0 (Queue Idle)'}</Text>
+                    <Text style={styles.queueText}>Current Queue: {d.queueLength > 0 ? `${d.queueLength} waiting` : '0 waiting'}</Text>
+                    <Text style={styles.waitText}>
+                      {d.queueLength === 0
+                        ? '🟢 Direct consultation available · 0 min wait'
+                        : `${d.queueLength} patient(s) ahead · ~${d.estimatedWaitMin} min wait`}
+                    </Text>
                   </View>
                 )}
 

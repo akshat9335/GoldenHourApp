@@ -107,18 +107,22 @@ export class AppointmentService {
 
     dataStore.appointments.set(appointmentId, newAppointment);
 
-    // Update doctor's live queue counters so doctor console and searches update immediately
+    // Update doctor's live queue counters across all aliases so doctor console and searches update immediately
     const queue = queueService.getOrCreateQueue(data.doctorId, data.date);
-    if (doctor) {
-      doctor.queueLength = queue.waitingCount;
-      doctor.servingToken = queue.servingToken;
-      doctor.estimatedWaitMinutes = queue.waitingCount * 8;
-      dataStore.doctors.set(data.doctorId, doctor);
+    const aliases = queueService.getDoctorAliases(data.doctorId);
+    for (const dId of aliases) {
+      const d = dataStore.doctors.get(dId);
+      if (d) {
+        d.queueLength = queue.waitingCount;
+        d.servingToken = queue.servingToken;
+        d.estimatedWaitMinutes = queue.waitingCount * 8;
+        dataStore.doctors.set(dId, d);
+      }
       if (firestore && process.env.NODE_ENV !== "test") {
-        firestore.collection("doctors").doc(data.doctorId).set({
-          queueLength: doctor.queueLength,
-          servingToken: doctor.servingToken,
-          estimatedWaitMinutes: doctor.estimatedWaitMinutes,
+        firestore.collection("doctors").doc(dId).set({
+          queueLength: queue.waitingCount,
+          servingToken: queue.servingToken,
+          estimatedWaitMinutes: queue.waitingCount * 8,
         }, { merge: true }).catch(() => {});
       }
     }
@@ -174,8 +178,8 @@ export class AppointmentService {
     return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
-  public async getDoctorAppointments(doctorId: string, date?: string): Promise<Appointment[]> {
-    const docIds = Array.from(new Set([doctorId, doctorId.replace(/^doc-/, ""), `doc-${doctorId}`]));
+  public async getDoctorAppointments(doctorId: string, date?: string, includeArchived = false): Promise<Appointment[]> {
+    const docIds = queueService.getDoctorAliases(doctorId);
     if (firestore) {
       try {
         let q: FirebaseFirestore.Query = firestore.collection("appointments").where("doctorId", "in", docIds);
@@ -195,6 +199,9 @@ export class AppointmentService {
     const results: Appointment[] = [];
     for (const appt of dataStore.appointments.values()) {
       if (docIds.includes(appt.doctorId) && (!date || appt.date === date)) {
+        if (!includeArchived && appt.isArchived) {
+          continue;
+        }
         results.push(appt);
       }
     }

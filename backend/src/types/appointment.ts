@@ -17,6 +17,7 @@ export interface Appointment {
   timeSlot: string; // e.g. "17:00"
   tokenNumber: number;
   status: AppointmentStatus;
+  isArchived?: boolean;
   notes?: string;
   createdAt: string;
   updatedAt: string;
