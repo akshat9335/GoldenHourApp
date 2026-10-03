@@ -225,6 +225,7 @@ export async function rankCandidateHospitalsForLocation(
       const hData = hDoc.data();
       const vStatus = String(hData.verificationStatus || "").toUpperCase();
       if (vStatus === "REJECTED") continue;
+      if (!hData.name && !hData.hospitalName) continue;
 
       const hLoc = hData.location || {
         latitude: hData.latitude || 25.4538,
