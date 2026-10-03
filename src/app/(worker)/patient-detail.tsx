@@ -16,6 +16,12 @@ import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { api, getApiBaseUrl } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
+
+const getPatientsKey = (uid?: string) =>
+  uid && !uid.startsWith('asha-demo')
+    ? `@golden_hour_community_patients_${uid}`
+    : '@golden_hour_community_patients_demo';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const VISITS_KEY = '@golden_hour_community_visits';
@@ -83,7 +89,13 @@ export default function PatientDetailScreen() {
     try {
       setLoading(true);
       // 1. Try local cache
-      const rawPatients = await AsyncStorage.getItem(PATIENTS_KEY);
+      const userProfile = useAppStore.getState().userProfile;
+      const workerUid = userProfile?.uid;
+      const scopedKey = getPatientsKey(workerUid);
+      let rawPatients = await AsyncStorage.getItem(scopedKey);
+      if (!rawPatients) {
+        rawPatients = await AsyncStorage.getItem(PATIENTS_KEY);
+      }
       if (rawPatients) {
         const list: CommunityPatient[] = JSON.parse(rawPatients);
         const found = list.find((p) => p.id === patientId);
@@ -129,7 +141,13 @@ export default function PatientDetailScreen() {
         {
           text: lang === 'hi' ? 'एसओएस भेजें' : 'Trigger SOS',
           style: 'destructive',
-          onPress: () => router.push('/(patient)/emergency/start' as any),
+          onPress: () => {
+            if (patient) {
+              const notes = `ASHA Emergency for Patient: ${patient.name}, ${patient.age}y/${patient.gender}, Village: ${patient.villageOrArea}${patient.knownConditions?.length ? `, Conditions: ${patient.knownConditions.join(', ')}` : ''}`;
+              useAppStore.getState().setDescription(notes);
+            }
+            router.push('/(patient)/emergency/start' as any);
+          },
         },
       ]
     );

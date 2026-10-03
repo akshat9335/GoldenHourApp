@@ -32,7 +32,18 @@ export default function Completed() {
 
   const handleBackHome = () => {
     resetEmergencySession();
-    router.replace('/(patient)/home');
+    const role = useAppStore.getState().role;
+    if (role === 'FRONTLINE_WORKER') {
+      router.replace('/(worker)/dashboard' as any);
+    } else if (role === 'DOCTOR') {
+      router.replace('/(doctor)/dashboard' as any);
+    } else if (role === 'AMBULANCE_DRIVER' || role === 'ambulance') {
+      router.replace('/(ambulance)/dashboard' as any);
+    } else if (role === 'HOSPITAL' || role === 'hospital') {
+      router.replace('/(hospital)/dashboard' as any);
+    } else {
+      router.replace('/(patient)/home');
+    }
   };
 
   return (

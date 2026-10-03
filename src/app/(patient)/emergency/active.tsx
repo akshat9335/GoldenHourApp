@@ -66,7 +66,18 @@ export default function Active() {
         useAppStore.getState().setTrustScore(me.trustScore);
       }
     } catch {}
-    router.replace('/(patient)/home');
+    const role = useAppStore.getState().role;
+    if (role === 'FRONTLINE_WORKER') {
+      router.replace('/(worker)/dashboard' as any);
+    } else if (role === 'DOCTOR') {
+      router.replace('/(doctor)/dashboard' as any);
+    } else if (role === 'AMBULANCE_DRIVER' || role === 'ambulance') {
+      router.replace('/(ambulance)/dashboard' as any);
+    } else if (role === 'HOSPITAL' || role === 'hospital') {
+      router.replace('/(hospital)/dashboard' as any);
+    } else {
+      router.replace('/(patient)/home');
+    }
   };
 
   const handleCancelEmergency = () => {
@@ -107,7 +118,18 @@ export default function Active() {
           if (statusKey === 'CANCELLED' || emg.status === 'CANCELLED') {
             if (timer) clearInterval(timer);
             resetEmergencySession();
-            router.replace('/(patient)/home');
+            const role = useAppStore.getState().role;
+            if (role === 'FRONTLINE_WORKER') {
+              router.replace('/(worker)/dashboard' as any);
+            } else if (role === 'DOCTOR') {
+              router.replace('/(doctor)/dashboard' as any);
+            } else if (role === 'AMBULANCE_DRIVER' || role === 'ambulance') {
+              router.replace('/(ambulance)/dashboard' as any);
+            } else if (role === 'HOSPITAL' || role === 'hospital') {
+              router.replace('/(hospital)/dashboard' as any);
+            } else {
+              router.replace('/(patient)/home');
+            }
             return;
           }
           if (statusKey === 'COMPLETED' || emg.status === 'COMPLETED' || emg.tripStatus === 'COMPLETED') {

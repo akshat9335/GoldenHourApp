@@ -17,6 +17,7 @@ import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { enqueueOfflineAction } from '@/services/offlineSync';
 import { api, getApiBaseUrl } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const VISITS_KEY = '@golden_hour_community_visits';
@@ -93,8 +94,17 @@ export default function VisitScreen() {
   });
 
   useEffect(() => {
-    AsyncStorage.getItem(PATIENTS_KEY).then((raw) => {
-      if (raw) setPatients(JSON.parse(raw));
+    const userProfile = useAppStore.getState().userProfile;
+    const workerUid = userProfile?.uid;
+    const key = workerUid && !workerUid.startsWith('asha-demo')
+      ? `@golden_hour_community_patients_${workerUid}`
+      : '@golden_hour_community_patients_demo';
+    AsyncStorage.getItem(key).then(async (raw) => {
+      let finalRaw = raw;
+      if (!finalRaw) {
+        finalRaw = await AsyncStorage.getItem(PATIENTS_KEY);
+      }
+      if (finalRaw) setPatients(JSON.parse(finalRaw));
     });
   }, []);
 
@@ -107,11 +117,16 @@ export default function VisitScreen() {
     }
     setIsSaving(true);
 
+    const userProfile = useAppStore.getState().userProfile;
+    const workerUid = userProfile?.uid || 'asha-worker-prayagraj';
+    const workerName = userProfile?.name || 'Sunita Verma (ASHA Sangini)';
+
     const visit = {
       id: `visit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       patientId: selectedPatientId,
       patientName: selectedPatient?.name || 'Unknown',
-      workerUid: 'asha-worker-local',
+      workerUid,
+      workerName,
       vitals: {
         bloodPressure: bp,
         bloodSugar: bloodSugar ? parseFloat(bloodSugar) : undefined,
@@ -132,6 +147,21 @@ export default function VisitScreen() {
       const raw = await AsyncStorage.getItem(VISITS_KEY);
       const existing = raw ? JSON.parse(raw) : [];
       await AsyncStorage.setItem(VISITS_KEY, JSON.stringify([visit, ...existing]));
+
+      // Update patient's lastVisitDate in worker storage
+      try {
+        const key = workerUid && !workerUid.startsWith('asha-demo')
+          ? `@golden_hour_community_patients_${workerUid}`
+          : '@golden_hour_community_patients_demo';
+        const rawP = await AsyncStorage.getItem(key);
+        if (rawP) {
+          const pList = JSON.parse(rawP);
+          const updated = pList.map((p: any) =>
+            p.id === selectedPatientId ? { ...p, lastVisitDate: new Date().toISOString() } : p
+          );
+          await AsyncStorage.setItem(key, JSON.stringify(updated));
+        }
+      } catch {}
 
       // Try live sync, else queue
       const netState = await NetInfo.fetch();

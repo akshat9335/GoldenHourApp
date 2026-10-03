@@ -89,7 +89,15 @@ export default function CreateReferralScreen() {
 
   const loadPatients = async () => {
     try {
-      const raw = await AsyncStorage.getItem(PATIENTS_KEY);
+      const userProfile = useAppStore.getState().userProfile;
+      const workerUid = userProfile?.uid;
+      const key = workerUid && !workerUid.startsWith('asha-demo')
+        ? `@golden_hour_community_patients_${workerUid}`
+        : '@golden_hour_community_patients_demo';
+      let raw = await AsyncStorage.getItem(key);
+      if (!raw) {
+        raw = await AsyncStorage.getItem(PATIENTS_KEY);
+      }
       if (raw) {
         const list = JSON.parse(raw);
         setPatients(list);
