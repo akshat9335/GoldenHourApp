@@ -522,4 +522,11 @@ export const authService = {
     store.setRole('PATIENT');
     store.setRoles(['PATIENT']);
   },
+
+  /**
+   * Alias for logout.
+   */
+  async signOut(): Promise<void> {
+    return this.logout();
+  },
 };

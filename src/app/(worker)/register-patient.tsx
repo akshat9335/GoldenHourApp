@@ -18,8 +18,12 @@ import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { enqueueOfflineAction } from '@/services/offlineSync';
 import { api, getApiBaseUrl } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 
-const PATIENTS_KEY = '@golden_hour_community_patients';
+const getPatientsKey = (uid?: string) =>
+  uid && !uid.startsWith('asha-demo')
+    ? `@golden_hour_community_patients_${uid}`
+    : '@golden_hour_community_patients_demo';
 
 type Gender = 'MALE' | 'FEMALE' | 'OTHER';
 
@@ -51,11 +55,16 @@ export default function RegisterPatient() {
     if (diabetes) knownConditions.push('Diabetes');
     if (heartDisease) knownConditions.push('Heart Disease');
 
+    const userProfile = useAppStore.getState().userProfile;
+    const workerUid = userProfile?.uid || 'asha-worker-prayagraj';
+    const workerName = userProfile?.name || 'Sunita Verma (ASHA Sangini)';
+    const storageKey = getPatientsKey(workerUid);
+
     const patient = {
       id: `pat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       crisisId: `CR-${Date.now().toString(36).toUpperCase()}`,
-      workerUid: 'asha-worker-local',
-      workerName: 'ASHA Worker',
+      workerUid,
+      workerName,
       name: name.trim(),
       age: parseInt(age || '0', 10),
       gender,
@@ -70,10 +79,11 @@ export default function RegisterPatient() {
     };
 
     try {
-      // Save locally first (offline-first)
-      const raw = await AsyncStorage.getItem(PATIENTS_KEY);
+      // Save locally first (offline-first, prepend to top of list)
+      const raw = await AsyncStorage.getItem(storageKey);
       const existing = raw ? JSON.parse(raw) : [];
-      await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify([...existing, patient]));
+      await AsyncStorage.setItem(storageKey, JSON.stringify([patient, ...existing]));
+      await AsyncStorage.setItem('@golden_hour_community_patients', JSON.stringify([patient, ...existing]));
 
       // Try to sync to backend, else queue it
       const netState = await NetInfo.fetch();

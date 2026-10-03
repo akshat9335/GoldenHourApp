@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
@@ -17,8 +17,14 @@ import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { processOfflineQueue, getPendingCount } from '@/services/offlineSync';
 import { api, getApiBaseUrl } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
+import { authService } from '@/services/auth';
 
-const PATIENTS_KEY = '@golden_hour_community_patients';
+const getPatientsKey = (uid?: string) =>
+  uid && !uid.startsWith('asha-demo')
+    ? `@golden_hour_community_patients_${uid}`
+    : '@golden_hour_community_patients_demo';
+
 const REFERRALS_KEY = '@golden_hour_community_referrals';
 const VISITS_KEY = '@golden_hour_community_visits';
 
@@ -41,6 +47,10 @@ export default function WorkerDashboard() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
 
+  const userProfile = useAppStore((s) => s.userProfile);
+  const workerUid = userProfile?.uid;
+  const isDemoMode = !workerUid || workerUid === 'asha-demo-1' || workerUid.startsWith('asha-demo');
+
   const [patients, setPatients] = useState<CommunityPatient[]>([]);
   const [search, setSearch] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
@@ -50,25 +60,20 @@ export default function WorkerDashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    loadPatients();
-    loadPendingCount();
-    loadReferralsCount();
-    loadVisitsCount();
-    loadBackendStats();
-
     const unsub = NetInfo.addEventListener((state) => {
       setIsOnline(!!state.isConnected);
     });
     return () => unsub();
   }, []);
 
-  const loadPatients = async () => {
+  const loadPatients = useCallback(async () => {
     try {
-      const raw = await AsyncStorage.getItem(PATIENTS_KEY);
-      if (raw) {
-        setPatients(JSON.parse(raw));
-      } else {
-        // Seed default rural Prayagraj patients for offline presentation
+      const storageKey = getPatientsKey(workerUid);
+      const raw = await AsyncStorage.getItem(storageKey);
+      let localList: CommunityPatient[] = raw ? JSON.parse(raw) : [];
+
+      if (isDemoMode && localList.length === 0) {
+        // Seed default rural Prayagraj patients ONLY in demo mode
         const seedPatients: CommunityPatient[] = [
           {
             id: 'pat-seed-01',
@@ -98,32 +103,28 @@ export default function WorkerDashboard() {
             lastVisitDate: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
             createdAt: new Date().toISOString(),
           },
-          {
-            id: 'pat-seed-03',
-            crisisId: 'CR-PRAYAG-003',
-            name: 'Meera Devi',
-            age: 31,
-            gender: 'FEMALE',
-            phone: '',
-            villageOrArea: 'Phaphamau Basti',
-            bloodGroup: 'A+',
-            knownConditions: ['Postpartum Hemorrhage History'],
-            isPregnant: false,
-            lastVisitDate: new Date(Date.now() - 1000 * 60 * 60 * 96).toISOString(),
-            createdAt: new Date().toISOString(),
-          },
         ];
-        await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(seedPatients));
-        setPatients(seedPatients);
+        localList = seedPatients;
+        await AsyncStorage.setItem(storageKey, JSON.stringify(seedPatients));
       }
 
-      // If online, fetch fresh list from backend
+      setPatients(localList);
+
+      // If online, fetch real patients from backend for this worker
       try {
-        const res: any = await api.worker.getPatients();
+        const queryUid = isDemoMode ? 'asha-worker-prayagraj' : workerUid;
+        const res: any = await api.worker.getPatients(queryUid);
         const list = Array.isArray(res) ? res : res?.data;
-        if (Array.isArray(list) && list.length > 0) {
-          setPatients(list);
-          await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(list));
+        if (Array.isArray(list)) {
+          // Merge local and backend by ID so newly registered patients are preserved
+          const map = new Map<string, CommunityPatient>();
+          list.forEach((p: CommunityPatient) => map.set(p.id, p));
+          localList.forEach((p: CommunityPatient) => map.set(p.id, p));
+          const merged = Array.from(map.values()).sort(
+            (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          );
+          setPatients(merged);
+          await AsyncStorage.setItem(storageKey, JSON.stringify(merged));
         }
       } catch {
         // Use local cache
@@ -131,6 +132,38 @@ export default function WorkerDashboard() {
     } catch {
       // ignore
     }
+  }, [workerUid, isDemoMode]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPatients();
+      loadPendingCount();
+      loadReferralsCount();
+      loadVisitsCount();
+      loadBackendStats();
+    }, [loadPatients])
+  );
+
+  const handleSwitchRole = () => {
+    router.replace('/role-selection');
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      lang === 'hi' ? 'लॉग आउट' : 'Log Out',
+      lang === 'hi' ? 'क्या आप ASHA कंसोल से लॉग आउट करना चाहते हैं?' : 'Are you sure you want to log out of ASHA console?',
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: lang === 'hi' ? 'लॉग आउट करें' : 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            await authService.logout();
+            router.replace('/role-selection');
+          },
+        },
+      ]
+    );
   };
 
   const loadPendingCount = async () => {
@@ -254,7 +287,7 @@ export default function WorkerDashboard() {
     <View style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>
             {lang === 'mr' ? 'गोल्डन अवर फ्रंटलाइन' : lang === 'hi' ? 'गोल्डन ऑवर फ़्रंटलाइन' : 'Golden Hour Frontline'}
           </Text>
@@ -263,6 +296,49 @@ export default function WorkerDashboard() {
           </Text>
         </View>
         <LanguageSelector />
+      </View>
+
+      {/* Worker Identity Card */}
+      <View style={styles.workerCard}>
+        <View style={styles.workerInfoRow}>
+          <View style={styles.workerAvatar}>
+            <Text style={styles.workerAvatarText}>
+              {(userProfile?.name ? userProfile.name.charAt(0) : 'A').toUpperCase()}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.workerName} numberOfLines={1}>
+                {userProfile?.name || (isDemoMode ? 'Sunita Devi (ASHA Sangini)' : 'ASHA Worker')}
+              </Text>
+              {isDemoMode && (
+                <View style={styles.demoBadge}>
+                  <Text style={styles.demoBadgeText}>DEMO</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.workerSub} numberOfLines={1}>
+              {userProfile?.workerType || (isDemoMode ? 'ASHA Sangini' : 'Frontline Worker')} • {userProfile?.assignedPhc || userProfile?.village || 'Prayagraj PHC'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.workerActions}>
+          <TouchableOpacity
+            style={styles.switchRoleBtn}
+            onPress={handleSwitchRole}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.switchRoleText}>‹ {lang === 'hi' ? 'रोल बदलें' : 'Switch Role'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={handleLogout}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.logoutText}>{lang === 'hi' ? 'लॉग आउट' : 'Log Out'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Sync Banner */}
@@ -417,6 +493,96 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 19, fontWeight: '800', color: colors.ink },
   headerSub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
+  workerCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  workerInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  workerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workerAvatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  workerName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  workerSub: {
+    fontSize: 12,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  demoBadge: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  demoBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  workerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  switchRoleBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  switchRoleText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: colors.inkSoft,
+  },
+  logoutBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  logoutText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
