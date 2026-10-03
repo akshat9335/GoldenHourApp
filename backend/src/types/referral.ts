@@ -1,4 +1,4 @@
-export type ReferralStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED";
+export type ReferralStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED" | "ADMITTED" | "DISCHARGED";
 export type ReferralPriority = "HIGH" | "NORMAL";
 
 export interface DoctorReferral {
@@ -13,6 +13,7 @@ export interface DoctorReferral {
   priority: ReferralPriority;
   status: ReferralStatus;
   notes?: string;
+  bedReserved?: boolean;
   createdAt: string;
   updatedAt: string;
 }

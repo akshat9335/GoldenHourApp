@@ -111,9 +111,12 @@ export default function HospitalRequests() {
     try {
       await api.referrals.updateStatus(id, 'ACCEPTED');
       setReferrals((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: 'ACCEPTED' } : r))
+        prev.map((r) => (r.id === id ? { ...r, status: 'ACCEPTED', bedReserved: true } : r))
       );
-      Alert.alert('Referral Accepted', 'Patient admitted to incoming tertiary transfer queue.');
+      Alert.alert(
+        'Referral Accepted & Bed Reserved',
+        '1 hospital bed has been reserved in this facility for incoming patient transfer.'
+      );
     } catch (_err) {
       Alert.alert('Update Failed', 'Could not accept referral.');
     }
@@ -131,27 +134,41 @@ export default function HospitalRequests() {
     try {
       await api.referrals.updateStatus(id, 'COMPLETED');
       setReferrals((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: 'COMPLETED' } : r))
+        prev.map((r) => (r.id === id ? { ...r, status: 'COMPLETED', bedReserved: true } : r))
       );
       Alert.alert(
-        'Referral Completed',
-        'Patient admission workflow finalized.',
-        [
-          { text: 'Keep in List', style: 'cancel' },
-          {
-            text: 'Dismiss / Archive',
-            onPress: async () => {
-              setReferrals((prev) => prev.filter((r) => r.id !== id));
-              try {
-                await api.referrals.dismiss(id);
-              } catch {}
-            },
-          },
-        ]
+        'Patient Admitted to ER',
+        'Patient has arrived and is admitted in active ER treatment. The bed remains reserved until patient discharge.'
       );
     } catch (_err) {
-      Alert.alert('Update Failed', 'Could not complete referral.');
+      Alert.alert('Update Failed', 'Could not complete admission.');
     }
+  };
+
+  const handleDischargeReferral = (refItem: any) => {
+    const patientName = refItem.patientName || 'Referred Patient';
+    Alert.alert(
+      'Discharge Patient & Free Bed?',
+      `Confirm discharge for ${patientName}?\n\n• Frees up 1 reserved hospital bed\n• Finalizes patient referral case`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Discharge',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.referrals.updateStatus(refItem.id, 'DISCHARGED');
+              setReferrals((prev) =>
+                prev.map((r) => (r.id === refItem.id ? { ...r, status: 'DISCHARGED', bedReserved: false } : r))
+              );
+              Alert.alert('Patient Discharged', `${patientName} has been discharged and 1 bed is now freed.`);
+            } catch (_err) {
+              Alert.alert('Update Failed', 'Could not discharge referral patient.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleClearAll = () => {
@@ -319,8 +336,8 @@ export default function HospitalRequests() {
                       <Pill color={ref.priority === 'HIGH' ? 'red' : 'grey'}>
                         {ref.priority} PRIORITY
                       </Pill>
-                      <Pill color={ref.status === 'ACCEPTED' ? 'success' : ref.status === 'COMPLETED' ? 'blue' : 'amber'}>
-                        {ref.status}
+                      <Pill color={ref.status === 'ACCEPTED' ? 'success' : (ref.status === 'COMPLETED' || ref.status === 'ADMITTED') ? 'blue' : ref.status === 'DISCHARGED' ? 'grey' : 'amber'}>
+                        {ref.status === 'ACCEPTED' ? 'BED RESERVED' : (ref.status === 'COMPLETED' || ref.status === 'ADMITTED') ? 'ADMITTED' : ref.status === 'DISCHARGED' ? 'DISCHARGED' : ref.status}
                       </Pill>
                     </View>
                     <Pressable
@@ -352,16 +369,34 @@ export default function HospitalRequests() {
                     )}
                     {ref.status === 'ACCEPTED' && (
                       <Button
-                        title="Patient Arrived · Complete Admission"
+                        title="Patient Arrived · Admit to ER (Bed Reserved ✓)"
                         variant="primary"
                         style={{ flex: 1 }}
                         onPress={() => handleCompleteReferral(ref.id)}
                       />
                     )}
-                    {ref.status === 'COMPLETED' && (
+                    {(ref.status === 'COMPLETED' || ref.status === 'ADMITTED') && (
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex: 1, gap: 8 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 12, color: colors.success, fontWeight: '700' }}>
+                            ✓ Admitted in ER (Bed Reserved)
+                          </Text>
+                          <Text style={{ fontSize: 10.5, color: colors.inkFaint }}>
+                            Active inpatient treatment
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => handleDischargeReferral(ref)}
+                          style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, backgroundColor: colors.bannerRedBg, borderWidth: 1, borderColor: '#FECACA' }}
+                        >
+                          <Text style={{ fontSize: 11.5, fontWeight: '700', color: colors.redDark }}>✅ Discharge & Free Bed</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                    {ref.status === 'DISCHARGED' && (
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
-                        <Text style={{ fontSize: 12, color: colors.success, fontWeight: '700' }}>
-                          ✓ Admitted & Transferred
+                        <Text style={{ fontSize: 12, color: colors.inkSoft, fontWeight: '700' }}>
+                          ✓ Discharged · Bed Freed
                         </Text>
                         <Pressable
                           onPress={() => handleDismissReferral(ref.id)}

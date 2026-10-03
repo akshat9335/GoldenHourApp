@@ -4,6 +4,7 @@ import { escalateEmergencyToNextHospital } from "../emergencies/emergency.servic
 import { adjustUserTrustScore } from "../users/user.service";
 import { assignAmbulance } from "../ambulance/assignment.service";
 import { createTripFromAssignment } from "../ambulance/trip.service";
+import { dataStore } from "../../models/dataStore";
 
 // ============================================================
 // TYPES
@@ -101,6 +102,17 @@ async function getHospitalByOwnerUid(uid: string) {
     );
   }
 
+  // 0. Fast-path check: direct lookup by hospital document ID or clean ID
+  try {
+    const directDoc = await firestore.collection("hospitals").doc(uid).get();
+    if (directDoc.exists && directDoc.data()) {
+      return {
+        docId: directDoc.id,
+        data: directDoc.data(),
+      };
+    }
+  } catch {}
+
   // 1. Check user profile for linked hospitalId or hospitalName
   let userHospId: string | null = null;
   let userData: any = null;
@@ -186,19 +198,22 @@ async function getHospitalByOwnerUid(uid: string) {
 
   const hospitalData = typeof hospitalDoc.data === "function" ? hospitalDoc.data() : hospitalDoc.data;
 
-  // Enforce consistent Apollo Multi-Specialty Hospital name for demo hospital desk ONLY
+  // Enforce consistent Apollo Multi-Specialty Hospital name for demo hospital desk without resetting live bed counts
   if (uid === "hosp-demo-apollo" || uid === "hosp-hosp-demo-apollo" || uid === "hosp-demo-token-hospital") {
     hospitalData.name = "Apollo Multi-Specialty Hospital";
     hospitalData.hospitalName = "Apollo Multi-Specialty Hospital";
     if (firestore && hospitalDoc?.id) {
-      firestore.collection("hospitals").doc(hospitalDoc.id).set({
+      const updates: any = {
         name: "Apollo Multi-Specialty Hospital",
         hospitalName: "Apollo Multi-Specialty Hospital",
-        totalBeds: 50,
-        availableBeds: 18,
-        icuBeds: 12,
-        availableIcuBeds: 4,
-      }, { merge: true }).catch(() => {});
+      };
+      if (hospitalData.totalBeds === undefined) {
+        updates.totalBeds = 50;
+        updates.availableBeds = 18;
+        updates.icuBeds = 12;
+        updates.availableIcuBeds = 4;
+      }
+      firestore.collection("hospitals").doc(hospitalDoc.id).set(updates, { merge: true }).catch(() => {});
     }
   }
 
@@ -829,6 +844,138 @@ export async function updateHospitalCapacity(
   }
 
   return capacity;
+}
+
+// ============================================================
+// BED RESERVATION & RELEASE (REFERRALS & ADMISSIONS)
+// ============================================================
+
+export async function reserveHospitalBed(
+  hospitalIdOrUid: string,
+  isIcu = false,
+): Promise<{ availableBeds: number; totalBeds: number; availableIcuBeds: number; totalIcuBeds: number } | null> {
+  if (!firestore) return null;
+  try {
+    const hosp = await getHospitalByOwnerUid(hospitalIdOrUid);
+    const capRef = firestore.collection("hospitalCapacity").doc(hosp.docId);
+    const capSnap = await capRef.get();
+
+    let totalBeds = 25;
+    let availableBeds = 14;
+    let icuBeds = 6;
+    let availableIcuBeds = 4;
+
+    if (capSnap.exists) {
+      const data = capSnap.data() || {};
+      totalBeds = Number(data.totalBeds) || 25;
+      availableBeds = Number(data.availableBeds) || 14;
+      icuBeds = Number(data.icuBeds) || 6;
+      availableIcuBeds = Number(data.availableIcuBeds) || 4;
+    } else if (hosp.data) {
+      totalBeds = Number(hosp.data.totalBeds) || 25;
+      availableBeds = Number(hosp.data.availableBeds) || 14;
+      icuBeds = Number(hosp.data.icuBeds) || 6;
+      availableIcuBeds = Number(hosp.data.availableIcuBeds) || 4;
+    }
+
+    const newAvail = Math.max(0, availableBeds - 1);
+    const newIcuAvail = isIcu ? Math.max(0, availableIcuBeds - 1) : availableIcuBeds;
+    const now = new Date();
+
+    const capPayload = {
+      hospitalId: hosp.docId,
+      totalBeds,
+      availableBeds: newAvail,
+      icuBeds,
+      availableIcuBeds: newIcuAvail,
+      updatedAt: now,
+    };
+
+    await capRef.set(capPayload, { merge: true });
+    await firestore.collection("hospitals").doc(hosp.docId).set({
+      availableBeds: newAvail,
+      availableIcuBeds: newIcuAvail,
+      availableCapacity: newAvail,
+      updatedAt: now,
+    }, { merge: true });
+
+    if (dataStore && dataStore.hospitals) {
+      const memHosp = dataStore.hospitals.get(hosp.docId);
+      if (memHosp) {
+        memHosp.availableBeds = newAvail;
+        memHosp.availableCapacity = newAvail;
+      }
+    }
+
+    return { availableBeds: newAvail, totalBeds, availableIcuBeds: newIcuAvail, totalIcuBeds: icuBeds };
+  } catch (err) {
+    console.warn("[reserveHospitalBed] Failed to reserve bed:", err);
+    return null;
+  }
+}
+
+export async function freeHospitalBed(
+  hospitalIdOrUid: string,
+  isIcu = false,
+): Promise<{ availableBeds: number; totalBeds: number; availableIcuBeds: number; totalIcuBeds: number } | null> {
+  if (!firestore) return null;
+  try {
+    const hosp = await getHospitalByOwnerUid(hospitalIdOrUid);
+    const capRef = firestore.collection("hospitalCapacity").doc(hosp.docId);
+    const capSnap = await capRef.get();
+
+    let totalBeds = 25;
+    let availableBeds = 14;
+    let icuBeds = 6;
+    let availableIcuBeds = 4;
+
+    if (capSnap.exists) {
+      const data = capSnap.data() || {};
+      totalBeds = Number(data.totalBeds) || 25;
+      availableBeds = Number(data.availableBeds) || 14;
+      icuBeds = Number(data.icuBeds) || 6;
+      availableIcuBeds = Number(data.availableIcuBeds) || 4;
+    } else if (hosp.data) {
+      totalBeds = Number(hosp.data.totalBeds) || 25;
+      availableBeds = Number(hosp.data.availableBeds) || 14;
+      icuBeds = Number(hosp.data.icuBeds) || 6;
+      availableIcuBeds = Number(hosp.data.availableIcuBeds) || 4;
+    }
+
+    const newAvail = Math.min(totalBeds, availableBeds + 1);
+    const newIcuAvail = isIcu ? Math.min(icuBeds, availableIcuBeds + 1) : availableIcuBeds;
+    const now = new Date();
+
+    const capPayload = {
+      hospitalId: hosp.docId,
+      totalBeds,
+      availableBeds: newAvail,
+      icuBeds,
+      availableIcuBeds: newIcuAvail,
+      updatedAt: now,
+    };
+
+    await capRef.set(capPayload, { merge: true });
+    await firestore.collection("hospitals").doc(hosp.docId).set({
+      availableBeds: newAvail,
+      availableIcuBeds: newIcuAvail,
+      availableCapacity: newAvail,
+      updatedAt: now,
+    }, { merge: true });
+
+    if (dataStore && dataStore.hospitals) {
+      const memHosp = dataStore.hospitals.get(hosp.docId);
+      if (memHosp) {
+        memHosp.availableBeds = newAvail;
+        memHosp.availableCapacity = newAvail;
+      }
+    }
+
+    return { availableBeds: newAvail, totalBeds, availableIcuBeds: newIcuAvail, totalIcuBeds: icuBeds };
+  } catch (err) {
+    console.warn("[freeHospitalBed] Failed to free bed:", err);
+    return null;
+  }
 }
 
 // ============================================================

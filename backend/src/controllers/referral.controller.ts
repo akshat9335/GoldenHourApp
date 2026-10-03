@@ -61,8 +61,8 @@ export class ReferralController {
       const { id } = req.params;
       const { status } = req.body;
 
-      if (!status || !["PENDING", "ACCEPTED", "REJECTED", "COMPLETED"].includes(status)) {
-        throw new AppError(400, "INVALID_STATUS", "Valid statuses are PENDING, ACCEPTED, REJECTED, COMPLETED.");
+      if (!status || !["PENDING", "ACCEPTED", "REJECTED", "COMPLETED", "ADMITTED", "DISCHARGED"].includes(status)) {
+        throw new AppError(400, "INVALID_STATUS", "Valid statuses are PENDING, ACCEPTED, REJECTED, COMPLETED, ADMITTED, DISCHARGED.");
       }
 
       const updated = await referralService.updateReferralStatus(id, status);

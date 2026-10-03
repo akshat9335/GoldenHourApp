@@ -9,6 +9,7 @@ import { authService } from '@/services/auth';
 import { acquireFreshLocation } from '@/services/deviceLocation';
 import LanguageSelector from '@/components/LanguageSelector';
 import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HospitalDashboard() {
   const { i18n } = useTranslation();
@@ -33,18 +34,31 @@ export default function HospitalDashboard() {
     emergencyCapacity: 5,
   });
 
+  // Load cached capacity immediately on mount to prevent flashing
+  useEffect(() => {
+    const hospId = userProfile?.uid || 'hosp-srn-prayagraj';
+    AsyncStorage.getItem(`@golden_hour_hospital_capacity_${hospId}`).then((raw) => {
+      if (raw) {
+        try {
+          const cached = JSON.parse(raw);
+          if (cached && cached.availableBeds !== undefined) {
+            setCapacity((prev) => ({ ...prev, ...cached }));
+          }
+        } catch {}
+      }
+    }).catch(() => {});
+  }, [userProfile?.uid]);
+
   // Load hospital profile and capacity once on mount or manual refresh
   const loadStaticInfo = useCallback(async () => {
     try {
-      const isDemo = useAppStore.getState().isDemoMode || userProfile?.uid?.includes('demo');
-      const profilePromise = isDemo ? Promise.resolve(null) : api.hospitals.getProfile().catch(() => null);
-      const capPromise = isDemo ? Promise.resolve(null) : api.hospitals.getCapacity().catch(() => null);
+      const hospId = userProfile?.uid || 'hosp-srn-prayagraj';
       const [profileRes, capRes]: any = await Promise.all([
-        profilePromise,
-        capPromise,
+        api.hospitals.getProfile().catch(() => null),
+        api.hospitals.getCapacity().catch(() => null),
       ]);
 
-      if (profileRes && !isDemo) {
+      if (profileRes) {
         const data = profileRes?.data || profileRes;
         const hosp = data?.hospitalName || data?.name;
         if (hosp) {
@@ -67,84 +81,164 @@ export default function HospitalDashboard() {
 
       if (capRes) {
         const cap = capRes?.data || capRes;
-        if (cap) {
-          setCapacity({
+        if (cap && cap.availableBeds !== undefined) {
+          const newCap = {
             totalBeds: Number(cap.totalBeds) || 20,
             availableBeds: Number(cap.availableBeds) || 14,
             icuBeds: Number(cap.icuBeds) || 5,
             availableIcuBeds: Number(cap.availableIcuBeds) || 4,
             emergencyCapacity: Number(cap.emergencyCapacity) || 5,
-          });
+          };
+          setCapacity(newCap);
+          AsyncStorage.setItem(`@golden_hour_hospital_capacity_${hospId}`, JSON.stringify(newCap)).catch(() => {});
         }
       }
     } catch {}
-  }, []);
+  }, [userProfile?.uid]);
 
-  // Poll ONLY incoming emergency requests in the recurring loop
+  // Poll incoming emergency requests, referrals, and live capacity in the recurring loop
   const pollEmergencyRequests = useCallback(async () => {
     try {
-      const reqsRes: any = await api.hospitals.getRequests().catch(() => null);
-      if (reqsRes) {
-        const items = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
-        const pending = items.filter((d: any) => {
-          const s = String(d.status || 'NEW').toUpperCase();
-          return s === 'NEW' || s === 'PENDING';
-        });
+      const hospId = userProfile?.uid || 'hosp-srn-prayagraj';
+      const [reqsRes, capRes, refRes]: any = await Promise.all([
+        api.hospitals.getRequests().catch(() => null),
+        api.hospitals.getCapacity().catch(() => null),
+        api.referrals.getHospitalReferrals(hospId).catch(() => null),
+      ]);
 
-        const admitted = items.filter((d: any) => {
-          const s = String(d.status || '').toUpperCase();
-          const ts = String(d.tripStatus || '').toUpperCase();
-          if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
-          return s === 'PATIENT ARRIVED' || s === 'IN TREATMENT' || s === 'AT_HOSPITAL' || ts === 'AT_HOSPITAL';
-        });
-
-        const inbound = items.filter((d: any) => {
-          const s = String(d.status || '').toUpperCase();
-          const ts = String(d.tripStatus || '').toUpperCase();
-          if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
-          if (s === 'PATIENT ARRIVED' || s === 'IN TREATMENT' || s === 'AT_HOSPITAL' || ts === 'AT_HOSPITAL') return false;
-          return (
-            s === 'ACCEPTED' ||
-            s === 'HOSPITAL_ACCEPTED' ||
-            s === 'AMBULANCE_ASSIGNED' ||
-            s === 'AMBULANCE EN ROUTE' ||
-            s === 'EN_ROUTE_TO_PATIENT' ||
-            s === 'ARRIVING' ||
-            s === 'AT_PATIENT' ||
-            s === 'PATIENT_ONBOARD' ||
-            s === 'EN_ROUTE_TO_HOSPITAL' ||
-            ts === 'ASSIGNED' ||
-            ts === 'EN_ROUTE_TO_PATIENT' ||
-            ts === 'AT_PATIENT' ||
-            ts === 'PATIENT_ONBOARD' ||
-            ts === 'EN_ROUTE_TO_HOSPITAL'
-          );
-        });
-        pending.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        inbound.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
-        admitted.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
-        
-        const completed = items.filter((d: any) => {
-          const s = String(d.status || '').toUpperCase();
-          const ts = String(d.tripStatus || '').toUpperCase();
-          return s === 'COMPLETED' || s === 'RESOLVED' || ts === 'COMPLETED';
-        });
-        completed.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
-
-        setCriticalCount(pending.length);
-        setActiveInbound(inbound);
-        setAdmittedPatients(admitted);
-        setCompletedCases(completed);
-        if (pending.length > 0) {
-          setPendingEmergency(pending[0]);
-        } else {
-          setPendingEmergency(null);
+      if (capRes) {
+        const cap = capRes?.data || capRes;
+        if (cap && cap.availableBeds !== undefined) {
+          const newCap = {
+            totalBeds: Number(cap.totalBeds) || 20,
+            availableBeds: Number(cap.availableBeds) || 14,
+            icuBeds: Number(cap.icuBeds) || 5,
+            availableIcuBeds: Number(cap.availableIcuBeds) || 4,
+            emergencyCapacity: Number(cap.emergencyCapacity) || 5,
+          };
+          setCapacity(newCap);
+          AsyncStorage.setItem(`@golden_hour_hospital_capacity_${hospId}`, JSON.stringify(newCap)).catch(() => {});
         }
+      }
+
+      const items = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
+      const refsRaw = Array.isArray(refRes) ? refRes : (refRes?.data || []);
+
+      const pending = items.filter((d: any) => {
+        const s = String(d.status || 'NEW').toUpperCase();
+        return s === 'NEW' || s === 'PENDING';
+      });
+
+      const admitted = items.filter((d: any) => {
+        const s = String(d.status || '').toUpperCase();
+        const ts = String(d.tripStatus || '').toUpperCase();
+        if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
+        return s === 'PATIENT ARRIVED' || s === 'IN TREATMENT' || s === 'AT_HOSPITAL' || ts === 'AT_HOSPITAL';
+      });
+
+      const inbound = items.filter((d: any) => {
+        const s = String(d.status || '').toUpperCase();
+        const ts = String(d.tripStatus || '').toUpperCase();
+        if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
+        if (s === 'PATIENT ARRIVED' || s === 'IN TREATMENT' || s === 'AT_HOSPITAL' || ts === 'AT_HOSPITAL') return false;
+        return (
+          s === 'ACCEPTED' ||
+          s === 'HOSPITAL_ACCEPTED' ||
+          s === 'AMBULANCE_ASSIGNED' ||
+          s === 'AMBULANCE EN ROUTE' ||
+          s === 'EN_ROUTE_TO_PATIENT' ||
+          s === 'ARRIVING' ||
+          s === 'AT_PATIENT' ||
+          s === 'PATIENT_ONBOARD' ||
+          s === 'EN_ROUTE_TO_HOSPITAL' ||
+          ts === 'ASSIGNED' ||
+          ts === 'EN_ROUTE_TO_PATIENT' ||
+          ts === 'AT_PATIENT' ||
+          ts === 'PATIENT_ONBOARD' ||
+          ts === 'EN_ROUTE_TO_HOSPITAL'
+        );
+      });
+
+      // Integrate accepted/incoming referrals into inbound
+      const refInbound = refsRaw
+        .filter((r: any) => String(r.status || '').toUpperCase() === 'ACCEPTED')
+        .map((r: any) => ({
+          id: r.id,
+          requestId: r.id,
+          patientName: r.patientName,
+          severity: r.priority || 'HIGH',
+          incidentType: `Referral Transfer (${r.doctorName || 'Doctor/ASHA'})`,
+          status: 'ACCEPTED',
+          tripStatus: 'EN_ROUTE_TO_HOSPITAL',
+          eta: 'Bed Reserved',
+          assignedDriverName: r.doctorName || 'Referring Clinician',
+          assignedAmbulanceId: 'Transfer',
+          isReferral: true,
+          notes: r.reason,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        }));
+
+      // Integrate admitted referrals into admittedPatients
+      const refAdmitted = refsRaw
+        .filter((r: any) => {
+          const s = String(r.status || '').toUpperCase();
+          return s === 'COMPLETED' || s === 'ADMITTED';
+        })
+        .map((r: any) => ({
+          id: r.id,
+          requestId: r.id,
+          patientName: r.patientName,
+          severity: r.priority || 'HIGH',
+          incidentType: `Referral Patient (${r.doctorName || 'Doctor/ASHA'})`,
+          status: 'IN TREATMENT',
+          assignedDriverName: r.doctorName || 'Primary Caregiver',
+          assignedAmbulanceId: 'ER Inpatient',
+          isReferral: true,
+          notes: r.reason,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        }));
+
+      const completed = items.filter((d: any) => {
+        const s = String(d.status || '').toUpperCase();
+        const ts = String(d.tripStatus || '').toUpperCase();
+        return s === 'COMPLETED' || s === 'RESOLVED' || ts === 'COMPLETED';
+      });
+
+      const refCompleted = refsRaw
+        .filter((r: any) => String(r.status || '').toUpperCase() === 'DISCHARGED')
+        .map((r: any) => ({
+          id: r.id,
+          requestId: r.id,
+          patientName: r.patientName,
+          status: 'COMPLETED',
+          isReferral: true,
+          updatedAt: r.updatedAt,
+        }));
+
+      const allInbound = [...inbound, ...refInbound];
+      const allAdmitted = [...admitted, ...refAdmitted];
+      const allCompleted = [...completed, ...refCompleted];
+
+      pending.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      allInbound.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+      allAdmitted.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+      allCompleted.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+
+      setCriticalCount(pending.length);
+      setActiveInbound(allInbound);
+      setAdmittedPatients(allAdmitted);
+      setCompletedCases(allCompleted);
+      if (pending.length > 0) {
+        setPendingEmergency(pending[0]);
+      } else {
+        setPendingEmergency(null);
       }
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [userProfile?.uid]);
 
   const loadData = useCallback(() => {
     loadStaticInfo();
@@ -187,7 +281,7 @@ export default function HospitalDashboard() {
   };
 
   const handleDischargePatient = (patient: any) => {
-    const patientName = patient.patientName || 'Emergency Patient';
+    const patientName = patient.patientName || 'Patient';
     const reqId = patient.requestId || patient.id;
     Alert.alert(
       'Discharge Patient?',
@@ -199,9 +293,13 @@ export default function HospitalDashboard() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await api.hospitals.completeRequest(reqId);
+              if (patient.isReferral) {
+                await api.referrals.updateStatus(patient.id, 'DISCHARGED');
+              } else {
+                await api.hospitals.completeRequest(reqId);
+              }
               loadData();
-              Alert.alert('Patient Discharged', `${patientName} has been discharged and case resolved.`);
+              Alert.alert('Patient Discharged', `${patientName} has been discharged and bed capacity freed.`);
             } catch (err: any) {
               Alert.alert('Error', err?.message || 'Could not discharge patient');
             }
@@ -464,8 +562,12 @@ export default function HospitalDashboard() {
                     <TouchableOpacity
                       style={styles.actionBtnGrey}
                       onPress={() => {
-                        setActiveHospitalRequestId(item.requestId || item.id);
-                        router.push('/(hospital)/request-detail');
+                        if (item.isReferral) {
+                          router.push('/(hospital)/requests');
+                        } else {
+                          setActiveHospitalRequestId(item.requestId || item.id);
+                          router.push('/(hospital)/request-detail');
+                        }
                       }}
                       activeOpacity={0.8}
                     >
@@ -518,8 +620,12 @@ export default function HospitalDashboard() {
                     <TouchableOpacity
                       style={styles.actionBtnGrey}
                       onPress={() => {
-                        setActiveHospitalRequestId(item.requestId || item.id);
-                        router.push('/(hospital)/request-detail');
+                        if (item.isReferral) {
+                          router.push('/(hospital)/requests');
+                        } else {
+                          setActiveHospitalRequestId(item.requestId || item.id);
+                          router.push('/(hospital)/request-detail');
+                        }
                       }}
                       activeOpacity={0.8}
                     >

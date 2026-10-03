@@ -2,6 +2,7 @@ import { firestore } from "../../config/firebase";
 import { DoctorReferral, CreateReferralRequest, ReferralStatus } from "../../types/referral";
 import { AppError } from "../../utils/AppError";
 import { dataStore } from "../../models/dataStore";
+import { reserveHospitalBed, freeHospitalBed } from "../hospital/hospital.service";
 
 class ReferralService {
   private inMemoryReferrals: Map<string, DoctorReferral> = new Map();
@@ -257,25 +258,77 @@ class ReferralService {
       throw new AppError(404, "REFERRAL_NOT_FOUND", `Referral '${referralId}' not found.`);
     }
 
+    const targetHospId = referral.hospitalId;
+    const isIcu = Boolean(
+      referral.priority === "HIGH" && (
+        (referral.reason && referral.reason.toLowerCase().includes("icu")) ||
+        (referral.notes && referral.notes.toLowerCase().includes("icu"))
+      )
+    );
+
+    // Bed reservation & release logic
+    if (status === "ACCEPTED" || status === "ADMITTED" || status === "COMPLETED") {
+      if (!referral.bedReserved && targetHospId) {
+        await reserveHospitalBed(targetHospId, isIcu).catch(() => {});
+        referral.bedReserved = true;
+      }
+    } else if (status === "DISCHARGED" || status === "REJECTED") {
+      if (referral.bedReserved && targetHospId) {
+        await freeHospitalBed(targetHospId, isIcu).catch(() => {});
+        referral.bedReserved = false;
+      }
+    }
+
     referral.status = status;
     referral.updatedAt = new Date().toISOString();
     this.inMemoryReferrals.set(referralId, referral);
 
     if (firestore && process.env.NODE_ENV !== "test") {
       try {
-        await firestore.collection("referrals").doc(referralId).update({
+        await firestore.collection("referrals").doc(referralId).set({
           status,
+          bedReserved: referral.bedReserved || false,
           updatedAt: referral.updatedAt,
-        });
-      } catch (err) {
-        // May already be updated in communityReferrals
-      }
+        }, { merge: true });
+      } catch (err) {}
+      try {
+        await firestore.collection("communityReferrals").doc(referralId).set({
+          status,
+          bedReserved: referral.bedReserved || false,
+          updatedAt: referral.updatedAt,
+        }, { merge: true });
+      } catch (err) {}
     }
 
     return referral;
   }
 
   public async dismissReferral(referralId: string): Promise<boolean> {
+    let referral = this.inMemoryReferrals.get(referralId);
+    if (!referral && firestore) {
+      try {
+        const snap = await firestore.collection("referrals").doc(referralId).get();
+        if (snap.exists) referral = snap.data() as DoctorReferral;
+      } catch {}
+      if (!referral) {
+        try {
+          const commSnap = await firestore.collection("communityReferrals").doc(referralId).get();
+          if (commSnap.exists) referral = commSnap.data() as any;
+        } catch {}
+      }
+    }
+
+    // Free reserved bed if referral is dismissed while bed was reserved
+    if (referral && (referral as any).bedReserved && (referral as any).hospitalId) {
+      const isIcu = Boolean(
+        (referral as any).priority === "HIGH" && (
+          ((referral as any).reason && (referral as any).reason.toLowerCase().includes("icu")) ||
+          ((referral as any).notes && (referral as any).notes.toLowerCase().includes("icu"))
+        )
+      );
+      await freeHospitalBed((referral as any).hospitalId, isIcu).catch(() => {});
+    }
+
     this.inMemoryReferrals.delete(referralId);
     if (dataStore && dataStore.communityReferrals) {
       dataStore.communityReferrals.delete(referralId);
