@@ -948,13 +948,24 @@ export async function getHospitalRequests(uid: string) {
   }
 
   // Hospital must ONLY see active requests intended for them right now:
-  // Must NOT show requests assigned to other hospitals, or QUEUED_STANDBY, TIMEOUT, REJECTED, COMPLETED, or CANCELLED
+  // Must NOT show requests assigned to other hospitals, or QUEUED_STANDBY, TIMEOUT (unless unassigned & fresh for late acceptance), REJECTED, COMPLETED, or CANCELLED
   const activeResults = results.filter((item: any) => {
     // Strictly exclude if assigned to a different hospital
     if (item.assignedHospitalId && !candidateIds.includes(item.assignedHospitalId)) {
       return false;
     }
     const st = String(item.status || "").toUpperCase();
+    if (st === "TIMEOUT") {
+      // Late acceptance window: if case is not yet accepted by another hospital and is fresh (< 30 min)
+      const emTime = new Date(item.createdAt || 0).getTime();
+      const isStillFresh = !emTime || Date.now() - emTime < 30 * 60 * 1000;
+      if (!item.assignedHospitalId && isStillFresh) {
+        item.status = "NEW"; // present as actionable in hospital request list
+        item.isLateAcceptable = true;
+        return true;
+      }
+      return false;
+    }
     return (
       st === "NEW" ||
       st === "PENDING" ||
@@ -1156,12 +1167,30 @@ export async function acceptHospitalRequest(
   const currentStatus = (requestData.status ??
     "NEW") as string;
 
+  const emergencyId =
+    requestData.emergencyId || requestData.accidentId || requestId;
+
   if (currentStatus !== "NEW" && currentStatus !== "PENDING" && currentStatus !== "QUEUED_STANDBY") {
-    throw new AppError(
-      400,
-      "INVALID_REQUEST_STATE",
-      `Emergency request cannot be accepted from ${currentStatus} state.`,
-    );
+    if (currentStatus === "TIMEOUT") {
+      // Late Acceptance Check: Can still accept if unassigned to another facility
+      if (firestore && emergencyId) {
+        const emSnap = await firestore.collection("emergencies").doc(emergencyId).get();
+        const emData = emSnap.exists ? emSnap.data() : null;
+        if (emData?.assignedHospitalId && emData.assignedHospitalId !== hospital.docId) {
+          throw new AppError(
+            409,
+            "CASE_ALREADY_ASSIGNED",
+            `Case has already been accepted by ${emData.assignedHospitalName || "another facility"}.`,
+          );
+        }
+      }
+    } else {
+      throw new AppError(
+        400,
+        "INVALID_REQUEST_STATE",
+        `Emergency request cannot be accepted from ${currentStatus} state.`,
+      );
+    }
   }
 
   const now = new Date();
@@ -1178,8 +1207,6 @@ export async function acceptHospitalRequest(
     merge: true,
   });
 
-  const emergencyId =
-    requestData.emergencyId || requestData.accidentId || requestId;
   const hospData = (hospital as any).data || (hospital as any);
   const patientLoc = requestData.location || null;
   const rawLoc = hospData.location;
@@ -1200,12 +1227,31 @@ export async function acceptHospitalRequest(
   await syncEmergencyStatus(emergencyId, {
     status: "HOSPITAL_ACCEPTED",
     assignedHospitalId: hospital.docId,
-    assignedHospitalName: hospData.name || hospData.hospitalName || "Hospital Emergency",
+    assignedHospitalName: hospData.name || hospData.hospitalName || "Apollo Multi-Specialty Hospital",
     assignedHospitalPhone: hospData.phone || hospData.emergencyContact || hospData.contactPhone || "",
     assignedHospitalLocation: resolvedHospLoc,
     dispatchMode: dispatchOptions?.dispatchMode || "INDEPENDENT",
     ...(dispatchOptions?.driverId ? { targetDriverId: dispatchOptions.driverId } : {}),
   });
+
+  // Update candidate status in the emergency document
+  try {
+    if (firestore && emergencyId) {
+      const emDocRef = firestore.collection("emergencies").doc(emergencyId);
+      const emSnap = await emDocRef.get();
+      if (emSnap.exists) {
+        const emData = emSnap.data() || {};
+        const candidates = Array.isArray(emData.hospitalCandidates) ? emData.hospitalCandidates : [];
+        const updatedCandidates = candidates.map((c: any) => {
+          if (c.hospitalId === hospital.docId || c.name === hospData.name) {
+            return { ...c, status: "ACCEPTED", acceptedAt: now.toISOString() };
+          }
+          return { ...c, status: c.status === "ALERTED" ? "CLOSED" : c.status };
+        });
+        await emDocRef.set({ hospitalCandidates: updatedCandidates }, { merge: true });
+      }
+    }
+  } catch (_candErr) {}
 
   // Also mark sibling hospital requests for this emergency as accepted elsewhere
   try {
@@ -1216,11 +1262,11 @@ export async function acceptHospitalRequest(
         .get();
       for (const sDoc of siblingSnaps.docs) {
         const sStatus = sDoc.data().status;
-        if (sDoc.id !== requestId && (sStatus === "NEW" || sStatus === "QUEUED_STANDBY" || sStatus === "PENDING")) {
+        if (sDoc.id !== requestId && (sStatus === "NEW" || sStatus === "QUEUED_STANDBY" || sStatus === "PENDING" || sStatus === "ALERTED" || sStatus === "TIMEOUT")) {
           await sDoc.ref.set(
             {
               status: "REJECTED",
-              rejectionReason: `Accepted by ${hospData.name || "another hospital"}`,
+              rejectionReason: `Accepted by ${hospData.name || hospData.hospitalName || "Apollo Multi-Specialty Hospital"}`,
               updatedAt: now,
             },
             { merge: true },
