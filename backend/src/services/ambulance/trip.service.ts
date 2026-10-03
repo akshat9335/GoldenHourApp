@@ -429,8 +429,10 @@ export async function transitionTrip(
     canonicalEmergencyStatus = "PATIENT_ARRIVED";
     hospitalStatus = "PATIENT ARRIVED";
   } else if (nextStatus === "COMPLETED") {
-    canonicalEmergencyStatus = "COMPLETED";
-    hospitalStatus = "COMPLETED";
+    // Ambulance mission is completed upon ER handoff
+    // Emergency itself stays in hospital ER care for treatment and subsequent doctor discharge!
+    canonicalEmergencyStatus = "PATIENT_ARRIVED";
+    hospitalStatus = "PATIENT ARRIVED";
   }
 
   if (canonicalEmergencyStatus && current.emergencyId) {

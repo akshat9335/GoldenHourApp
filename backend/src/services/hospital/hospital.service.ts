@@ -2,6 +2,8 @@ import { firestore } from "../../config/firebase";
 import { AppError } from "../../utils/AppError";
 import { escalateEmergencyToNextHospital } from "../emergencies/emergency.service";
 import { adjustUserTrustScore } from "../users/user.service";
+import { assignAmbulance } from "../ambulance/assignment.service";
+import { createTripFromAssignment } from "../ambulance/trip.service";
 
 // ============================================================
 // TYPES
@@ -985,13 +987,27 @@ export async function getHospitalRequests(uid: string) {
       }
       return false;
     }
+    if (st === "COMPLETED" || st === "RESOLVED") {
+      const emTime = new Date(item.updatedAt || item.createdAt || 0).getTime();
+      return !emTime || Date.now() - emTime < 24 * 60 * 60 * 1000;
+    }
     return (
       st === "NEW" ||
       st === "PENDING" ||
       st === "ACCEPTED" ||
+      st === "HOSPITAL_ACCEPTED" ||
+      st === "AMBULANCE_ASSIGNED" ||
       st === "AMBULANCE EN ROUTE" ||
+      st === "EN_ROUTE" ||
+      st === "EN_ROUTE_TO_PATIENT" ||
+      st === "ARRIVING" ||
+      st === "AT_PATIENT" ||
+      st === "PATIENT_ONBOARD" ||
+      st === "EN_ROUTE_TO_HOSPITAL" ||
+      st === "AT_HOSPITAL" ||
       st === "PATIENT ARRIVED" ||
-      st === "IN TREATMENT"
+      st === "IN TREATMENT" ||
+      st === "TREATMENT"
     );
   });
 
@@ -1243,17 +1259,59 @@ export async function acceptHospitalRequest(
         ? { latitude: Number((patientLoc.latitude + 0.012).toFixed(6)), longitude: Number((patientLoc.longitude + 0.009).toFixed(6)) }
         : null);
 
+  // Find affiliated driver for instant zero-lag ambulance assignment
+  let autoAssignedDriver: any = null;
+  if (dispatchOptions?.driverId) {
+    try {
+      const dSnap = await firestore!.collection("drivers").doc(dispatchOptions.driverId).get();
+      if (dSnap.exists) autoAssignedDriver = { id: dSnap.id, ...dSnap.data() };
+    } catch {}
+  }
+  if (!autoAssignedDriver) {
+    try {
+      const matched = await getHospitalDrivers(uid);
+      if (matched.length > 0) {
+        autoAssignedDriver = matched[0];
+      }
+    } catch {}
+  }
+
+  const isAffiliatedDispatch = dispatchOptions?.dispatchMode === "AFFILIATED" || Boolean(autoAssignedDriver);
+  const autoAmbId = autoAssignedDriver
+    ? (autoAssignedDriver.vehiclePlateNumber || autoAssignedDriver.ambulanceId || autoAssignedDriver.vehicleNumber || `AMB-${(autoAssignedDriver.id || "").slice(-4).toUpperCase()}`)
+    : null;
+  const autoDrvUid = autoAssignedDriver ? (autoAssignedDriver.id || autoAssignedDriver.uid || autoAssignedDriver.driverId) : null;
+  const autoDrvName = autoAssignedDriver ? (autoAssignedDriver.name || autoAssignedDriver.driverName || "Hospital ER Pilot") : null;
+  const autoDrvPhone = autoAssignedDriver ? (autoAssignedDriver.phone || autoAssignedDriver.contactNumber || "") : null;
+
   await syncEmergencyStatus(emergencyId, {
-    status: "HOSPITAL_ACCEPTED",
+    status: autoAssignedDriver ? "AMBULANCE_ASSIGNED" : "HOSPITAL_ACCEPTED",
     assignedHospitalId: hospital.docId,
     assignedHospitalName: hospData.name || hospData.hospitalName || "Apollo Multi-Specialty Hospital",
     assignedHospitalPhone: hospData.phone || hospData.emergencyContact || hospData.contactPhone || "",
     assignedHospitalLocation: resolvedHospLoc,
-    dispatchMode: dispatchOptions?.dispatchMode || "INDEPENDENT",
-    ...(dispatchOptions?.driverId ? { targetDriverId: dispatchOptions.driverId } : {}),
+    dispatchMode: isAffiliatedDispatch ? "AFFILIATED" : "INDEPENDENT",
+    ...(autoDrvUid ? {
+      assignedDriverId: autoDrvUid,
+      assignedDriverName: autoDrvName,
+      assignedDriverPhone: autoDrvPhone,
+      assignedAmbulanceId: autoAmbId,
+      targetDriverId: autoDrvUid,
+    } : (dispatchOptions?.driverId ? { targetDriverId: dispatchOptions.driverId } : {})),
   });
 
-  // Update candidate status in the emergency document
+  // If affiliated driver is ready, auto-create assignment and trip for instant zero-lag navigation
+  if (autoAssignedDriver && autoAmbId && autoDrvUid) {
+    try {
+      const assignId = await assignAmbulance(autoAmbId, emergencyId, requestData.patientId, autoDrvUid);
+      await createTripFromAssignment(assignId);
+    } catch (_autoAssignErr) {
+      console.warn("[acceptHospitalRequest] Auto driver assignment non-blocking fallback:", _autoAssignErr);
+    }
+  }
+
+  // Update candidate status in the emergency document:
+  // Move accepted hospital to Slot 0, reset alertedCandidateIndex to 0 so exactly ONE hospital is highlighted
   try {
     if (firestore && emergencyId) {
       const emDocRef = firestore.collection("emergencies").doc(emergencyId);
@@ -1261,13 +1319,27 @@ export async function acceptHospitalRequest(
       if (emSnap.exists) {
         const emData = emSnap.data() || {};
         const candidates = Array.isArray(emData.hospitalCandidates) ? emData.hospitalCandidates : [];
-        const updatedCandidates = candidates.map((c: any) => {
-          if (c.hospitalId === hospital.docId || c.name === hospData.name) {
-            return { ...c, status: "ACCEPTED", acceptedAt: now.toISOString() };
-          }
-          return { ...c, status: c.status === "ALERTED" ? "CLOSED" : c.status };
-        });
-        await emDocRef.set({ hospitalCandidates: updatedCandidates }, { merge: true });
+        const acceptedCand = candidates.find((c: any) => c.hospitalId === hospital.docId || c.name === hospData.name);
+        const remainingCands = candidates.filter((c: any) => c.hospitalId !== hospital.docId && c.name !== hospData.name)
+          .map((c: any) => ({ ...c, status: "STANDBY" }));
+
+        const reorderedCandidates = acceptedCand
+          ? [{ ...acceptedCand, status: "ACCEPTED", acceptedAt: now.toISOString() }, ...remainingCands]
+          : [{
+              hospitalId: hospital.docId,
+              name: hospData.name || hospData.hospitalName || "Apollo Multi-Specialty Hospital",
+              phone: hospData.phone || "+91-532-2460108",
+              location: resolvedHospLoc,
+              status: "ACCEPTED",
+              acceptedAt: now.toISOString(),
+            }, ...remainingCands];
+
+        await emDocRef.set({
+          hospitalCandidates: reorderedCandidates,
+          alertedCandidateIndex: 0,
+          alertedHospitalId: hospital.docId,
+          alertedHospitalName: hospData.name || hospData.hospitalName || "Apollo Multi-Specialty Hospital",
+        }, { merge: true });
       }
     }
   } catch (_candErr) {}

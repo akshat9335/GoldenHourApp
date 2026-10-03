@@ -166,8 +166,11 @@ export async function getAmbulanceRequests(
         if (!isApolloOrUnassigned && !isIndependent) {
           return false;
         }
-      } else if (!isIndependent && driverHospId && req.assignedHospitalId && driverHospId !== req.assignedHospitalId) {
-        return false; // Assigned to a different hospital's catchment
+      } else if (!isIndependent && driverHospId) {
+        // Affiliated hospital driver: ONLY see emergencies that have been accepted by their hospital!
+        if (!req.assignedHospitalId || driverHospId !== req.assignedHospitalId) {
+          return false;
+        }
       }
 
       // 4. If hospital dispatched to AFFILIATED fleet explicitly:
