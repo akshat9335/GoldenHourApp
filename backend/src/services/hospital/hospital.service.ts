@@ -461,7 +461,7 @@ async function transitionHospitalRequest(
     // Keep Ambulance Trips, Driver availability, and Ambulance vehicle in sync with hospital status
     try {
       if (firestore && emergencyId) {
-        const tripsSnap = await firestore.collection("trips").where("emergencyId", "==", emergencyId).get();
+        const tripsSnap = await firestore.collection("ambulanceTrips").where("emergencyId", "==", emergencyId).get();
         for (const tripDoc of tripsSnap.docs) {
           const tripData = tripDoc.data() || {};
           if (tripData.status !== "COMPLETED") {
@@ -1470,7 +1470,7 @@ export async function markHospitalPatientArrived(
     const { requestData } = await getOwnedEmergencyRequest(uid, requestId, false);
     const emergencyId = requestData.emergencyId || requestData.accidentId || requestId;
     if (firestore && emergencyId) {
-      const tripsSnap = await firestore.collection("trips").where("emergencyId", "==", emergencyId).get();
+      const tripsSnap = await firestore.collection("ambulanceTrips").where("emergencyId", "==", emergencyId).get();
       for (const tripDoc of tripsSnap.docs) {
         const tripData = tripDoc.data() || {};
         const tStatus = String(tripData.status || "").toUpperCase();

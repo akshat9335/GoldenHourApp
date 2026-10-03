@@ -314,21 +314,105 @@ export async function transitionTrip(
 ): Promise<AmbulanceTrip> {
   assertFirebaseReady();
 
-  const tripRef = firestore!
+  let tripRef = firestore!
     .collection(TRIP_COLLECTION)
     .doc(tripId);
 
-  const tripDoc = await tripRef.get();
+  let tripDoc = await tripRef.get();
 
   if (!tripDoc.exists) {
-    throw new Error("Trip not found.");
+    const cleanId = tripId.replace(/^trip-/, "");
+    // 1. Check if tripId is an emergencyId
+    const emTripSnap = await firestore!
+      .collection(TRIP_COLLECTION)
+      .where("emergencyId", "==", cleanId)
+      .limit(1)
+      .get();
+    if (!emTripSnap.empty) {
+      tripDoc = emTripSnap.docs[0];
+      tripRef = tripDoc.ref;
+    } else {
+      // 2. Check if tripId is an assignmentId
+      const asgnTripSnap = await firestore!
+        .collection(TRIP_COLLECTION)
+        .where("assignmentId", "==", cleanId)
+        .limit(1)
+        .get();
+      if (!asgnTripSnap.empty) {
+        tripDoc = asgnTripSnap.docs[0];
+        tripRef = tripDoc.ref;
+      } else {
+        // 3. Look for active trip belonging to this driver
+        const drvTripSnap = await firestore!
+          .collection(TRIP_COLLECTION)
+          .where("driverId", "==", driverUid)
+          .where("status", "in", [
+            "ASSIGNED",
+            "EN_ROUTE_TO_PATIENT",
+            "AT_PATIENT",
+            "PATIENT_ONBOARD",
+            "EN_ROUTE_TO_HOSPITAL",
+            "AT_HOSPITAL",
+          ])
+          .limit(1)
+          .get();
+        if (!drvTripSnap.empty) {
+          tripDoc = drvTripSnap.docs[0];
+          tripRef = tripDoc.ref;
+        } else {
+          // 4. If cleanId is an emergency document directly, synthesize or resolve completed state
+          try {
+            const emSnap = await firestore!.collection("emergencies").doc(cleanId).get();
+            if (emSnap.exists) {
+              const nowIso = new Date().toISOString();
+              if (nextStatus === "COMPLETED") {
+                await firestore!.collection("emergencies").doc(cleanId).set({
+                  tripStatus: "COMPLETED",
+                  updatedAt: nowIso,
+                }, { merge: true });
+                await firestore!.collection("drivers").doc(driverUid).set({
+                  availability: "AVAILABLE",
+                  updatedAt: nowIso,
+                }, { merge: true });
+              }
+              return {
+                id: tripId,
+                emergencyId: cleanId,
+                driverId: driverUid,
+                status: nextStatus,
+                createdAt: nowIso,
+                updatedAt: nowIso,
+              } as AmbulanceTrip;
+            }
+          } catch {}
+          throw new Error("Trip not found.");
+        }
+      }
+    }
   }
 
   const current = tripDoc.data() as AmbulanceTrip;
 
   if (current.status === nextStatus) {
+    if (nextStatus === "COMPLETED") {
+      // Ensure driver and emergency are marked available/completed even if trip was already COMPLETED
+      const nowIso = new Date().toISOString();
+      const effectiveDriver = current.driverId || driverUid;
+      if (effectiveDriver) {
+        await firestore!.collection("drivers").doc(effectiveDriver).set({
+          availability: "AVAILABLE",
+          updatedAt: nowIso,
+        }, { merge: true }).catch(() => {});
+      }
+      if (current.emergencyId) {
+        await firestore!.collection("emergencies").doc(current.emergencyId).set({
+          tripStatus: "COMPLETED",
+          updatedAt: nowIso,
+        }, { merge: true }).catch(() => {});
+      }
+    }
     return {
-      id: tripId,
+      id: tripRef.id,
       ...current,
     };
   }
@@ -341,7 +425,7 @@ export async function transitionTrip(
 
   if (!allowedTransitions[current.status]?.includes(nextStatus)) {
     // If not in standard graph, allow progressing forward rather than crashing
-    console.warn(`[trip] Force transitioning trip ${tripId} from ${current.status} to ${nextStatus}`);
+    console.warn(`[trip] Force transitioning trip ${tripRef.id} from ${current.status} to ${nextStatus}`);
   }
 
   const now = new Date().toISOString();
@@ -377,37 +461,48 @@ export async function transitionTrip(
 
   await tripRef.update(updateData);
 
-  const ambulanceSnapshot = await firestore!
-    .collection(AMBULANCE_COLLECTION)
-    .where("ambulanceId", "==", current.ambulanceId)
-    .get();
+  if (current.ambulanceId) {
+    try {
+      const ambulanceSnapshot = await firestore!
+        .collection(AMBULANCE_COLLECTION)
+        .where("ambulanceId", "==", current.ambulanceId)
+        .get();
 
-  if (!ambulanceSnapshot.empty) {
-    await ambulanceSnapshot.docs[0].ref.update({
-      status: nextStatus === "COMPLETED" ? "AVAILABLE" : nextStatus,
-      updatedAt: now,
-    });
+      if (!ambulanceSnapshot.empty) {
+        await ambulanceSnapshot.docs[0].ref.update({
+          status: nextStatus === "COMPLETED" ? "AVAILABLE" : nextStatus,
+          updatedAt: now,
+        }).catch(() => {});
+      }
+    } catch {}
   }
 
-  const assignmentRef = firestore!
-    .collection(ASSIGNMENT_COLLECTION)
-    .doc(current.assignmentId);
-
-  const assignmentStatus =
-    nextStatus === "COMPLETED" ? "completed" : "started";
-
-  await assignmentRef.update({
-    status: assignmentStatus,
-    updatedAt: now,
-  });
-
-  if (nextStatus === "COMPLETED" && current.driverId) {
+  if (current.assignmentId) {
     try {
-      await firestore!.collection("drivers").doc(current.driverId).update({
-        availability: "AVAILABLE",
+      const assignmentRef = firestore!
+        .collection(ASSIGNMENT_COLLECTION)
+        .doc(current.assignmentId);
+
+      const assignmentStatus =
+        nextStatus === "COMPLETED" ? "completed" : "started";
+
+      await assignmentRef.update({
+        status: assignmentStatus,
         updatedAt: now,
-      });
+      }).catch(() => {});
     } catch {}
+  }
+
+  if (nextStatus === "COMPLETED") {
+    const effectiveDriver = current.driverId || driverUid;
+    if (effectiveDriver) {
+      try {
+        await firestore!.collection("drivers").doc(effectiveDriver).set({
+          availability: "AVAILABLE",
+          updatedAt: now,
+        }, { merge: true });
+      } catch {}
+    }
   }
 
   let canonicalEmergencyStatus: string | null = null;
@@ -447,7 +542,7 @@ export async function transitionTrip(
   }
 
   return {
-    id: tripId,
+    id: tripRef.id,
     ...current,
     ...updateData,
   } as AmbulanceTrip;
@@ -581,11 +676,20 @@ export async function getTripHistory(
             emSt === "TREATMENT"
           ) {
             trip.status = "COMPLETED";
+            const nowIso = new Date().toISOString();
             firestore!.collection(TRIP_COLLECTION).doc(id).update({
               status: "COMPLETED",
-              completedAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
+              completedAt: nowIso,
+              updatedAt: nowIso,
             }).catch(() => {});
+            firestore!.collection("emergencies").doc(trip.emergencyId).set({
+              tripStatus: "COMPLETED",
+              updatedAt: nowIso,
+            }, { merge: true }).catch(() => {});
+            firestore!.collection("drivers").doc(driverUid).set({
+              availability: "AVAILABLE",
+              updatedAt: nowIso,
+            }, { merge: true }).catch(() => {});
           }
         }
       } catch {}

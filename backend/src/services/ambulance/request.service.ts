@@ -113,18 +113,32 @@ export async function getAmbulanceRequests(
   return requests
     .filter((req) => {
       const st = String(req.status || "").toUpperCase();
-      // Strictly exclude terminal/closed/completed emergencies from incoming active requests
+      const tripSt = String((req as any).tripStatus || "").toUpperCase();
+
+      // Strictly exclude terminal/closed/completed/arrived emergencies from incoming active requests
       if (
         st === "COMPLETED" ||
         st === "CANCELLED" ||
         st === "RESOLVED" ||
-        st === "REJECTED"
+        st === "REJECTED" ||
+        st === "PATIENT_ARRIVED" ||
+        st === "IN_TREATMENT" ||
+        st === "IN TREATMENT" ||
+        st === "TREATMENT" ||
+        st === "DISCHARGED" ||
+        tripSt === "COMPLETED" ||
+        tripSt === "AT_HOSPITAL"
       ) {
         return false;
       }
 
       // If already assigned to another driver, exclude
       if (req.assignedDriverId && driverUid && req.assignedDriverId !== driverUid) {
+        return false;
+      }
+
+      // If already claimed by this driver, it belongs to active trip or mission history, not dispatch queue!
+      if (req.assignedDriverId && driverUid && req.assignedDriverId === driverUid) {
         return false;
       }
 
@@ -175,11 +189,8 @@ export async function getAmbulanceRequests(
 
       // 4. If hospital dispatched to AFFILIATED fleet explicitly:
       if (req.dispatchMode === "AFFILIATED") {
-        if (req.targetDriverId && driverUid && req.targetDriverId === driverUid) {
-          return true;
-        }
-        if (driverHospId && req.assignedHospitalId && driverHospId === req.assignedHospitalId) {
-          return true;
+        if (req.targetDriverId && driverUid && req.targetDriverId !== driverUid) {
+          return false;
         }
         if (driverHospId && req.assignedHospitalId && driverHospId !== req.assignedHospitalId) {
           return false;

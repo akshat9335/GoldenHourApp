@@ -1196,7 +1196,7 @@ export async function cancelEmergencyById(
 
   // Cascade cancel trips and free assigned driver / ambulance
   try {
-    const tripsSnap = await db.collection("trips").where("emergencyId", "==", emergencyId).get();
+    const tripsSnap = await db.collection("ambulanceTrips").where("emergencyId", "==", emergencyId).get();
     for (const tripDoc of tripsSnap.docs) {
       await tripDoc.ref.update({
         status: "CANCELLED",
