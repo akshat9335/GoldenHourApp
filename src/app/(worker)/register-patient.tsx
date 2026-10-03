@@ -100,23 +100,35 @@ export default function RegisterPatient() {
     };
 
     try {
-      // Save locally first (offline-first, prepend to top of list)
+      // Save locally first (offline-first, deduplicate against existing)
       const raw = await AsyncStorage.getItem(storageKey);
-      const existing = raw ? JSON.parse(raw) : [];
-      await AsyncStorage.setItem(storageKey, JSON.stringify([patient, ...existing]));
-      await AsyncStorage.setItem('@golden_hour_community_patients', JSON.stringify([patient, ...existing]));
+      const existing: any[] = raw ? JSON.parse(raw) : [];
+      const isSamePatient = (a: any, b: any) =>
+        a.id === b.id ||
+        (a.phone && b.phone && a.phone.trim() === b.phone.trim()) ||
+        (a.name?.trim().toLowerCase() === b.name?.trim().toLowerCase() && a.age === b.age);
+
+      const deduped = existing.filter((p) => !isSamePatient(p, patient));
+      let finalPatient = patient;
 
       // Try to sync to backend, else queue it
       const netState = await NetInfo.fetch();
       if (netState.isConnected) {
         try {
-          await api.worker.registerPatient(patient);
+          const res: any = await api.worker.registerPatient(patient);
+          if (res?.data?.id) {
+            finalPatient = res.data;
+          }
         } catch {
           await enqueueOfflineAction('/api/worker/patients', 'POST', patient);
         }
       } else {
         await enqueueOfflineAction('/api/worker/patients', 'POST', patient);
       }
+
+      const updatedList = [finalPatient, ...deduped.filter((p) => p.id !== finalPatient.id)];
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedList));
+      await AsyncStorage.setItem('@golden_hour_community_patients', JSON.stringify(updatedList));
 
       Alert.alert(t('asha.patientRegistered'), t('asha.patientSaved'), [
         { text: 'OK', onPress: () => router.back() },

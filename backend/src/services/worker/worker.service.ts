@@ -16,20 +16,20 @@ const REFERRALS_COL = "communityReferrals";
  */
 export async function registerCommunityPatient(
   workerUid: string,
-  data: Omit<CommunityPatient, "id" | "crisisId" | "workerUid" | "createdAt" | "updatedAt">
+  data: Partial<CommunityPatient> & { name: string; age: number; gender: any }
 ): Promise<CommunityPatient> {
-  const id = `pat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const crisisId = `CR-${Date.now().toString(36).toUpperCase()}`;
+  const id = data.id || `pat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const crisisId = data.crisisId || `CR-${Date.now().toString(36).toUpperCase()}`;
   const now = new Date().toISOString();
 
   const patient: CommunityPatient = {
+    ...data,
     id,
     crisisId,
     workerUid,
-    ...data,
-    createdAt: now,
+    createdAt: data.createdAt || now,
     updatedAt: now,
-  };
+  } as CommunityPatient;
 
   // Cache in in-memory datastore
   dataStore.communityPatients.set(id, patient);
@@ -58,7 +58,9 @@ export async function getWorkerPatients(workerUid: string): Promise<CommunityPat
         .get();
 
       if (!snap.empty) {
-        const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as CommunityPatient));
+        const docs = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as any) } as CommunityPatient))
+          .filter((p) => p && p.name);
         docs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         return docs;
       }
@@ -68,9 +70,15 @@ export async function getWorkerPatients(workerUid: string): Promise<CommunityPat
   }
 
   // Fallback to in-memory store
-  const all = Array.from(dataStore.communityPatients.values());
-  const filtered = all.filter((p) => !workerUid || p.workerUid === workerUid || workerUid === "asha-worker-prayagraj");
-  return filtered.length > 0 ? filtered : all;
+  const all = Array.from(dataStore.communityPatients.values()).filter((p) => p && p.name);
+  const filtered = all.filter((p) => p.workerUid === workerUid);
+  if (filtered.length > 0) return filtered;
+
+  // Only return demo seed patients if this is the explicit demo worker or no workerUid provided
+  if (!workerUid || workerUid === "asha-worker-prayagraj") {
+    return all;
+  }
+  return [];
 }
 
 /**
@@ -85,7 +93,23 @@ export async function getPatientById(
     try {
       const doc = await firestore.collection(PATIENTS_COL).doc(patientId).get();
       if (doc.exists) {
-        patient = { id: doc.id, ...(doc.data() as any) } as CommunityPatient;
+        const data = doc.data() as any;
+        const memoryFallback = dataStore.communityPatients.get(patientId);
+        patient = {
+          id: doc.id,
+          name: data?.name || memoryFallback?.name || "Community Patient",
+          age: data?.age ?? memoryFallback?.age ?? 30,
+          gender: data?.gender || memoryFallback?.gender || "FEMALE",
+          phone: data?.phone || memoryFallback?.phone || "",
+          villageOrArea: data?.villageOrArea || memoryFallback?.villageOrArea || "Prayagraj Rural",
+          workerUid: data?.workerUid || memoryFallback?.workerUid || "asha-worker-prayagraj",
+          workerName: data?.workerName || memoryFallback?.workerName || "ASHA Worker",
+          bloodGroup: data?.bloodGroup || memoryFallback?.bloodGroup,
+          knownConditions: data?.knownConditions || memoryFallback?.knownConditions || [],
+          isPregnant: data?.isPregnant ?? memoryFallback?.isPregnant ?? false,
+          expectedDeliveryDate: data?.expectedDeliveryDate || memoryFallback?.expectedDeliveryDate,
+          ...data,
+        } as CommunityPatient;
       }
     } catch {
       // fallback
@@ -164,10 +188,14 @@ export async function recordCommunityVisit(
   if (isFirebaseConfigured() && firestore) {
     try {
       await firestore.collection(VISITS_COL).doc(id).set(visit);
-      await firestore
-        .collection(PATIENTS_COL)
-        .doc(data.patientId)
-        .set({ lastVisitDate: now, updatedAt: now }, { merge: true });
+      const patRef = firestore.collection(PATIENTS_COL).doc(data.patientId);
+      const patSnap = await patRef.get();
+      if (patSnap.exists) {
+        await patRef.set({ lastVisitDate: now, updatedAt: now }, { merge: true });
+      } else if (existingPat) {
+        // Patient exists in memory/seed, save full document to avoid orphan stub
+        await patRef.set({ ...existingPat, lastVisitDate: now, updatedAt: now });
+      }
     } catch (err) {
       console.warn("[WorkerService] Firestore visit write failed:", err);
     }
@@ -215,8 +243,12 @@ export async function createCommunityReferral(
  */
 export async function getWorkerReferrals(workerUid: string): Promise<CommunityReferral[]> {
   const all = Array.from(dataStore.communityReferrals.values());
-  const filtered = all.filter((r) => !workerUid || r.workerUid === workerUid || workerUid === "asha-worker-prayagraj");
-  return filtered.length > 0 ? filtered : all;
+  const filtered = all.filter((r) => r.workerUid === workerUid);
+  if (filtered.length > 0) return filtered;
+  if (!workerUid || workerUid === "asha-worker-prayagraj") {
+    return all;
+  }
+  return [];
 }
 
 /**

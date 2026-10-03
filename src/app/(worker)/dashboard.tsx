@@ -106,8 +106,13 @@ export default function WorkerDashboard() {
         ];
         localList = seedPatients;
         await AsyncStorage.setItem(storageKey, JSON.stringify(seedPatients));
+      } else if (!isDemoMode) {
+        // Purge any leaked seed demo patients from real worker storage
+        localList = localList.filter((p) => p && p.name && !p.id.startsWith('pat-seed-'));
       }
 
+      // Filter out any corrupted stubs without names
+      localList = localList.filter((p) => p && p.name);
       setPatients(localList);
 
       // If online, fetch real patients from backend for this worker
@@ -116,11 +121,48 @@ export default function WorkerDashboard() {
         const res: any = await api.worker.getPatients(queryUid);
         const list = Array.isArray(res) ? res : res?.data;
         if (Array.isArray(list)) {
-          // Merge local and backend by ID so newly registered patients are preserved
-          const map = new Map<string, CommunityPatient>();
-          list.forEach((p: CommunityPatient) => map.set(p.id, p));
-          localList.forEach((p: CommunityPatient) => map.set(p.id, p));
-          const merged = Array.from(map.values()).sort(
+          const validBackendList: CommunityPatient[] = list.filter(
+            (p: CommunityPatient) => p && p.name && (isDemoMode || !p.id.startsWith('pat-seed-'))
+          );
+
+          // Deduplicate smartly by ID and semantic profile (name + phone/village)
+          const getDedupKey = (p: CommunityPatient): string => {
+            if (p.phone && p.phone.trim().length >= 4) {
+              return `phone::${p.phone.replace(/[^0-9]/g, '')}`;
+            }
+            const normName = (p.name || '').trim().toLowerCase();
+            const normVillage = (p.villageOrArea || '').trim().toLowerCase();
+            return `sem::${normName}_${p.age || 0}_${normVillage}`;
+          };
+
+          const idMap = new Map<string, CommunityPatient>();
+          const dedupMap = new Map<string, CommunityPatient>();
+
+          // Backend is primary source of truth for IDs & synced timestamps
+          validBackendList.forEach((p: CommunityPatient) => {
+            idMap.set(p.id, p);
+            dedupMap.set(getDedupKey(p), p);
+          });
+
+          // Merge local cache
+          localList.forEach((localP: CommunityPatient) => {
+            const semKey = getDedupKey(localP);
+            if (idMap.has(localP.id)) {
+              const existing = idMap.get(localP.id)!;
+              idMap.set(localP.id, { ...localP, ...existing });
+            } else if (dedupMap.has(semKey)) {
+              // Same patient registered with local temporary ID vs backend generated ID
+              const existing = dedupMap.get(semKey)!;
+              const merged = { ...localP, ...existing };
+              idMap.set(existing.id, merged);
+              dedupMap.set(semKey, merged);
+            } else {
+              idMap.set(localP.id, localP);
+              dedupMap.set(semKey, localP);
+            }
+          });
+
+          const merged = Array.from(idMap.values()).sort(
             (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
           );
           setPatients(merged);
@@ -235,8 +277,8 @@ export default function WorkerDashboard() {
 
   const filtered = patients.filter(
     (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.villageOrArea.toLowerCase().includes(search.toLowerCase())
+      (p?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      (p?.villageOrArea || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const getBannerConfig = () => {
@@ -445,15 +487,15 @@ export default function WorkerDashboard() {
                 activeOpacity={0.8}
               >
                 <View style={styles.patientAvatar}>
-                  <Text style={styles.patientAvatarText}>{p.name.charAt(0).toUpperCase()}</Text>
+                  <Text style={styles.patientAvatarText}>{((p?.name || 'P').trim().charAt(0) || 'P').toUpperCase()}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={styles.patientName}>{p.name}</Text>
-                    <Text style={styles.crisisBadge}>{p.crisisId || 'ID'}</Text>
+                    <Text style={styles.patientName}>{p?.name || (lang === 'hi' ? 'अज्ञात रोगी' : 'Unnamed Patient')}</Text>
+                    <Text style={styles.crisisBadge}>{p?.crisisId || p?.id || 'ID'}</Text>
                   </View>
                   <Text style={styles.patientMeta}>
-                    {p.age}y • {p.gender === 'MALE' ? '♂' : p.gender === 'FEMALE' ? '♀' : '⚧'} • {p.villageOrArea}
+                    {p?.age ?? '--'}y • {p?.gender === 'MALE' ? '♂' : p?.gender === 'FEMALE' ? '♀' : '⚧'} • {p?.villageOrArea || (lang === 'hi' ? 'ग्रामीण क्षेत्र' : 'Rural Area')}
                   </Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                     {p.isPregnant && (

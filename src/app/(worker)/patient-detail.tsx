@@ -118,7 +118,11 @@ export default function PatientDetailScreen() {
       try {
         const data: any = await api.worker.getPatientDetail(patientId);
         if (data?.patient) {
-          setPatient(data.patient);
+          setPatient((prev) => {
+            const merged = { ...(prev || {}), ...data.patient };
+            if (!merged.name && prev?.name) merged.name = prev.name;
+            return merged;
+          });
           if (data.visits?.length) setVisits(data.visits);
           if (data.referrals?.length) setReferrals(data.referrals);
         }
@@ -191,12 +195,12 @@ export default function PatientDetailScreen() {
         <View style={styles.profileCard}>
           <View style={styles.avatarRow}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{patient.name.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.avatarText}>{((patient.name || 'P').trim().charAt(0) || 'P').toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.patientName}>{patient.name}</Text>
+              <Text style={styles.patientName}>{patient.name || (lang === 'hi' ? 'अज्ञात रोगी' : 'Unnamed Patient')}</Text>
               <Text style={styles.patientMeta}>
-                {patient.age}y • {patient.gender === 'MALE' ? '♂ Male' : patient.gender === 'FEMALE' ? '♀ Female' : '⚧ Other'} • {patient.villageOrArea}
+                {patient.age ?? '--'}y • {patient.gender === 'MALE' ? '♂ Male' : patient.gender === 'FEMALE' ? '♀ Female' : '⚧ Other'} • {patient.villageOrArea || (lang === 'hi' ? 'ग्रामीण क्षेत्र' : 'Rural Area')}
               </Text>
               <View style={styles.crisisBadge}>
                 <Text style={styles.crisisText}>ID: {patient.crisisId || patient.id}</Text>
@@ -296,11 +300,13 @@ export default function PatientDetailScreen() {
               <View key={v.id} style={styles.visitCard}>
                 <View style={styles.visitHeader}>
                   <Text style={styles.visitDate}>
-                    📅 {new Date(v.visitDate).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-US', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
+                    📅 {v.visitDate && !isNaN(new Date(v.visitDate).getTime())
+                      ? new Date(v.visitDate).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-US', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : (lang === 'hi' ? 'हाल की जाँच' : 'Recent Visit')}
                   </Text>
                   <View
                     style={[
@@ -321,30 +327,30 @@ export default function PatientDetailScreen() {
 
                 {/* Vitals summary */}
                 <View style={styles.vitalsRow}>
-                  {v.vitals.bloodPressure && (
+                  {v.vitals?.bloodPressure ? (
                     <View style={styles.vitalBox}>
                       <Text style={styles.vitalVal}>{v.vitals.bloodPressure}</Text>
                       <Text style={styles.vitalLabel}>BP</Text>
                     </View>
-                  )}
-                  {v.vitals.pulse && (
+                  ) : null}
+                  {v.vitals?.pulse ? (
                     <View style={styles.vitalBox}>
                       <Text style={styles.vitalVal}>{v.vitals.pulse} bpm</Text>
                       <Text style={styles.vitalLabel}>Pulse</Text>
                     </View>
-                  )}
-                  {v.vitals.spO2 && (
+                  ) : null}
+                  {v.vitals?.spO2 ? (
                     <View style={styles.vitalBox}>
                       <Text style={styles.vitalVal}>{v.vitals.spO2}%</Text>
                       <Text style={styles.vitalLabel}>SpO₂</Text>
                     </View>
-                  )}
-                  {v.vitals.bloodSugar && (
+                  ) : null}
+                  {v.vitals?.bloodSugar ? (
                     <View style={styles.vitalBox}>
                       <Text style={styles.vitalVal}>{v.vitals.bloodSugar}</Text>
                       <Text style={styles.vitalLabel}>Sugar</Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
 
                 {v.symptoms ? (

@@ -15,13 +15,15 @@ export class WorkerController {
   public static async registerPatient(req: Request, res: Response, next: NextFunction) {
     try {
       const workerUid = (req as any).user?.uid || req.body.workerUid || "asha-worker-prayagraj";
-      const { name, age, gender, phone, villageOrArea, bloodGroup, knownConditions, isPregnant, expectedDeliveryDate } = req.body;
+      const { id, crisisId, name, age, gender, phone, villageOrArea, bloodGroup, knownConditions, isPregnant, expectedDeliveryDate } = req.body;
 
       if (!name) {
         throw new AppError(400, "MISSING_REQUIRED_FIELD", "Patient name is required");
       }
 
       const patient = await registerCommunityPatient(workerUid, {
+        id,
+        crisisId,
         name,
         age: Number(age) || 0,
         gender: gender || "FEMALE",
