@@ -13,6 +13,7 @@ import {
   escalateToEmergency, userHasAccess, type Teleconsultation,
 } from '@/services/teleconsultation';
 import { api } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 import {
   WebRTCPeer, publishSignal, subscribeSignals, ensureRoomDoc,
   type SignalPayload,
@@ -138,6 +139,10 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
     } catch {}
     if (consult?.appointmentId && !consult.appointmentId.startsWith('apt_tc_')) {
       api.appointments.complete(consult.appointmentId).catch(() => {});
+    }
+    if (selfRole === 'doctor') {
+      const docId = consult?.doctorId || (useAppStore.getState().userProfile?.uid ? `doc-${useAppStore.getState().userProfile.uid}` : 'doc-1');
+      api.queues.advanceQueue(docId).catch(() => {});
     }
     Alert.alert('Consultation Ended', 'The teleconsultation session has ended.', [
       { text: 'OK', onPress: () => router.back() }

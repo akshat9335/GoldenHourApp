@@ -127,7 +127,10 @@ export default function AppointmentDetail() {
           <Button
             title="📹 Start Video Consultation"
             variant="primary"
-            onPress={() => router.push(`/(patient)/teleconsultation/tc_${displayToken}` as any)}
+            onPress={() => {
+              const consultId = activeAppt?.appointmentId || activeAppt?.id || `appt_${selectedDoctorId}_${displayToken}`;
+              router.push(`/(patient)/teleconsultation/${consultId}` as any);
+            }}
           />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button title="Get Directions" variant="blue" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/clinic-location')} />

@@ -101,7 +101,10 @@ export default function DoctorAppointments() {
                   <Button
                     title="📹 Start Video Consultation"
                     variant="blue"
-                    onPress={() => router.push(`/(doctor)/teleconsultation/tc_${a.token || a.id}` as any)}
+                    onPress={() => {
+                      const consultId = a.appointmentId || a.id || `appt_${a.token}`;
+                      router.push(`/(doctor)/teleconsultation/${consultId}` as any);
+                    }}
                   />
                 </View>
               )}

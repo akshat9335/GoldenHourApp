@@ -17,6 +17,7 @@ export default function LiveQueue() {
   const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
 
   const [isConsultCompleted, setIsConsultCompleted] = React.useState(false);
+  const [currentAppt, setCurrentAppt] = React.useState<any>(null);
   const myToken = userToken ?? (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
   const isCompleted = isConsultCompleted || (servingToken > myToken && servingToken > 0);
   const isMyTurn = !isCompleted && servingToken === myToken && servingToken > 0;
@@ -44,10 +45,14 @@ export default function LiveQueue() {
             const current = appts.find(
               (a: any) =>
                 a.doctorId === selectedDoctorId &&
-                ((a.tokenNumber || a.token) === myToken || (a.status || '').toUpperCase() === 'COMPLETED')
+                (a.tokenNumber || a.token) === myToken &&
+                (a.status || '').toUpperCase() !== 'CANCELLED'
             );
-            if (current && (current.status || '').toUpperCase() === 'COMPLETED') {
-              setIsConsultCompleted(true);
+            if (current) {
+              setCurrentAppt(current);
+              if ((current.status || '').toUpperCase() === 'COMPLETED') {
+                setIsConsultCompleted(true);
+              }
             }
           }
         })
@@ -133,7 +138,10 @@ export default function LiveQueue() {
           <Button
             title="📹 Join Teleconsultation Room"
             style={{ marginTop: 14, backgroundColor: colors.blue }}
-            onPress={() => router.push(`/(patient)/teleconsultation/tc_${myToken}` as any)}
+            onPress={() => {
+              const consultId = currentAppt?.appointmentId || currentAppt?.id || `appt_${selectedDoctorId}_${myToken}`;
+              router.push(`/(patient)/teleconsultation/${consultId}` as any);
+            }}
           />
         )}
 

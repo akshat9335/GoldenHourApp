@@ -400,9 +400,14 @@ export default function DoctorQueue() {
             <View style={{ marginTop: 12 }}>
               <View style={{ paddingVertical: 8, paddingHorizontal: 12, backgroundColor: colors.successBg, borderRadius: 8, marginBottom: 10 }}>
                 <Text style={{ color: colors.success, fontWeight: '700', fontSize: 13 }}>✓ Consultation Completed & Prescription Saved</Text>
+                {waitingAppointments.length > 0 && (
+                  <Text style={{ color: colors.ink, fontWeight: '600', fontSize: 12, marginTop: 4 }}>
+                    Next Patient: {waitingAppointments[0].patientName} (Token #{waitingAppointments[0].tokenNumber || waitingAppointments[0].token})
+                  </Text>
+                )}
               </View>
               <Button
-                title="Call Next Patient ›"
+                title={waitingAppointments.length > 0 ? `Call Next Patient › (${waitingAppointments[0].patientName})` : "Call Next Patient ›"}
                 style={{ backgroundColor: colors.red }}
                 onPress={handleNext}
               />
@@ -430,7 +435,10 @@ export default function DoctorQueue() {
                 <Button
                   title="📹 Join Teleconsultation Room"
                   style={{ marginTop: 8, backgroundColor: colors.blue }}
-                  onPress={() => router.push(`/(doctor)/teleconsultation/tc_${servingToken}` as any)}
+                  onPress={() => {
+                    const consultId = currentAppt?.appointmentId || currentAppt?.id || `appt_${doctorId}_${servingToken}`;
+                    router.push(`/(doctor)/teleconsultation/${consultId}` as any);
+                  }}
                 />
               )}
             </>
