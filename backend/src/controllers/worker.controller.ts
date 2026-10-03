@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import {
   registerCommunityPatient,
+  deleteCommunityPatient,
   getWorkerPatients,
   getPatientById,
   recordCommunityVisit,
@@ -28,7 +29,7 @@ export class WorkerController {
         age: Number(age) || 0,
         gender: gender || "FEMALE",
         phone: phone || "",
-        villageOrArea: villageOrArea || "Prayagraj Rural",
+        villageOrArea: (villageOrArea !== undefined && villageOrArea !== null) ? String(villageOrArea).trim() : "",
         workerName: req.body.workerName || "Sunita Verma (ASHA Sangini)",
         bloodGroup,
         knownConditions: knownConditions || [],
@@ -40,6 +41,24 @@ export class WorkerController {
         success: true,
         message: "Community patient registered successfully",
         data: patient,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public static async deletePatient(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = ((req as any).user?.uid || req.query.workerUid || "asha-worker-prayagraj") as string;
+      const { id } = req.params;
+      if (!id) {
+        throw new AppError(400, "MISSING_PATIENT_ID", "Patient id is required");
+      }
+      await deleteCommunityPatient(workerUid, id);
+      res.status(200).json({
+        success: true,
+        message: "Community patient removed successfully",
+        data: { id },
       });
     } catch (err) {
       next(err);
@@ -123,6 +142,8 @@ export class WorkerController {
     try {
       const workerUid = (req as any).user?.uid || req.body.workerUid || "asha-worker-prayagraj";
       const {
+        id,
+        referralCode,
         patientId,
         patientName,
         patientAge,
@@ -140,6 +161,8 @@ export class WorkerController {
       }
 
       const referral = await createCommunityReferral(workerUid, {
+        id,
+        referralCode,
         patientId,
         patientName: patientName || "Community Patient",
         patientAge: Number(patientAge) || 0,

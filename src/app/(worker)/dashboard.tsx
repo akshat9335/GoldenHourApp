@@ -125,14 +125,14 @@ export default function WorkerDashboard() {
             (p: CommunityPatient) => p && p.name && (isDemoMode || !p.id.startsWith('pat-seed-'))
           );
 
-          // Deduplicate smartly by ID and semantic profile (name + phone/village)
+          // Deduplicate smartly by ID and normalized semantic profile (phone or name + age)
           const getDedupKey = (p: CommunityPatient): string => {
-            if (p.phone && p.phone.trim().length >= 4) {
-              return `phone::${p.phone.replace(/[^0-9]/g, '')}`;
+            const rawPhone = (p.phone || '').replace(/[^0-9]/g, '');
+            if (rawPhone.length >= 4) {
+              return `phone::${rawPhone}`;
             }
-            const normName = (p.name || '').trim().toLowerCase();
-            const normVillage = (p.villageOrArea || '').trim().toLowerCase();
-            return `sem::${normName}_${p.age || 0}_${normVillage}`;
+            const normName = (p.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            return `sem::${normName}_${p.age || 0}`;
           };
 
           const idMap = new Map<string, CommunityPatient>();

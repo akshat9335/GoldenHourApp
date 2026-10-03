@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
@@ -61,6 +62,7 @@ export default function CreateReferralScreen() {
   const [spo2, setSpo2] = useState('');
   const [bloodSugar, setBloodSugar] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
     loadPatients();
@@ -116,6 +118,8 @@ export default function CreateReferralScreen() {
   const selectedPatient = patients.find((p) => p.id === selectedPatientId);
 
   const handleSubmit = async () => {
+    if (isSubmittingRef.current || isSubmitting) return;
+
     if (!selectedPatientId) {
       Alert.alert(t('common.error'), lang === 'mr' ? 'कृपया रुग्ण निवडा.' : lang === 'hi' ? 'कृपया रोगी चुनें।' : 'Please select a patient.');
       return;
@@ -125,6 +129,7 @@ export default function CreateReferralScreen() {
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     const userProfile = useAppStore.getState().userProfile;
     const workerUid = userProfile?.uid || 'asha-worker-prayagraj';
@@ -155,20 +160,22 @@ export default function CreateReferralScreen() {
     };
 
     try {
-      // 1. Save locally in AsyncStorage
+      // 1. Save locally in AsyncStorage (deduping by id)
       const raw = await AsyncStorage.getItem(REFERRALS_KEY);
       const list = raw ? JSON.parse(raw) : [];
-      list.unshift(payload);
-      await AsyncStorage.setItem(REFERRALS_KEY, JSON.stringify(list));
+      const updatedList = [payload, ...list.filter((r: any) => r.id !== payload.id)];
+      await AsyncStorage.setItem(REFERRALS_KEY, JSON.stringify(updatedList));
 
-      // 2. Enqueue in persistent offline queue
-      await enqueueOfflineAction('/api/worker/referrals', 'POST', payload);
-
-      // 3. If online, fire directly
-      try {
-        await api.worker.createReferral(payload);
-      } catch {
-        // Queue will auto-sync
+      // 2. Transmit to backend if online; otherwise enqueue in persistent offline queue
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        try {
+          await api.worker.createReferral(payload);
+        } catch {
+          await enqueueOfflineAction('/api/worker/referrals', 'POST', payload);
+        }
+      } else {
+        await enqueueOfflineAction('/api/worker/referrals', 'POST', payload);
       }
 
       Alert.alert(
@@ -183,6 +190,7 @@ export default function CreateReferralScreen() {
     } catch (err) {
       Alert.alert(t('common.error'), 'Could not save referral.');
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };

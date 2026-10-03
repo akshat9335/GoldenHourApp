@@ -361,6 +361,7 @@ export const api = {
     getHospitalReferrals: (hospitalId?: string) => request(`/referrals/hospital${hospitalId ? `/${hospitalId}` : ''}`),
     getPatientReferrals: (patientId: string) => request(`/referrals/patient/${patientId}`),
     updateStatus: (id: string, status: string) => request(`/referrals/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    dismiss: (id: string) => request(`/referrals/${id}`, { method: 'DELETE' }),
   },
 
   // Medicines & Stock Availability
@@ -391,6 +392,8 @@ export const api = {
       request(`/worker/patients/${id}`),
     registerPatient: (data: any) =>
       request('/worker/patients', { method: 'POST', body: JSON.stringify(data) }),
+    deletePatient: (id: string) =>
+      request(`/worker/patients/${id}`, { method: 'DELETE' }),
     recordVisit: (data: any) =>
       request('/worker/visits', { method: 'POST', body: JSON.stringify(data) }),
     createReferral: (data: any) =>

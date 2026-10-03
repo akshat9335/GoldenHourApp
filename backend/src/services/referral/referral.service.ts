@@ -228,26 +228,28 @@ class ReferralService {
       } catch {}
     }
 
-    if (!referral && dataStore && dataStore.communityReferrals) {
+    if (dataStore && dataStore.communityReferrals) {
       const commItem = dataStore.communityReferrals.get(referralId);
       if (commItem) {
         commItem.status = (status === "REJECTED" ? "CANCELLED" : status) as any;
         commItem.updatedAt = new Date().toISOString();
-        referral = {
-          id: commItem.id,
-          patientId: commItem.patientId,
-          patientName: commItem.patientName || "Community Patient",
-          doctorId: commItem.workerUid || "asha-worker",
-          doctorName: commItem.workerName || "ASHA Frontline Worker",
-          hospitalId: (commItem as any).hospitalId || "hospital",
-          hospitalName: commItem.destinationFacility || "District Hospital",
-          reason: commItem.reason || "",
-          priority: (commItem.priority === "CRITICAL" || commItem.priority === "HIGH") ? "HIGH" : "NORMAL",
-          status: (commItem.status === "CANCELLED" ? "REJECTED" : commItem.status) as ReferralStatus,
-          notes: "",
-          createdAt: commItem.createdAt || new Date().toISOString(),
-          updatedAt: commItem.updatedAt || new Date().toISOString(),
-        };
+        if (!referral) {
+          referral = {
+            id: commItem.id,
+            patientId: commItem.patientId,
+            patientName: commItem.patientName || "Community Patient",
+            doctorId: commItem.workerUid || "asha-worker",
+            doctorName: commItem.workerName || "ASHA Frontline Worker",
+            hospitalId: (commItem as any).hospitalId || "hospital",
+            hospitalName: commItem.destinationFacility || "District Hospital",
+            reason: commItem.reason || "",
+            priority: (commItem.priority === "CRITICAL" || commItem.priority === "HIGH") ? "HIGH" : "NORMAL",
+            status: (commItem.status === "CANCELLED" ? "REJECTED" : commItem.status) as ReferralStatus,
+            notes: "",
+            createdAt: commItem.createdAt || new Date().toISOString(),
+            updatedAt: commItem.updatedAt || new Date().toISOString(),
+          };
+        }
       }
     }
 
@@ -271,6 +273,24 @@ class ReferralService {
     }
 
     return referral;
+  }
+
+  public async dismissReferral(referralId: string): Promise<boolean> {
+    this.inMemoryReferrals.delete(referralId);
+    if (dataStore && dataStore.communityReferrals) {
+      dataStore.communityReferrals.delete(referralId);
+    }
+
+    if (firestore && process.env.NODE_ENV !== "test") {
+      try {
+        await firestore.collection("referrals").doc(referralId).delete();
+      } catch {}
+      try {
+        await firestore.collection("communityReferrals").doc(referralId).delete();
+      } catch {}
+    }
+
+    return true;
   }
 }
 

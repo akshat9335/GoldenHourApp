@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -44,6 +44,7 @@ export default function RegisterPatient() {
   const [customCondition, setCustomCondition] = useState('');
   const [selectedQuickConditions, setSelectedQuickConditions] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
 
   const QUICK_CONDITIONS = [
     'Severe Anemia',
@@ -56,10 +57,13 @@ export default function RegisterPatient() {
   ];
 
   const handleSave = async () => {
+    if (isSavingRef.current || isSaving) return;
+
     if (!name.trim()) {
       Alert.alert(t('common.error'), t('asha.enterPatientName'));
       return;
     }
+    isSavingRef.current = true;
     setIsSaving(true);
 
     const knownConditions: string[] = [];
@@ -105,8 +109,8 @@ export default function RegisterPatient() {
       const existing: any[] = raw ? JSON.parse(raw) : [];
       const isSamePatient = (a: any, b: any) =>
         a.id === b.id ||
-        (a.phone && b.phone && a.phone.trim() === b.phone.trim()) ||
-        (a.name?.trim().toLowerCase() === b.name?.trim().toLowerCase() && a.age === b.age);
+        (a.phone && b.phone && a.phone.trim().length >= 4 && a.phone.trim() === b.phone.trim()) ||
+        (a.name?.trim().toLowerCase() === b.name?.trim().toLowerCase());
 
       const deduped = existing.filter((p) => !isSamePatient(p, patient));
       let finalPatient = patient;
@@ -136,6 +140,7 @@ export default function RegisterPatient() {
     } catch (err) {
       Alert.alert(t('common.error'), 'Could not save patient. Please try again.');
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
   };

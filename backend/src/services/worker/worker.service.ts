@@ -18,6 +18,59 @@ export async function registerCommunityPatient(
   workerUid: string,
   data: Partial<CommunityPatient> & { name: string; age: number; gender: any }
 ): Promise<CommunityPatient> {
+  const normName = (data.name || "").trim().toLowerCase();
+  const normPhone = (data.phone || "").replace(/[^0-9]/g, "");
+
+  // Check in-memory store for existing patient under same worker
+  for (const existing of dataStore.communityPatients.values()) {
+    if (existing.workerUid === workerUid) {
+      const matchId = data.id && existing.id === data.id;
+      const matchPhone = normPhone.length >= 4 && (existing.phone || "").replace(/[^0-9]/g, "") === normPhone;
+      const matchNameAge = (existing.name || "").trim().toLowerCase() === normName && existing.age === Number(data.age);
+      if (matchId || matchPhone || matchNameAge) {
+        const merged: CommunityPatient = {
+          ...existing,
+          ...data,
+          id: existing.id,
+          crisisId: existing.crisisId || data.crisisId || `CR-${Date.now().toString(36).toUpperCase()}`,
+          workerUid,
+          updatedAt: new Date().toISOString(),
+        };
+        dataStore.communityPatients.set(existing.id, merged);
+        if (isFirebaseConfigured() && firestore) {
+          try {
+            await firestore.collection(PATIENTS_COL).doc(existing.id).set(merged, { merge: true });
+          } catch (err) {
+            console.warn("[WorkerService] Firestore update existing patient failed:", err);
+          }
+        }
+        return merged;
+      }
+    }
+  }
+
+  // Also check Firestore for existing patient by name or phone
+  if (isFirebaseConfigured() && firestore) {
+    try {
+      if (data.id) {
+        const docSnap = await firestore.collection(PATIENTS_COL).doc(data.id).get();
+        if (docSnap.exists) {
+          const existingData = docSnap.data() as CommunityPatient;
+          const merged: CommunityPatient = {
+            ...existingData,
+            ...data,
+            id: data.id,
+            workerUid,
+            updatedAt: new Date().toISOString(),
+          };
+          dataStore.communityPatients.set(data.id, merged);
+          await firestore.collection(PATIENTS_COL).doc(data.id).set(merged, { merge: true });
+          return merged;
+        }
+      }
+    } catch {}
+  }
+
   const id = data.id || `pat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const crisisId = data.crisisId || `CR-${Date.now().toString(36).toUpperCase()}`;
   const now = new Date().toISOString();
@@ -44,6 +97,48 @@ export async function registerCommunityPatient(
   }
 
   return patient;
+}
+
+/**
+ * Delete a community patient record and purge their associated records.
+ */
+export async function deleteCommunityPatient(workerUid: string, patientId: string): Promise<boolean> {
+  // 1. Remove from in-memory store
+  dataStore.communityPatients.delete(patientId);
+
+  // Purge visits & referrals for this patient in memory
+  for (const [vId, visit] of dataStore.communityVisits.entries()) {
+    if (visit.patientId === patientId) {
+      dataStore.communityVisits.delete(vId);
+    }
+  }
+  for (const [rId, ref] of dataStore.communityReferrals.entries()) {
+    if (ref.patientId === patientId) {
+      dataStore.communityReferrals.delete(rId);
+    }
+  }
+
+  // 2. Remove from Firestore
+  if (isFirebaseConfigured() && firestore) {
+    try {
+      await firestore.collection(PATIENTS_COL).doc(patientId).delete();
+
+      // Delete associated visits
+      const vSnap = await firestore.collection(VISITS_COL).where("patientId", "==", patientId).get();
+      const batch = firestore.batch();
+      vSnap.docs.forEach((doc) => batch.delete(doc.ref));
+
+      // Delete associated referrals
+      const rSnap = await firestore.collection(REFERRALS_COL).where("patientId", "==", patientId).get();
+      rSnap.docs.forEach((doc) => batch.delete(doc.ref));
+
+      await batch.commit();
+    } catch (err) {
+      console.warn("[WorkerService] Firestore delete patient failed:", err);
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -209,21 +304,54 @@ export async function recordCommunityVisit(
  */
 export async function createCommunityReferral(
   workerUid: string,
-  data: Omit<CommunityReferral, "id" | "referralCode" | "workerUid" | "status" | "createdAt" | "updatedAt">
+  data: Partial<CommunityReferral> & { patientId: string; destinationFacility: string }
 ): Promise<CommunityReferral> {
-  const id = `ref-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const referralCode = `REF-ASHA-${Date.now().toString(36).toUpperCase()}`;
   const now = new Date().toISOString();
+
+  // 1. Idempotency: Check if referral with the specified ID already exists
+  if (data.id && dataStore.communityReferrals.has(data.id)) {
+    return dataStore.communityReferrals.get(data.id)!;
+  }
+
+  // 2. Check for duplicate submission within last 30 seconds (same patient, worker, facility)
+  for (const existing of dataStore.communityReferrals.values()) {
+    if (
+      existing.workerUid === workerUid &&
+      existing.patientId === data.patientId &&
+      existing.destinationFacility.toLowerCase().trim() === (data.destinationFacility || "").toLowerCase().trim()
+    ) {
+      const timeDiff = Math.abs(new Date(now).getTime() - new Date(existing.createdAt || 0).getTime());
+      if (timeDiff < 30000) {
+        // Less than 30s ago, return existing referral
+        return existing;
+      }
+    }
+  }
+
+  // Also check Firestore if client passed an explicit ID
+  if (data.id && isFirebaseConfigured() && firestore) {
+    try {
+      const docSnap = await firestore.collection(REFERRALS_COL).doc(data.id).get();
+      if (docSnap.exists) {
+        const existingData = docSnap.data() as CommunityReferral;
+        dataStore.communityReferrals.set(data.id, existingData);
+        return existingData;
+      }
+    } catch {}
+  }
+
+  const id = data.id || `ref-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const referralCode = data.referralCode || `REF-ASHA-${Date.now().toString(36).toUpperCase()}`;
 
   const referral: CommunityReferral = {
     id,
     referralCode,
     workerUid,
     ...data,
-    status: "PENDING",
-    createdAt: now,
+    status: (data.status as any) || "PENDING",
+    createdAt: data.createdAt || now,
     updatedAt: now,
-  };
+  } as CommunityReferral;
 
   dataStore.communityReferrals.set(id, referral);
 

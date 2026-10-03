@@ -71,6 +71,16 @@ export class ReferralController {
       next(err);
     }
   }
+
+  public async dismissReferral(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      await referralService.dismissReferral(id);
+      sendSuccess(res, { id }, "Referral dismissed successfully");
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 export const referralController = new ReferralController();

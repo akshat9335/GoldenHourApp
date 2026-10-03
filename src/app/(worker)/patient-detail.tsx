@@ -80,6 +80,7 @@ export default function PatientDetailScreen() {
   const [visits, setVisits] = useState<CommunityVisit[]>([]);
   const [referrals, setReferrals] = useState<CommunityReferral[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     loadPatientData();
@@ -132,6 +133,64 @@ export default function PatientDetailScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDeletePatient = () => {
+    Alert.alert(
+      lang === 'mr' ? 'रुग्ण हटवा' : lang === 'hi' ? 'मरीज हटाएं' : 'Remove Patient',
+      lang === 'mr'
+        ? `तुम्हाला खात्री आहे का की तुम्ही ${patient?.name || 'रुग्ण'} ला सूचीमधून काढू इच्छिता?`
+        : lang === 'hi'
+        ? `क्या आप वाकई ${patient?.name || 'मरीज'} को अपनी सूची से हटाना चाहते हैं?`
+        : `Are you sure you want to remove ${patient?.name || 'this patient'} from your directory?`,
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: lang === 'mr' ? 'हटवा' : lang === 'hi' ? 'हटाएं' : 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!patient) return;
+            try {
+              setIsDeleting(true);
+              const userProfile = useAppStore.getState().userProfile;
+              const workerUid = userProfile?.uid;
+              const scopedKey = getPatientsKey(workerUid);
+
+              // 1. Remove from local storage
+              const raw = await AsyncStorage.getItem(scopedKey);
+              if (raw) {
+                const list: CommunityPatient[] = JSON.parse(raw);
+                const filtered = list.filter((p) => p.id !== patient.id);
+                await AsyncStorage.setItem(scopedKey, JSON.stringify(filtered));
+              }
+              const rawGlobal = await AsyncStorage.getItem(PATIENTS_KEY);
+              if (rawGlobal) {
+                const list: CommunityPatient[] = JSON.parse(rawGlobal);
+                const filtered = list.filter((p) => p.id !== patient.id);
+                await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(filtered));
+              }
+
+              // 2. Call backend delete
+              try {
+                await api.worker.deletePatient(patient.id);
+              } catch {
+                // If offline, already removed locally
+              }
+
+              Alert.alert(
+                lang === 'mr' ? 'यशस्वी' : lang === 'hi' ? 'सफल' : 'Success',
+                lang === 'mr' ? 'रुग्ण यशस्वीरीत्या काढला गेला.' : lang === 'hi' ? 'मरीज को सूची से हटा दिया गया है।' : 'Patient removed successfully.',
+                [{ text: 'OK', onPress: () => router.back() }]
+              );
+            } catch (err) {
+              Alert.alert(t('common.error'), 'Could not remove patient.');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleEmergencySos = () => {
@@ -387,6 +446,25 @@ export default function PatientDetailScreen() {
             ))}
           </View>
         )}
+
+        {/* Delete / Remove Patient Button */}
+        <TouchableOpacity
+          style={styles.deletePatientBtn}
+          onPress={handleDeletePatient}
+          disabled={isDeleting}
+          activeOpacity={0.8}
+        >
+          {isDeleting ? (
+            <ActivityIndicator size="small" color="#DC2626" />
+          ) : (
+            <>
+              <Icon name="close" size={15} color="#DC2626" />
+              <Text style={styles.deletePatientText}>
+                {lang === 'mr' ? 'हा रुग्ण यादीतून हटवा' : lang === 'hi' ? 'मरीज को सूची से हटाएं' : 'Remove Patient from Directory'}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -395,6 +473,24 @@ export default function PatientDetailScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { justifyContent: 'center', alignItems: 'center', padding: 20 },
+  deletePatientBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    marginTop: 14,
+    marginBottom: 40,
+  },
+  deletePatientText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

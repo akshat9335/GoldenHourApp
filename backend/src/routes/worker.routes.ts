@@ -10,6 +10,7 @@ router.get("/stats", WorkerController.getStats);
 router.post("/patients", WorkerController.registerPatient);
 router.get("/patients", WorkerController.getPatients);
 router.get("/patients/:id", WorkerController.getPatientDetail);
+router.delete("/patients/:id", WorkerController.deletePatient);
 
 // Home Visits & AI Triage
 router.post("/visits", WorkerController.recordVisit);

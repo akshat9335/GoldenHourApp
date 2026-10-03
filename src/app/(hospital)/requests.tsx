@@ -119,13 +119,36 @@ export default function HospitalRequests() {
     }
   };
 
+  const handleDismissReferral = async (id: string, e?: any) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    try {
+      setReferrals((prev) => prev.filter((r) => r.id !== id));
+      await api.referrals.dismiss(id);
+    } catch (_e) {}
+  };
+
   const handleCompleteReferral = async (id: string) => {
     try {
       await api.referrals.updateStatus(id, 'COMPLETED');
       setReferrals((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status: 'COMPLETED' } : r))
       );
-      Alert.alert('Referral Completed', 'Patient admission workflow finalized.');
+      Alert.alert(
+        'Referral Completed',
+        'Patient admission workflow finalized.',
+        [
+          { text: 'Keep in List', style: 'cancel' },
+          {
+            text: 'Dismiss / Archive',
+            onPress: async () => {
+              setReferrals((prev) => prev.filter((r) => r.id !== id));
+              try {
+                await api.referrals.dismiss(id);
+              } catch {}
+            },
+          },
+        ]
+      );
     } catch (_err) {
       Alert.alert('Update Failed', 'Could not complete referral.');
     }
@@ -260,6 +283,26 @@ export default function HospitalRequests() {
         {/* Tab 2: Doctor Referrals (Phase 4) */}
         {activeTab === 'REFERRALS' && !loading && (
           <>
+            {referrals.length > 0 && (
+              <View style={styles.queueHeader}>
+                <Text style={styles.queueCount}>{referrals.length} Total {referrals.length === 1 ? 'Referral' : 'Referrals'}</Text>
+                {referrals.some((r) => r.status === 'COMPLETED') && (
+                  <Pressable
+                    onPress={() => {
+                      const completed = referrals.filter((r) => r.status === 'COMPLETED');
+                      setReferrals((prev) => prev.filter((r) => r.status !== 'COMPLETED'));
+                      completed.forEach((c) => api.referrals.dismiss(c.id).catch(() => {}));
+                    }}
+                    style={styles.clearBtn}
+                    hitSlop={8}
+                  >
+                    <Icon name="close" size={12} color={colors.red} />
+                    <Text style={styles.clearBtnText}>Clear Completed</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
             {referrals.length === 0 ? (
               <Card style={styles.emptyCard}>
                 <Icon name="doctor" size={36} color={colors.inkSoft} />
@@ -272,12 +315,24 @@ export default function HospitalRequests() {
               referrals.map((ref) => (
                 <Card key={ref.id} style={styles.referralCard}>
                   <View style={styles.row}>
-                    <Pill color={ref.priority === 'HIGH' ? 'red' : 'grey'}>
-                      {ref.priority} PRIORITY
-                    </Pill>
-                    <Pill color={ref.status === 'ACCEPTED' ? 'success' : ref.status === 'COMPLETED' ? 'blue' : 'amber'}>
-                      {ref.status}
-                    </Pill>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Pill color={ref.priority === 'HIGH' ? 'red' : 'grey'}>
+                        {ref.priority} PRIORITY
+                      </Pill>
+                      <Pill color={ref.status === 'ACCEPTED' ? 'success' : ref.status === 'COMPLETED' ? 'blue' : 'amber'}>
+                        {ref.status}
+                      </Pill>
+                    </View>
+                    <Pressable
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDismissReferral(ref.id, e);
+                      }}
+                      hitSlop={8}
+                      style={styles.cardDismissBtn}
+                    >
+                      <Icon name="close" size={12} color={colors.redDark} />
+                    </Pressable>
                   </View>
 
                   <Text style={styles.patient}>{ref.patientName}</Text>
@@ -304,9 +359,17 @@ export default function HospitalRequests() {
                       />
                     )}
                     {ref.status === 'COMPLETED' && (
-                      <Text style={{ fontSize: 12, color: colors.success, fontWeight: '700' }}>
-                        ✓ Admitted & Transferred
-                      </Text>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                        <Text style={{ fontSize: 12, color: colors.success, fontWeight: '700' }}>
+                          ✓ Admitted & Transferred
+                        </Text>
+                        <Pressable
+                          onPress={() => handleDismissReferral(ref.id)}
+                          style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: '#F1F5F9' }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft }}>Dismiss ✕</Text>
+                        </Pressable>
+                      </View>
                     )}
                   </View>
                 </Card>
