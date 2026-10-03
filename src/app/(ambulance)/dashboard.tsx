@@ -7,6 +7,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
 import { authService } from '@/services/auth';
 import { watchDeviceLocation } from '@/services/deviceLocation';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function AmbulanceDashboard() {
   const userProfile = useAppStore((s) => s.userProfile);
@@ -329,7 +330,8 @@ export default function AmbulanceDashboard() {
           <Text style={{ fontSize: 18, color: colors.ink }}>‹</Text>
           <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>Ambulance Console</Text>
         </TouchableOpacity>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <LanguageSelector />
           <TouchableOpacity
             onPress={() => router.replace('/role-selection')}
             style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' }}

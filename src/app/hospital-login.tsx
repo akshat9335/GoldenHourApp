@@ -8,6 +8,7 @@ import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthToken } from '@/services/api';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function HospitalLogin() {
   const insets = useSafeAreaInsets();
@@ -115,6 +116,10 @@ export default function HospitalLogin() {
       >
         <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
       </Pressable>
+
+      <View style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, right: 16, zIndex: 10 }}>
+        <LanguageSelector />
+      </View>
 
       <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 40 }}>
         <View style={styles.iconCircle}>

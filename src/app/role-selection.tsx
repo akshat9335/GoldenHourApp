@@ -5,6 +5,7 @@ import { colors } from '@/constants/theme';
 import { Card, Icon, IconName, HTitle } from '@/components/ui';
 import { useAppStore, Role } from '@/store/useAppStore';
 
+import LanguageSelector from '@/components/LanguageSelector';
 import '@/services/i18n';
 
 const ROLES: Array<{ role: Role; label: string; sub: string; icon: IconName; href: string; accent?: string }> = [
@@ -20,8 +21,13 @@ export default function RoleSelection() {
   const setRole = useAppStore((s) => s.setRole);
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-      <HTitle size={21}>Continue as</HTitle>
-      <Text style={styles.sub}>Select how you'll be using Golden Hour</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <HTitle size={21}>Continue as</HTitle>
+          <Text style={styles.sub}>Select how you'll be using Golden Hour</Text>
+        </View>
+        <LanguageSelector />
+      </View>
       <View style={{ gap: 12, marginTop: 24 }}>
         {ROLES.map((r) => {
           const isASHA = r.role === 'FRONTLINE_WORKER';

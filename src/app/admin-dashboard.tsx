@@ -9,6 +9,7 @@ import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Card, Pill, Chip, HTitle, Banner, Icon, Divider } from '@/components/ui';
 import { api } from '@/services/api';
 import { authService } from '@/services/auth';
+import LanguageSelector from '@/components/LanguageSelector';
 
 type Tab = 'PENDING_DOCTORS' | 'ACTIVE_DOCTORS' | 'HOSPITALS' | 'AMBULANCES' | 'WORKERS' | 'ALL';
 type AdminState = 'LOGIN' | 'NOT_AUTHORIZED' | 'DASHBOARD';
@@ -39,6 +40,9 @@ function AdminLoginScreen({ onLogin, loading }: { onLogin: () => void; loading: 
           <Text style={gateStyles.backArrow}>&#8249;</Text>
           <Text style={gateStyles.backText}>Back</Text>
         </TouchableOpacity>
+        <View style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, right: 16, zIndex: 10 }}>
+          <LanguageSelector />
+        </View>
         <Image source={require('../../assets/images/golden-hour-logo.png')} style={gateStyles.logo} resizeMode="contain" />
         <View style={gateStyles.shieldWrap}>
           <Text style={gateStyles.shieldIcon}>🛡️</Text>
@@ -712,7 +716,7 @@ export default function AdminDashboard() {
 
   return (
     <Screen>
-      <TopBar title="Admin Console" onPressBack={handleExitAdmin} />
+      <TopBar title="Admin Console" onPressBack={handleExitAdmin} right={<LanguageSelector />} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}

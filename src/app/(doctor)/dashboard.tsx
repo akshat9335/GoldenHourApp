@@ -6,6 +6,7 @@ import { Screen, Card, Pill, Icon, DoctorNav, HTitle, LabelEyebrow, Button } fro
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById, APPOINTMENTS } from '@/constants/doctorData';
 import { api } from '@/services/api';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function DoctorDashboard() {
   const userProfile = useAppStore((s) => s.userProfile);
@@ -255,7 +256,8 @@ export default function DoctorDashboard() {
             <Text style={styles.greeting}>Good Morning,</Text>
             <HTitle size={17}>{doctorName}</HTitle>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <LanguageSelector />
             <Pressable style={styles.switchRoleBtn} onPress={() => router.replace('/role-selection')}>
               <Text style={styles.switchRoleText}>‹ Switch Role</Text>
             </Pressable>

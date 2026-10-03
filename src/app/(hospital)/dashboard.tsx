@@ -7,6 +7,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
 import { authService } from '@/services/auth';
 import { acquireFreshLocation } from '@/services/deviceLocation';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function HospitalDashboard() {
   const userProfile = useAppStore((s) => s.userProfile);
@@ -269,6 +270,7 @@ export default function HospitalDashboard() {
             </TouchableOpacity>
           </View>
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <LanguageSelector />
             <TouchableOpacity
               style={styles.switchBtn}
               onPress={() => router.replace('/role-selection')}
