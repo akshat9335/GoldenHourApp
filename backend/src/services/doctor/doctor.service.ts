@@ -405,8 +405,20 @@ export class DoctorService {
         }
       }
 
+      const today = new Date().toISOString().split("T")[0];
+      const liveQueue =
+        dataStore.queues.get(`${doc.doctorId}_${today}`) ||
+        dataStore.queues.get(`${doc.doctorId.replace(/^doc-/, '')}_${today}`) ||
+        dataStore.queues.get(`doc-${doc.doctorId}_${today}`);
+      const servingToken = liveQueue?.servingToken ?? doc.servingToken ?? 0;
+      const queueLength = liveQueue?.waitingCount ?? doc.queueLength ?? 0;
+      const estimatedWaitMinutes = queueLength * (liveQueue?.avgConsultationMinutes ?? 8);
+
       results.push({
         ...doc,
+        servingToken,
+        queueLength,
+        estimatedWaitMinutes,
         distanceKm,
         clinic,
       });

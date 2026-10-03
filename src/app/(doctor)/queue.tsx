@@ -313,6 +313,17 @@ export default function DoctorQueue() {
 
   const handleResetQueue = async () => {
     const unservedCount = waitingAppointments.length;
+    const applyResetState = () => {
+      useAppStore.setState({ servingToken: 0 });
+      setAppointments((prev) =>
+        prev.map((a) => {
+          const s = (a.status || '').toUpperCase();
+          return s === 'COMPLETED' ? a : { ...a, status: 'CANCELLED' };
+        })
+      );
+      fetchQueueData();
+    };
+
     if (unservedCount > 0) {
       Alert.alert(
         '⚠️ Active Patients in Queue',
@@ -325,12 +336,10 @@ export default function DoctorQueue() {
               try {
                 await api.doctors.closeClinicAndRollover();
                 await api.queues.resetQueue(doctorId);
-                useAppStore.setState({ servingToken: 0 });
-                fetchQueueData();
+                applyResetState();
                 Alert.alert('Queue Rolled Over', `${unservedCount} patients shifted to tomorrow's priority list.`);
               } catch {
-                useAppStore.setState({ servingToken: 0 });
-                fetchQueueData();
+                applyResetState();
               }
             },
           },
@@ -340,11 +349,9 @@ export default function DoctorQueue() {
             onPress: async () => {
               try {
                 await api.queues.resetQueue(doctorId);
-                useAppStore.setState({ servingToken: 0 });
-                fetchQueueData();
+                applyResetState();
               } catch {
-                useAppStore.setState({ servingToken: 0 });
-                fetchQueueData();
+                applyResetState();
               }
             },
           },
@@ -358,11 +365,9 @@ export default function DoctorQueue() {
           onPress: async () => {
             try {
               await api.queues.resetQueue(doctorId);
-              useAppStore.setState({ servingToken: 0 });
-              fetchQueueData();
+              applyResetState();
             } catch {
-              useAppStore.setState({ servingToken: 0 });
-              fetchQueueData();
+              applyResetState();
             }
           },
         },

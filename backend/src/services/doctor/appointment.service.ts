@@ -175,9 +175,10 @@ export class AppointmentService {
   }
 
   public async getDoctorAppointments(doctorId: string, date?: string): Promise<Appointment[]> {
+    const docIds = Array.from(new Set([doctorId, doctorId.replace(/^doc-/, ""), `doc-${doctorId}`]));
     if (firestore) {
       try {
-        let q: FirebaseFirestore.Query = firestore.collection("appointments").where("doctorId", "==", doctorId);
+        let q: FirebaseFirestore.Query = firestore.collection("appointments").where("doctorId", "in", docIds);
         if (date) {
           q = q.where("date", "==", date);
         }
@@ -193,7 +194,7 @@ export class AppointmentService {
 
     const results: Appointment[] = [];
     for (const appt of dataStore.appointments.values()) {
-      if (appt.doctorId === doctorId && (!date || appt.date === date)) {
+      if (docIds.includes(appt.doctorId) && (!date || appt.date === date)) {
         results.push(appt);
       }
     }

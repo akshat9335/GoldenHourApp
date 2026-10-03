@@ -1,4 +1,4 @@
-import { LiveQueueState, PatientQueueView } from "../../types/appointment";
+import { Appointment, LiveQueueState, PatientQueueView } from "../../types/appointment";
 import { AppError } from "../../utils/AppError";
 import { dataStore } from "../../models/dataStore";
 import { doctorService } from "./doctor.service";
@@ -116,13 +116,65 @@ export class QueueService {
     queue.waitingCount = Math.max(0, queue.totalTokensIssued - queue.servingToken);
     dataStore.queues.set(`${doctorId}_${today}`, queue);
 
-    // Update doctor record
-    const doctor = dataStore.doctors.get(doctorId);
-    if (doctor) {
-      doctor.servingToken = queue.servingToken;
-      doctor.queueLength = queue.waitingCount;
-      doctor.estimatedWaitMinutes = queue.waitingCount * queue.avgConsultationMinutes;
-      dataStore.doctors.set(doctorId, doctor);
+    const docIds = Array.from(new Set([doctorId, doctorId.replace(/^doc-/, ""), `doc-${doctorId}`]));
+
+    // Update appointment statuses in memory
+    for (const appt of dataStore.appointments.values()) {
+      if (docIds.includes(appt.doctorId)) {
+        if (appt.tokenNumber === queue.servingToken && appt.status !== "COMPLETED" && appt.status !== "CANCELLED") {
+          appt.status = "IN_PROGRESS";
+          appt.updatedAt = new Date().toISOString();
+          dataStore.appointments.set(appt.appointmentId, appt);
+        } else if (appt.tokenNumber < queue.servingToken && (appt.status === "IN_PROGRESS" || appt.status === "CONFIRMED" || appt.status === "WAITING")) {
+          appt.status = "COMPLETED";
+          appt.updatedAt = new Date().toISOString();
+          dataStore.appointments.set(appt.appointmentId, appt);
+        }
+      }
+    }
+
+    // Persist appointment status updates to Firestore
+    if (firestore && process.env.NODE_ENV !== "test") {
+      try {
+        const snap = await firestore.collection("appointments").where("doctorId", "in", docIds).get();
+        const batch = firestore.batch();
+        let bCount = 0;
+        for (const doc of snap.docs) {
+          const a = doc.data() as Appointment;
+          if (a) {
+            if (a.tokenNumber === queue.servingToken && a.status !== "COMPLETED" && a.status !== "CANCELLED") {
+              batch.set(doc.ref, { status: "IN_PROGRESS", updatedAt: new Date().toISOString() }, { merge: true });
+              bCount++;
+            } else if (a.tokenNumber < queue.servingToken && (a.status === "IN_PROGRESS" || a.status === "CONFIRMED" || a.status === "WAITING")) {
+              batch.set(doc.ref, { status: "COMPLETED", updatedAt: new Date().toISOString() }, { merge: true });
+              bCount++;
+            }
+          }
+        }
+        if (bCount > 0) {
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn("[queueService] Error updating appointment statuses in Firestore on advance:", err);
+      }
+    }
+
+    // Update doctor record across all ID variations
+    for (const dId of docIds) {
+      const doctor = dataStore.doctors.get(dId);
+      if (doctor) {
+        doctor.servingToken = queue.servingToken;
+        doctor.queueLength = queue.waitingCount;
+        doctor.estimatedWaitMinutes = queue.waitingCount * queue.avgConsultationMinutes;
+        dataStore.doctors.set(dId, doctor);
+      }
+      if (firestore && process.env.NODE_ENV !== "test") {
+        firestore.collection("doctors").doc(dId).set({
+          servingToken: queue.servingToken,
+          queueLength: queue.waitingCount,
+          estimatedWaitMinutes: queue.waitingCount * queue.avgConsultationMinutes,
+        }, { merge: true }).catch(() => {});
+      }
     }
 
     return queue;
@@ -130,7 +182,7 @@ export class QueueService {
 
   /**
    * Resets today's queue for a doctor back to clean 0 state.
-   * Cancels unserved appointments for today so they don't linger or reappear as waiting.
+   * Cancels unserved appointments so they don't linger or reappear as waiting.
    * Completed appointments remain COMPLETED.
    */
   public async resetQueue(doctorId: string, cancelUnserved: boolean = true): Promise<LiveQueueState> {
@@ -146,11 +198,13 @@ export class QueueService {
     };
     dataStore.queues.set(key, queue);
 
+    const docIds = Array.from(new Set([doctorId, doctorId.replace(/^doc-/, ""), `doc-${doctorId}`]));
+
     if (cancelUnserved) {
+      // In-memory update
       for (const appt of dataStore.appointments.values()) {
         if (
-          appt.doctorId === doctorId &&
-          appt.date === today &&
+          docIds.includes(appt.doctorId) &&
           appt.status !== "COMPLETED" &&
           appt.status !== "CANCELLED"
         ) {
@@ -158,30 +212,65 @@ export class QueueService {
           appt.notes = (appt.notes ? `${appt.notes} · ` : "") + "[Cancelled during queue reset]";
           appt.updatedAt = new Date().toISOString();
           dataStore.appointments.set(appt.appointmentId, appt);
+        }
+      }
 
-          if (firestore && process.env.NODE_ENV !== "test") {
-            firestore.collection("appointments").doc(appt.appointmentId).set({
-              status: "CANCELLED",
-              notes: appt.notes,
-              updatedAt: appt.updatedAt,
-            }, { merge: true }).catch(() => {});
+      // Firestore query & batch update
+      if (firestore && process.env.NODE_ENV !== "test") {
+        try {
+          const snap = await firestore.collection("appointments").where("doctorId", "in", docIds).get();
+          const batch = firestore.batch();
+          let count = 0;
+          for (const doc of snap.docs) {
+            const appt = doc.data() as Appointment;
+            if (appt.status !== "COMPLETED" && appt.status !== "CANCELLED") {
+              const updatedNotes = (appt.notes ? `${appt.notes} · ` : "") + "[Cancelled during queue reset]";
+              const now = new Date().toISOString();
+              batch.set(
+                doc.ref,
+                {
+                  status: "CANCELLED",
+                  notes: updatedNotes,
+                  updatedAt: now,
+                },
+                { merge: true }
+              );
+              count++;
+
+              dataStore.appointments.set(doc.id, {
+                ...appt,
+                status: "CANCELLED",
+                notes: updatedNotes,
+                updatedAt: now,
+              });
+            }
           }
+          if (count > 0) {
+            await batch.commit();
+          }
+        } catch (err) {
+          console.warn("[queueService] Error cancelling Firestore appointments on reset:", err);
         }
       }
     }
 
-    const doctor = dataStore.doctors.get(doctorId);
-    if (doctor) {
-      doctor.servingToken = 0;
-      doctor.queueLength = 0;
-      doctor.estimatedWaitMinutes = 0;
-      dataStore.doctors.set(doctorId, doctor);
+    for (const dId of docIds) {
+      const doctor = dataStore.doctors.get(dId);
+      if (doctor) {
+        doctor.servingToken = 0;
+        doctor.queueLength = 0;
+        doctor.estimatedWaitMinutes = 0;
+        dataStore.doctors.set(dId, doctor);
+      }
       if (firestore && process.env.NODE_ENV !== "test") {
-        firestore.collection("doctors").doc(doctorId).set({
-          servingToken: 0,
-          queueLength: 0,
-          estimatedWaitMinutes: 0,
-        }, { merge: true }).catch(() => {});
+        firestore.collection("doctors").doc(dId).set(
+          {
+            servingToken: 0,
+            queueLength: 0,
+            estimatedWaitMinutes: 0,
+          },
+          { merge: true }
+        ).catch(() => {});
       }
     }
 

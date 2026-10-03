@@ -21,55 +21,59 @@ export default function ConsultDoctor() {
   const storeAppointments = useAppStore((s) => s.bookedAppointments || []);
   const setStoreAppointments = useAppStore((s) => s.setBookedAppointments);
 
+  const [hasLoadedServerAppts, setHasLoadedServerAppts] = useState(false);
+
   React.useEffect(() => {
     let mounted = true;
     const userLat = lastKnownLocation?.latitude || 25.4538;
     const userLng = lastKnownLocation?.longitude || 81.8540;
 
-    api.doctors
-      .search({
-        specialty: selectedSpecialty !== 'All' ? selectedSpecialty : undefined,
-        userLat,
-        userLng,
-      })
-      .then((data: any) => {
-        if (mounted && Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((d: any, idx: number) => {
-            const rawDist = typeof d.distanceKm === 'number' ? d.distanceKm : 1.8;
-            const distKm = Number(rawDist.toFixed(1));
-            const serving = typeof d.servingToken === 'number' ? d.servingToken : 0;
-            const queueLen = typeof d.queueLength === 'number' ? d.queueLength : 0;
-            const currentTok = serving + queueLen;
+    const fetchDoctors = () => {
+      api.doctors
+        .search({
+          specialty: selectedSpecialty !== 'All' ? selectedSpecialty : undefined,
+          userLat,
+          userLng,
+        })
+        .then((data: any) => {
+          if (mounted && Array.isArray(data) && data.length > 0) {
+            const mapped = data.map((d: any, idx: number) => {
+              const rawDist = typeof d.distanceKm === 'number' ? d.distanceKm : 1.8;
+              const distKm = Number(rawDist.toFixed(1));
+              const serving = typeof d.servingToken === 'number' ? d.servingToken : 0;
+              const queueLen = typeof d.queueLength === 'number' ? d.queueLength : 0;
+              const currentTok = serving + queueLen;
 
-            return {
-              id: d.doctorId || d.id || `doc-be-${idx}`,
-              name: d.name || `Dr. ${d.specialty || 'Practitioner'}`,
-              specialization: d.specialty || d.specialization || 'General Physician',
-              qualification: d.qualification || 'MBBS, MD',
-              experience: d.experienceYears ? `${d.experienceYears} years experience` : (d.experience || '8+ yrs exp'),
-              clinic: d.clinic?.clinicName || d.clinicName || 'Prayagraj Health Center',
-              address: d.clinic?.address || d.clinicAddress || d.address || 'Civil Lines, Prayagraj',
-              latitude: d.clinic?.lat ?? d.latitude ?? 25.4538,
-              longitude: d.clinic?.lng ?? d.longitude ?? 81.8540,
-              distanceKm: distKm,
-              etaMin: Math.max(Math.round(distKm * 3), 3),
-              fee: d.consultationFee ?? 500,
-              workingHours: d.clinic?.workingHours || d.workingHours || '09:00 AM – 8:00 PM',
-              status: (d.availability === 'AVAILABLE' ? 'open' : d.availability === 'BUSY' ? 'busy' : 'closed') as 'open' | 'busy' | 'closed',
-              availableToday: d.availability !== 'OFFLINE',
-              servingToken: serving,
-              currentToken: currentTok,
-              queueLength: queueLen,
-              estimatedWaitMin: d.estimatedWaitMinutes ?? (queueLen * 8),
-              verified: d.verificationStatus === 'VERIFIED' || d.verified === true,
-            };
-          });
-          setAllDoctors(mapped);
-        }
-      })
-      .catch(() => {
-        // Offline demo fallback preserves DOCTORS
-      });
+              return {
+                id: d.doctorId || d.id || `doc-be-${idx}`,
+                name: d.name || `Dr. ${d.specialty || 'Practitioner'}`,
+                specialization: d.specialty || d.specialization || 'General Physician',
+                qualification: d.qualification || 'MBBS, MD',
+                experience: d.experienceYears ? `${d.experienceYears} years experience` : (d.experience || '8+ yrs exp'),
+                clinic: d.clinic?.clinicName || d.clinicName || 'Prayagraj Health Center',
+                address: d.clinic?.address || d.clinicAddress || d.address || 'Civil Lines, Prayagraj',
+                latitude: d.clinic?.lat ?? d.latitude ?? 25.4538,
+                longitude: d.clinic?.lng ?? d.longitude ?? 81.8540,
+                distanceKm: distKm,
+                etaMin: Math.max(Math.round(distKm * 3), 3),
+                fee: d.consultationFee ?? 500,
+                workingHours: d.clinic?.workingHours || d.workingHours || '09:00 AM – 8:00 PM',
+                status: (d.availability === 'AVAILABLE' ? 'open' : d.availability === 'BUSY' ? 'busy' : 'closed') as 'open' | 'busy' | 'closed',
+                availableToday: d.availability !== 'OFFLINE',
+                servingToken: serving,
+                currentToken: currentTok,
+                queueLength: queueLen,
+                estimatedWaitMin: d.estimatedWaitMinutes ?? (queueLen * 8),
+                verified: d.verificationStatus === 'VERIFIED' || d.verified === true,
+              };
+            });
+            setAllDoctors(mapped);
+          }
+        })
+        .catch(() => {
+          // Offline demo fallback preserves DOCTORS
+        });
+    };
 
     // Fetch user's booked appointments with patientId & poll every 4s
     const pid = userProfile?.uid || (userProfile as any)?.id || 'patient-1';
@@ -78,16 +82,23 @@ export default function ConsultDoctor() {
         .getMyAppointments(pid)
         .then((res: any) => {
           const appts = Array.isArray(res) ? res : res?.data;
-          if (mounted && Array.isArray(appts)) {
-            setMyAppointments(appts);
-            setStoreAppointments(appts);
+          if (mounted) {
+            setHasLoadedServerAppts(true);
+            if (Array.isArray(appts)) {
+              setMyAppointments(appts);
+              setStoreAppointments(appts);
+            }
           }
         })
         .catch(() => {});
     };
 
+    fetchDoctors();
     fetchAppts();
-    const timer = setInterval(fetchAppts, 4000);
+    const timer = setInterval(() => {
+      fetchDoctors();
+      fetchAppts();
+    }, 4000);
 
     return () => {
       mounted = false;
@@ -95,7 +106,11 @@ export default function ConsultDoctor() {
     };
   }, [selectedSpecialty, lastKnownLocation?.latitude, lastKnownLocation?.longitude, userProfile?.uid]);
 
-  const combinedAppointments = myAppointments.length > 0 ? myAppointments : storeAppointments;
+  const combinedAppointments = hasLoadedServerAppts
+    ? myAppointments
+    : myAppointments.length > 0
+    ? myAppointments
+    : storeAppointments;
   const todayStr = new Date().toISOString().split('T')[0];
 
   const activeAppointments = combinedAppointments.filter(
@@ -124,13 +139,12 @@ export default function ConsultDoctor() {
       await api.appointments.cancel(apptId);
     } catch {}
     setMyAppointments((prev) =>
-      prev.map((a) => ((a.appointmentId || a.id) === apptId ? { ...a, status: 'CANCELLED' } : a))
+      prev.filter((a) => (a.appointmentId || a.id) !== apptId)
     );
-    setStoreAppointments(
-      useAppStore.getState().bookedAppointments.map((a) =>
-        (a.appointmentId || a.id) === apptId ? { ...a, status: 'CANCELLED' } : a
-      )
+    const updatedStore = (useAppStore.getState().bookedAppointments || []).filter(
+      (a: any) => (a.appointmentId || a.id) !== apptId
     );
+    useAppStore.getState().setBookedAppointments(updatedStore);
     Alert.alert('Appointment Cancelled', 'The appointment has been removed from active list.');
   };
 

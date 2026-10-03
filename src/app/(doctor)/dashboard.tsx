@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
@@ -35,42 +35,42 @@ export default function DoctorDashboard() {
   const defaultDoctor = getDoctorById('doc-1');
   const [appointments, setAppointments] = useState<any[]>([]);
 
+  const loadDoctorData = useCallback((resolvedId: string) => {
+    const cleanId = normalizeDocId(resolvedId);
+
+    // Fetch live queue
+    api.queues
+      .getLiveQueue(cleanId)
+      .then((qRes: any) => {
+        const q = (qRes && typeof qRes === 'object' && 'servingToken' in qRes) ? qRes : (qRes?.data || qRes);
+        if (q && typeof q.servingToken === 'number') {
+          useAppStore.setState({ servingToken: q.servingToken });
+        }
+      })
+      .catch(() => {});
+
+    // Fetch real appointments
+    api.appointments
+      .getDoctorAppointments({ doctorId: cleanId })
+      .then((apptData: any) => {
+        if (Array.isArray(apptData)) {
+          const mapped = apptData.map((a: any) => ({
+            id: a.appointmentId || a.id,
+            doctorId: a.doctorId,
+            patientName: a.patientName || 'Patient',
+            date: a.date === new Date().toISOString().split('T')[0] ? 'Today' : a.date,
+            time: a.timeSlot || '10:00 AM',
+            token: a.tokenNumber || 1,
+            status: (a.status?.toLowerCase() === 'completed' ? 'completed' : a.status?.toLowerCase() === 'cancelled' ? 'cancelled' : 'upcoming') as 'upcoming' | 'completed' | 'cancelled',
+          }));
+          setAppointments(mapped);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-
-    const loadDoctorData = (resolvedId: string) => {
-      const cleanId = normalizeDocId(resolvedId);
-
-      // Fetch live queue
-      api.queues
-        .getLiveQueue(cleanId)
-        .then((qRes: any) => {
-          const q = (qRes && typeof qRes === 'object' && 'servingToken' in qRes) ? qRes : (qRes?.data || qRes);
-          if (mounted && q && typeof q.servingToken === 'number') {
-            useAppStore.setState({ servingToken: q.servingToken });
-          }
-        })
-        .catch(() => {});
-
-      // Fetch real appointments
-      api.appointments
-        .getDoctorAppointments({ doctorId: cleanId })
-        .then((apptData: any) => {
-          if (mounted && Array.isArray(apptData)) {
-            const mapped = apptData.map((a: any) => ({
-              id: a.appointmentId || a.id,
-              doctorId: a.doctorId,
-              patientName: a.patientName || 'Patient',
-              date: a.date === new Date().toISOString().split('T')[0] ? 'Today' : a.date,
-              time: a.timeSlot || '10:00 AM',
-              token: a.tokenNumber || 1,
-              status: (a.status?.toLowerCase() === 'completed' ? 'completed' : a.status?.toLowerCase() === 'cancelled' ? 'cancelled' : 'upcoming') as 'upcoming' | 'completed' | 'cancelled',
-            }));
-            setAppointments(mapped);
-          }
-        })
-        .catch(() => {});
-    };
 
     const isDemo = useAppStore.getState().isDemoMode || doctorId === 'doc-1' || doctorId?.includes('demo');
     if (isDemo) {
@@ -158,6 +158,14 @@ export default function DoctorDashboard() {
 
   const handleResetQueue = async () => {
     const unservedCount = activeAppointments.filter((a) => a.token > servingToken).length;
+    const applyResetState = () => {
+      useAppStore.setState({ servingToken: 0 });
+      setAppointments((prev) =>
+        prev.map((a) => (a.status === 'completed' ? a : { ...a, status: 'cancelled' }))
+      );
+      loadDoctorData(doctorId);
+    };
+
     if (unservedCount > 0) {
       Alert.alert(
         '⚠️ Active Patients in Queue',
@@ -171,10 +179,10 @@ export default function DoctorDashboard() {
                 await api.doctors.closeClinicAndRollover();
                 setIsClinicOpen(false);
                 await api.queues.resetQueue(doctorId);
-                useAppStore.setState({ servingToken: 0 });
+                applyResetState();
                 Alert.alert('Queue Rolled Over', `${unservedCount} patients shifted to tomorrow's priority queue and queue reset to 0.`);
               } catch {
-                useAppStore.setState({ servingToken: 0 });
+                applyResetState();
               }
             },
           },
@@ -184,9 +192,9 @@ export default function DoctorDashboard() {
             onPress: async () => {
               try {
                 await api.queues.resetQueue(doctorId);
-                useAppStore.setState({ servingToken: 0 });
+                applyResetState();
               } catch {
-                useAppStore.setState({ servingToken: 0 });
+                applyResetState();
               }
             },
           },
@@ -203,9 +211,9 @@ export default function DoctorDashboard() {
             onPress: async () => {
               try {
                 await api.queues.resetQueue(doctorId);
-                useAppStore.setState({ servingToken: 0 });
+                applyResetState();
               } catch {
-                useAppStore.setState({ servingToken: 0 });
+                applyResetState();
               }
             },
           },
