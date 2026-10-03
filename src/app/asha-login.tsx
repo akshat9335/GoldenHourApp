@@ -8,6 +8,8 @@ import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
 
 export default function AshaLogin() {
   const { t, i18n } = useTranslation();
@@ -68,10 +70,10 @@ export default function AshaLogin() {
     }
   };
 
-  const handleDemoLogin = () => {
-    useAppStore.getState().setRole('FRONTLINE_WORKER');
-    useAppStore.getState().setVerificationStatus('APPROVED');
-    useAppStore.getState().setUserProfile({
+  const handleDemoLogin = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-asha');
+    const profile = {
       uid: 'asha-demo-1',
       name: 'Sunita Devi (ASHA)',
       email: 'sunitadevi.asha@prayagraj.gov.in',
@@ -81,7 +83,18 @@ export default function AshaLogin() {
       verificationStatus: 'APPROVED',
       isPhoneVerified: true,
       hasCompletedProfile: true,
-    } as any);
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-asha');
+      await AsyncStorage.setItem('gh_user_uid', 'asha-demo-1');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setRole('FRONTLINE_WORKER');
+    useAppStore.getState().setRoles(['FRONTLINE_WORKER']);
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile(profile as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
     router.replace('/(worker)/dashboard');
   };
 

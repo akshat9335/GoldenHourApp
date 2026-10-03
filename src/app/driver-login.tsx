@@ -6,6 +6,8 @@ import { colors } from '@/constants/theme';
 import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
 
 export default function DriverLogin() {
   const insets = useSafeAreaInsets();
@@ -62,26 +64,34 @@ export default function DriverLogin() {
     }
   };
 
-  const handleDemoDriver = () => {
-    useAppStore.getState().setRole('AMBULANCE_DRIVER');
-    useAppStore.getState().setRoles(['AMBULANCE_DRIVER']);
-    useAppStore.getState().setVerificationStatus('APPROVED');
-    useAppStore.getState().setUserProfile({
+  const handleDemoDriver = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-driver');
+    const profile = {
       uid: 'driver-demo-ramesh',
       name: 'Pilot Ramesh Kumar',
       driverName: 'Pilot Ramesh Kumar',
       email: 'ramesh.als108@goldenhour.org',
-      phone: '+91 98765 77889',
+      phone: '+91 98765 43210',
       role: 'AMBULANCE_DRIVER',
       roles: ['AMBULANCE_DRIVER'],
       ambulanceId: 'Unit UP-70-AMB-108',
-      vehiclePlateNumber: 'UP-70-AMB-108',
+      vehiclePlateNumber: 'UP-70-EMG-108',
       ambulanceType: 'Advanced Life Support (ALS)',
-      hospitalName: 'Apollo ER Emergency Response Fleet',
+      hospitalName: 'Apollo Multi-Specialty Hospital',
       verificationStatus: 'APPROVED',
       isPhoneVerified: true,
       hasCompletedProfile: true,
-    } as any);
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-driver');
+      await AsyncStorage.setItem('gh_user_uid', 'driver-demo-ramesh');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setRole('AMBULANCE_DRIVER');
+    useAppStore.getState().setRoles(['AMBULANCE_DRIVER']);
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile(profile as any);
     useAppStore.getState().setIsAuthenticated(true);
     useAppStore.getState().setProfileExists(true);
     router.replace('/(ambulance)/dashboard');

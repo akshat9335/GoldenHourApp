@@ -832,6 +832,7 @@ export async function getHospitalRequests(uid: string) {
         `hosp-${uid}`,
         hospital.data?.hospitalId,
         hospital.data?.id,
+        ...(uid === "hosp-demo-apollo" || uid.includes("apollo") ? ["hosp-demo-apollo", "hosp-hosp-demo-apollo", "hosp-demo-token-hospital"] : []),
       ].filter(Boolean) as string[]
     )
   ).slice(0, 10);

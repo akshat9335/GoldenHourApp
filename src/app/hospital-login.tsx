@@ -7,6 +7,7 @@ import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
 
 export default function HospitalLogin() {
   const insets = useSafeAreaInsets();
@@ -73,11 +74,10 @@ export default function HospitalLogin() {
     }
   };
 
-  const handleDemoHospital = () => {
-    useAppStore.getState().setRole('HOSPITAL');
-    useAppStore.getState().setRoles(['HOSPITAL']);
-    useAppStore.getState().setVerificationStatus('APPROVED');
-    useAppStore.getState().setUserProfile({
+  const handleDemoHospital = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-hospital');
+    const profile = {
       uid: 'hosp-demo-apollo',
       name: 'Dr. Apollo Desk Admin',
       hospitalName: 'Apollo Multi-Specialty Hospital',
@@ -92,7 +92,16 @@ export default function HospitalLogin() {
       availableBeds: 18,
       icuBeds: 12,
       availableIcuBeds: 4,
-    } as any);
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-hospital');
+      await AsyncStorage.setItem('gh_user_uid', 'hosp-demo-apollo');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setRole('HOSPITAL');
+    useAppStore.getState().setRoles(['HOSPITAL']);
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile(profile as any);
     useAppStore.getState().setIsAuthenticated(true);
     useAppStore.getState().setProfileExists(true);
     router.replace('/(hospital)/dashboard');

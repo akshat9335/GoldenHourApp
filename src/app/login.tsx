@@ -12,6 +12,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -57,10 +59,10 @@ export default function LoginScreen() {
     }
   };
 
-  const handleDemoPatient = () => {
-    useAppStore.getState().setRole('PATIENT');
-    useAppStore.getState().setRoles(['PATIENT']);
-    useAppStore.getState().setUserProfile({
+  const handleDemoPatient = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-patient');
+    const profile = {
       uid: 'patient-demo-1',
       name: 'Rahul Patel',
       email: 'rahul.patel@gmail.com',
@@ -71,7 +73,15 @@ export default function LoginScreen() {
       isPhoneVerified: true,
       hasCompletedProfile: true,
       crisisId: 'CRISIS-RP-911',
-    } as any);
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-patient');
+      await AsyncStorage.setItem('gh_user_uid', 'patient-demo-1');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setRole('PATIENT');
+    useAppStore.getState().setRoles(['PATIENT']);
+    useAppStore.getState().setUserProfile(profile as any);
     useAppStore.getState().setIsAuthenticated(true);
     useAppStore.getState().setProfileExists(true);
     router.replace('/(patient)/home');

@@ -156,7 +156,17 @@ export async function getAmbulanceRequests(
       }
 
       // 3. Hospital Fleet Affiliation Check
-      if (!isIndependent && driverHospId && req.assignedHospitalId && driverHospId !== req.assignedHospitalId) {
+      if (driverUid === "driver-demo-ramesh") {
+        // Demo driver Ramesh is affiliated with Apollo (hosp-demo-apollo) and ALS 108 Emergency Dispatch
+        const isApolloOrUnassigned =
+          !req.assignedHospitalId ||
+          req.assignedHospitalId === "hosp-demo-apollo" ||
+          req.assignedHospitalId === "hosp-hosp-demo-apollo" ||
+          req.assignedHospitalId === "hosp-demo-token-hospital";
+        if (!isApolloOrUnassigned && !isIndependent) {
+          return false;
+        }
+      } else if (!isIndependent && driverHospId && req.assignedHospitalId && driverHospId !== req.assignedHospitalId) {
         return false; // Assigned to a different hospital's catchment
       }
 

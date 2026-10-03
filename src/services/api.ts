@@ -52,6 +52,18 @@ async function request<T = any>(
     headers.Authorization = `Bearer ${authToken}`;
   }
 
+  try {
+    const store = require('@/store/useAppStore')?.useAppStore?.getState();
+    const activeUid = store?.userProfile?.uid;
+    const activeRole = store?.role;
+    if (activeUid && !headers['x-dev-uid']) {
+      headers['x-dev-uid'] = activeUid;
+    }
+    if (activeRole && !headers['x-dev-role']) {
+      headers['x-dev-role'] = activeRole;
+    }
+  } catch {}
+
   const res = await fetch(url, {
     ...options,
     headers,

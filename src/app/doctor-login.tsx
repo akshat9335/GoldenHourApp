@@ -6,6 +6,8 @@ import { colors } from '@/constants/theme';
 import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
 
 export default function DoctorLogin() {
   const insets = useSafeAreaInsets();
@@ -62,11 +64,10 @@ export default function DoctorLogin() {
     }
   };
 
-  const handleDemoDoctor = () => {
-    useAppStore.getState().setRole('DOCTOR');
-    useAppStore.getState().setRoles(['DOCTOR']);
-    useAppStore.getState().setVerificationStatus('APPROVED');
-    useAppStore.getState().setUserProfile({
+  const handleDemoDoctor = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-doctor');
+    const profile = {
       uid: 'doc-1',
       doctorId: 'doc-1',
       name: 'Dr. Alok Tripathi',
@@ -84,7 +85,16 @@ export default function DoctorLogin() {
       verificationStatus: 'APPROVED',
       isPhoneVerified: true,
       hasCompletedProfile: true,
-    } as any);
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-doctor');
+      await AsyncStorage.setItem('gh_user_uid', 'doc-1');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setRole('DOCTOR');
+    useAppStore.getState().setRoles(['DOCTOR']);
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile(profile as any);
     useAppStore.getState().setIsAuthenticated(true);
     useAppStore.getState().setProfileExists(true);
     router.replace('/(doctor)/dashboard');
