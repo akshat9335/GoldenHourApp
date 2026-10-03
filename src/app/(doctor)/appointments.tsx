@@ -3,8 +3,6 @@ import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Chip, DoctorNav, Button } from '@/components/ui';
-import { APPOINTMENTS } from '@/constants/doctorData';
-
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
 

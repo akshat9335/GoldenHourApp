@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, DoctorNav, HTitle, LabelEyebrow, Button } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
-import { getDoctorById, APPOINTMENTS } from '@/constants/doctorData';
+import { getDoctorById } from '@/constants/doctorData';
 import { api } from '@/services/api';
 import LanguageSelector from '@/components/LanguageSelector';
 import { useTranslation } from 'react-i18next';
@@ -214,37 +214,7 @@ export default function DoctorDashboard() {
     }
   };
 
-  const SEED_APPOINTMENTS = [
-    {
-      id: 'apt-seed-1',
-      doctorId: doctorId,
-      patientName: 'Rahul Patel (Cardiology Consult)',
-      date: 'Today',
-      time: '10:30 AM',
-      token: 1,
-      status: 'completed' as const,
-    },
-    {
-      id: 'apt-seed-2',
-      doctorId: doctorId,
-      patientName: 'Pooja Verma (Post-Op Trauma)',
-      date: 'Today',
-      time: '11:15 AM',
-      token: 2,
-      status: 'upcoming' as const,
-    },
-    {
-      id: 'apt-seed-3',
-      doctorId: doctorId,
-      patientName: 'Amit Singh (Emergency Follow-up)',
-      date: 'Today',
-      time: '12:00 PM',
-      token: 3,
-      status: 'upcoming' as const,
-    },
-  ];
-
-  const todaysAppointments = appointments.length > 0 ? appointments : SEED_APPOINTMENTS;
+  const todaysAppointments = appointments;
   const completedAppointments = todaysAppointments.filter(
     (a) => a.status === 'completed' || (servingToken > 0 && a.token < servingToken)
   );
@@ -253,7 +223,7 @@ export default function DoctorDashboard() {
     return !isDone && a.status !== 'cancelled';
   });
   const waitingToday = activeAppointments.filter((a) => servingToken === 0 || a.token > servingToken).length;
-  const totalToday = Math.max(todaysAppointments.length, servingToken);
+  const totalToday = servingToken > 0 ? Math.max(todaysAppointments.length, servingToken) : todaysAppointments.length;
   const completedToday = completedAppointments.length;
   const remainingToday = activeAppointments.length;
 
