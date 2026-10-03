@@ -78,6 +78,7 @@ export default function DriverLogin() {
       ambulanceId: 'Unit UP-70-AMB-108',
       vehiclePlateNumber: 'UP-70-EMG-108',
       ambulanceType: 'Advanced Life Support (ALS)',
+      hospitalId: 'hosp-demo-apollo',
       hospitalName: 'Apollo Multi-Specialty Hospital',
       verificationStatus: 'APPROVED',
       isPhoneVerified: true,

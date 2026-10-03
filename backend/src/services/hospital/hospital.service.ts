@@ -2557,6 +2557,7 @@ export async function getHospitalDrivers(uid: string) {
     .filter((d: any) => {
       if (d.hospitalId === hospital.docId || d.hospitalId === uid) return true;
       if (d.hospitalName && hospitalName && d.hospitalName.toLowerCase() === hospitalName) return true;
+      if ((uid === "hosp-demo-apollo" || uid === "hosp-hosp-demo-apollo" || uid === "hosp-demo-token-hospital") && d.id === "driver-demo-ramesh") return true;
       return false;
     });
 
