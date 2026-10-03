@@ -13,6 +13,7 @@ export default function AmbulanceDashboard() {
   const userProfile = useAppStore((s) => s.userProfile);
   const activeTripId = useAppStore((s) => s.activeTripId);
   const setActiveTripId = useAppStore((s) => s.setActiveTripId);
+  const emergencyId = useAppStore((s) => s.emergencyId);
   const setEmergencyId = useAppStore((s) => s.setEmergencyId);
 
   const [onDuty, setOnDuty] = useState(true);
@@ -228,15 +229,15 @@ export default function AmbulanceDashboard() {
 
   const handleEndMission = () => {
     const effectiveTripId = activeTrip?.id || (activeTrip as any)?._id || (activeTrip as any)?.tripId || activeTripId;
+    const associatedEmgId = activeTrip?.emergencyId || emergencyId;
     if (!effectiveTripId && !activeTrip) return;
     Alert.alert(
-      'Complete / End Mission',
-      'Are you sure you want to finish or clear this active mission? This will free your ambulance unit for new dispatches.',
+      'Complete / Resolve Mission',
+      'Select the outcome for this ambulance mission:',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'End Mission',
-          style: 'destructive',
+          text: '✓ Safe Handover (Completed)',
           onPress: async () => {
             try {
               if (effectiveTripId) {
@@ -250,6 +251,28 @@ export default function AmbulanceDashboard() {
               setEmergencyId(null);
               await api.ambulances.updateAvailability('AVAILABLE').catch(() => {});
               loadDashboardData();
+            }
+          },
+        },
+        {
+          text: '🚨 No Patient Found (False Alarm)',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (associatedEmgId) {
+                await api.emergencies.cancel(associatedEmgId, 'No patient found on scene - ground responder verified false alarm');
+              } else if (effectiveTripId) {
+                await api.ambulances.completeTrip(effectiveTripId);
+              }
+            } catch (_err) {
+              // Non-blocking fallback
+            } finally {
+              setActiveTrip(null);
+              setActiveTripId(null);
+              setEmergencyId(null);
+              await api.ambulances.updateAvailability('AVAILABLE').catch(() => {});
+              loadDashboardData();
+              Alert.alert('Reported', 'Mission closed. Ground report recorded as false alarm.');
             }
           },
         },
@@ -617,18 +640,39 @@ export default function AmbulanceDashboard() {
         </Card>
       </View>
 
-      <View style={{ marginTop: 24, marginBottom: 32 }}>
+      <View style={{ marginTop: 24, marginBottom: 36, gap: 10 }}>
         <Button
-          title="Exit Crew Console"
+          title="‹ Switch Role"
           variant="secondary"
           onPress={() => router.replace('/role-selection')}
         />
+        <TouchableOpacity
+          style={styles.driverLogoutBtn}
+          onPress={handleAccountOptions}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.driverLogoutText}>🚪 Log Out Driver Account</Text>
+        </TouchableOpacity>
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  driverLogoutBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#F87171',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverLogoutText: {
+    color: colors.red,
+    fontSize: 14,
+    fontWeight: '800',
+  },
   driverUnitCard: {
     padding: 16,
     backgroundColor: '#F8FAFC',

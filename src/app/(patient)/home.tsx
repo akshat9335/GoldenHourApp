@@ -122,17 +122,21 @@ export default function PatientHome() {
 
     Alert.alert(
       'Cancel Emergency SOS?',
-      'Are you sure you want to cancel?\n\n• False Alarm / Test Report: 20 points deducted from Trust Score\n• Situation Resolved Safely: No penalty applied',
+      'Please select the reason for cancellation:',
       [
         { text: 'Keep Active', style: 'cancel' },
         {
-          text: 'Resolved Safely',
-          onPress: () => doCancel('Situation resolved safely by user'),
+          text: 'Situation Resolved / Help Arrived',
+          onPress: () => doCancel('Situation resolved safely - patient stable'),
         },
         {
-          text: 'False Alarm (-20)',
+          text: 'Arranged Alternate Vehicle',
+          onPress: () => doCancel('Patient transported via alternative private vehicle'),
+        },
+        {
+          text: 'Accidental Trigger',
           style: 'destructive',
-          onPress: () => doCancel('False alarm reported by user'),
+          onPress: () => doCancel('Accidental tap - cancelled by user within grace period'),
         },
       ]
     );
@@ -399,7 +403,12 @@ export default function PatientHome() {
             <SosHold
               label={t('emergency.sos', 'SOS')}
               sublabel="EMERGENCY"
-              onPress={startEmergency}
+              onPress={() =>
+                Alert.alert(
+                  'Hold for 3 Seconds',
+                  'To prevent accidental triggers, please press and HOLD the red SOS button for 3 seconds to launch emergency response.'
+                )
+              }
               onConfirm={startEmergency}
             />
             {/* Dedicated Button for Voice SOS & AI Triage */}

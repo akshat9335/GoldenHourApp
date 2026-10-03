@@ -1156,18 +1156,45 @@ export async function cancelEmergencyById(
     updatedAt: now,
   };
 
-  // Check if cancellation is a false alarm / invalid report (-20 trust score penalty)
-  const isFalseAlarm =
-    /false|fake|prank|mistake|accidental|invalid/i.test(reason) ||
-    reason.toLowerCase().includes("false alarm");
+  // Smart Trust Score Adjustment Logic:
+  // 1. Accidental triggers cancelled within 45s grace period -> 0 penalty (free accidental cancel).
+  // 2. Ground responder-verified false alarm (driver/hospital reports "no patient found" / fake) -> -25 points.
+  // 3. Deliberate false/prank report after dispatch (> 45s) -> -20 points.
+  const rawCreated = (existing as any)?.createdAt;
+  const createdDate = rawCreated && (typeof rawCreated === "string" || typeof rawCreated === "number")
+    ? new Date(rawCreated)
+    : (rawCreated && typeof rawCreated.toDate === "function" ? rawCreated.toDate() : new Date(now));
+  const createdTime = createdDate.getTime();
+  const elapsedSeconds = Math.max(0, (new Date(now).getTime() - createdTime) / 1000);
+  const isWithinGracePeriod = elapsedSeconds <= 45;
 
-  if (isFalseAlarm && existing.reporterId && !(existing as any).trustScorePenalized) {
-    (cancellationUpdates as any).trustScorePenalized = true;
-    void adjustUserTrustScore(
-      existing.reporterId,
-      -20,
-      `False alarm reported: ${reason}`,
-    ).catch(() => {});
+  const isGroundResponder =
+    requesterRole === "AMBULANCE_DRIVER" ||
+    requesterRole === "HOSPITAL" ||
+    /driver|responder|hospital|pilot/i.test(requesterRole || "") ||
+    /ground responder|no patient found/i.test(reason);
+
+  const isFakeOrPrank =
+    /fake|prank|hoax|malicious|no patient found|false alarm/i.test(reason);
+
+  if (existing.reporterId && !(existing as any).trustScorePenalized) {
+    if (isGroundResponder && isFakeOrPrank) {
+      // Driver/Hospital reached the spot and found no one (ground-verified hoax/prank)
+      (cancellationUpdates as any).trustScorePenalized = true;
+      void adjustUserTrustScore(
+        existing.reporterId,
+        -25,
+        `Ground responder verified false alarm: ${reason}`,
+      ).catch(() => {});
+    } else if (!isWithinGracePeriod && isFakeOrPrank) {
+      // Post-dispatch cancellation flagged as fake
+      (cancellationUpdates as any).trustScorePenalized = true;
+      void adjustUserTrustScore(
+        existing.reporterId,
+        -20,
+        `False alarm cancelled after dispatch (${Math.round(elapsedSeconds)}s): ${reason}`,
+      ).catch(() => {});
+    }
   }
 
   await emergencyRef.set(cancellationUpdates, { merge: true });
