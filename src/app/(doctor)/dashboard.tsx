@@ -7,8 +7,12 @@ import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById, APPOINTMENTS } from '@/constants/doctorData';
 import { api } from '@/services/api';
 import LanguageSelector from '@/components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 export default function DoctorDashboard() {
+  const { i18n } = useTranslation();
+  const lang = i18n.language;
+
   const userProfile = useAppStore((s) => s.userProfile);
   const servingToken = useAppStore((s) => s.servingToken);
   const advanceServingToken = useAppStore((s) => s.advanceServingToken);
@@ -258,13 +262,17 @@ export default function DoctorDashboard() {
       <Screen>
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good Morning,</Text>
+            <Text style={styles.greeting}>
+              {lang === 'mr' ? 'शुभ सकाळ,' : lang === 'hi' ? 'नमस्ते,' : 'Good Morning,'}
+            </Text>
             <HTitle size={17}>{doctorName}</HTitle>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <LanguageSelector />
             <Pressable style={styles.switchRoleBtn} onPress={() => router.replace('/role-selection')}>
-              <Text style={styles.switchRoleText}>‹ Switch Role</Text>
+              <Text style={styles.switchRoleText}>
+                {lang === 'mr' ? '‹ भूमिका बदला' : lang === 'hi' ? '‹ रोल बदलें' : '‹ Switch Role'}
+              </Text>
             </Pressable>
             <Pressable style={styles.bellBtn} onPress={() => router.push('/(doctor)/notifications')}>
               <Icon name="bell" />
@@ -278,10 +286,12 @@ export default function DoctorDashboard() {
             <View style={[styles.statusDot, { backgroundColor: isClinicOpen ? colors.success : colors.red }]} />
             <View style={{ flex: 1 }}>
               <Text style={styles.clinicStatusTitle}>
-                OPD STATUS: {isClinicOpen ? 'OPEN' : 'CLOSED'}
+                {lang === 'mr' ? 'ओपीडी स्थिती' : lang === 'hi' ? 'ओपीडी स्थिति' : 'OPD STATUS'}: {isClinicOpen ? (lang === 'mr' ? 'सुरू' : lang === 'hi' ? 'चालू' : 'OPEN') : (lang === 'mr' ? 'बंद' : lang === 'hi' ? 'बंद' : 'CLOSED')}
               </Text>
               <Text style={styles.clinicStatusSubtitle}>
-                {isClinicOpen ? 'Accepting patient bookings & tokens' : 'Token booking paused · Rolled over'}
+                {isClinicOpen
+                  ? (lang === 'mr' ? 'रुग्ण नोंदणी व टोकन सुरू आहेत' : lang === 'hi' ? 'मरीज बुकिंग और टोकन चालू हैं' : 'Accepting patient bookings & tokens')
+                  : (lang === 'mr' ? 'टोकन नोंदणी थांबवली आहे' : lang === 'hi' ? 'टोकन बुकिंग रोक दी गई है' : 'Token booking paused · Rolled over')}
               </Text>
             </View>
           </View>
@@ -290,39 +300,77 @@ export default function DoctorDashboard() {
             onPress={handleToggleClinic}
           >
             <Text style={[styles.toggleClinicText, { color: isClinicOpen ? colors.red : colors.success }]}>
-              {isClinicOpen ? 'Close OPD' : 'Open OPD'}
+              {isClinicOpen
+                ? (lang === 'mr' ? 'ओपीडी बंद करा' : lang === 'hi' ? 'ओपीडी बंद करें' : 'Close OPD')
+                : (lang === 'mr' ? 'ओपीडी सुरू करा' : lang === 'hi' ? 'ओपीडी शुरू करें' : 'Open OPD')}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <LabelEyebrow>TODAY'S SUMMARY</LabelEyebrow>
+        <LabelEyebrow>
+          {lang === 'mr' ? 'आजचा सारांश' : lang === 'hi' ? 'आज का सारांश' : "TODAY'S SUMMARY"}
+        </LabelEyebrow>
         <View style={styles.statsGrid}>
-          <Card style={styles.stat}><Text style={styles.statNum}>{totalToday}</Text><Text style={styles.statLabel}>PATIENTS TODAY</Text></Card>
-          <Card style={styles.stat}><Text style={[styles.statNum, { color: colors.success }]}>{completedToday}</Text><Text style={styles.statLabel}>COMPLETED</Text></Card>
-          <Card style={styles.stat}><Text style={[styles.statNum, { color: colors.amber }]}>{waitingToday}</Text><Text style={styles.statLabel}>WAITING</Text></Card>
-          <Card style={styles.stat}><Text style={styles.statNum}>{remainingToday}</Text><Text style={styles.statLabel}>REMAINING</Text></Card>
+          <Card style={styles.stat}>
+            <Text style={styles.statNum}>{totalToday}</Text>
+            <Text style={styles.statLabel}>{lang === 'mr' ? 'एकूण रुग्ण' : lang === 'hi' ? 'आज के मरीज' : 'PATIENTS TODAY'}</Text>
+          </Card>
+          <Card style={styles.stat}>
+            <Text style={[styles.statNum, { color: colors.success }]}>{completedToday}</Text>
+            <Text style={styles.statLabel}>{lang === 'mr' ? 'तपासलेले' : lang === 'hi' ? 'परामर्श पूर्ण' : 'COMPLETED'}</Text>
+          </Card>
+          <Card style={styles.stat}>
+            <Text style={[styles.statNum, { color: colors.amber }]}>{waitingToday}</Text>
+            <Text style={styles.statLabel}>{lang === 'mr' ? 'प्रतिक्षेत' : lang === 'hi' ? 'प्रतीक्षारत' : 'WAITING'}</Text>
+          </Card>
+          <Card style={styles.stat}>
+            <Text style={styles.statNum}>{remainingToday}</Text>
+            <Text style={styles.statLabel}>{lang === 'mr' ? 'शिल्लक' : lang === 'hi' ? 'शेष' : 'REMAINING'}</Text>
+          </Card>
         </View>
 
         <Card style={styles.tokenCard}>
           <View style={styles.tokenRow}>
             <View style={{ alignItems: 'center', flex: 1 }}>
-              <LabelEyebrow>NOW SERVING</LabelEyebrow>
+              <LabelEyebrow>
+                {lang === 'mr' ? 'सध्या सुरू असलेला' : lang === 'hi' ? 'वर्तमान टोकन' : 'NOW SERVING'}
+              </LabelEyebrow>
               <Text style={styles.tokenNum}>{servingToken}</Text>
-              <Text style={styles.tokenSub}>Patient #{servingToken}</Text>
+              <Text style={styles.tokenSub}>
+                {lang === 'mr' ? 'रुग्ण #' : lang === 'hi' ? 'मरीज #' : 'Patient #'}{servingToken}
+              </Text>
             </View>
             <View style={styles.tokenDivider} />
             <View style={{ alignItems: 'center', flex: 1 }}>
-              <LabelEyebrow>NEXT PATIENT</LabelEyebrow>
+              <LabelEyebrow>
+                {lang === 'mr' ? 'पुढील रुग्ण' : lang === 'hi' ? 'अगला मरीज' : 'NEXT PATIENT'}
+              </LabelEyebrow>
               <Text style={styles.tokenNum}>{servingToken + 1}</Text>
-              <Text style={styles.tokenSub}>Token #{servingToken + 1}</Text>
+              <Text style={styles.tokenSub}>
+                {lang === 'mr' ? 'टोकन #' : lang === 'hi' ? 'टोकन #' : 'Token #'}{servingToken + 1}
+              </Text>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-            <Button title="Call Next Patient" onPress={handleCallNext} style={{ flex: 1 }} />
+            <Button
+              title={lang === 'mr' ? 'पुढील रुग्ण बोलवा' : lang === 'hi' ? 'अगला मरीज बुलाएं' : 'Call Next Patient'}
+              onPress={handleCallNext}
+              style={{ flex: 1 }}
+            />
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            <Button title="Start Consultation" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(doctor)/queue')} />
-            <Button title="Reset Queue" variant="ghost" style={{ flex: 1 }} onPress={handleResetQueue} />
+            <Button
+              title={lang === 'mr' ? 'तपासणी सुरू करा' : lang === 'hi' ? 'परामर्श शुरू करें' : 'Start Consultation'}
+              variant="secondary"
+              style={{ flex: 1 }}
+              onPress={() => router.push('/(doctor)/queue')}
+            />
+            <Button
+              title={lang === 'mr' ? 'रांग रीसेट करा' : lang === 'hi' ? 'कतार रीसेट करें' : 'Reset Queue'}
+              variant="ghost"
+              style={{ flex: 1 }}
+              onPress={handleResetQueue}
+            />
           </View>
         </Card>
 
@@ -333,7 +381,7 @@ export default function DoctorDashboard() {
             onPress={() => setActiveTab('waiting')}
           >
             <Text style={[styles.tabButtonText, activeTab === 'waiting' && styles.tabButtonTextActive]}>
-              🕒 Waiting Queue ({activeAppointments.length})
+              🕒 {lang === 'mr' ? 'प्रतिक्षा यादी' : lang === 'hi' ? 'प्रतीक्षा कतार' : 'Waiting Queue'} ({activeAppointments.length})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -341,7 +389,7 @@ export default function DoctorDashboard() {
             onPress={() => setActiveTab('completed')}
           >
             <Text style={[styles.tabButtonText, activeTab === 'completed' && styles.tabButtonTextActive]}>
-              ✅ Completed ({completedAppointments.length})
+              ✅ {lang === 'mr' ? 'पूर्ण तपासणी' : lang === 'hi' ? 'पूर्ण' : 'Completed'} ({completedAppointments.length})
             </Text>
           </TouchableOpacity>
         </View>

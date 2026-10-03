@@ -8,8 +8,12 @@ import { api } from '@/services/api';
 import { authService } from '@/services/auth';
 import { acquireFreshLocation } from '@/services/deviceLocation';
 import LanguageSelector from '@/components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 export default function HospitalDashboard() {
+  const { i18n } = useTranslation();
+  const lang = i18n.language;
+
   const userProfile = useAppStore((s) => s.userProfile);
   const setActiveHospitalRequestId = useAppStore((s) => s.setActiveHospitalRequestId);
   const initialName = userProfile?.hospitalName || "Hospital ER";
@@ -269,7 +273,9 @@ export default function HospitalDashboard() {
             </Pressable>
             <TouchableOpacity onPress={handleAccountOptions} style={{ flex: 1 }}>
               <HTitle size={15}>{hospitalName}</HTitle>
-              <Text style={{ fontSize: 10.5, color: colors.inkFaint }}>Tap to switch role or log out</Text>
+              <Text style={{ fontSize: 10.5, color: colors.inkFaint }}>
+                {lang === 'mr' ? 'भूमिका बदलण्यासाठी किंवा लॉगआउट करण्यासाठी टॅप करा' : lang === 'hi' ? 'रोल बदलने या लॉगआउट करने के लिए टैप करें' : 'Tap to switch role or log out'}
+              </Text>
             </TouchableOpacity>
           </View>
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
@@ -279,7 +285,9 @@ export default function HospitalDashboard() {
               onPress={() => router.replace('/role-selection')}
               hitSlop={8}
             >
-              <Text style={styles.switchBtnText}>‹ Switch Role</Text>
+              <Text style={styles.switchBtnText}>
+                {lang === 'mr' ? '‹ भूमिका बदला' : lang === 'hi' ? '‹ रोल बदलें' : '‹ Switch Role'}
+              </Text>
             </TouchableOpacity>
             <Pressable style={styles.bellBtn} onPress={() => router.push('/notifications')}>
               <Icon name="bell" />
@@ -292,9 +300,11 @@ export default function HospitalDashboard() {
           {pendingEmergency ? (
             <Card style={[styles.incomingCard, styles.activeIncomingCard]}>
               <View style={styles.rowTop}>
-                <Pill color="red">INCOMING · {String(pendingEmergency.severity || 'HIGH').toUpperCase()}</Pill>
+                <Pill color="red">
+                  {lang === 'mr' ? 'येत असलेला रुग्ण' : lang === 'hi' ? 'इनकमिंग मरीज' : 'INCOMING'} · {String(pendingEmergency.severity || 'HIGH').toUpperCase()}
+                </Pill>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={styles.eta}>ETA {pendingEmergency.eta || '6 min'}</Text>
+                  <Text style={styles.eta}>{lang === 'mr' ? 'वेळ' : lang === 'hi' ? 'समय' : 'ETA'} {pendingEmergency.eta || '6 min'}</Text>
                   <Pressable
                     onPress={handleDismissPendingEmergency}
                     hitSlop={8}
@@ -305,21 +315,29 @@ export default function HospitalDashboard() {
                 </View>
               </View>
               <Text style={styles.incomingName}>
-                {pendingEmergency.patientName || 'Emergency Patient'} · {pendingEmergency.incidentType || 'Trauma Alert'}
+                {pendingEmergency.patientName || (lang === 'hi' ? 'आपातकालीन मरीज' : 'Emergency Patient')} · {pendingEmergency.incidentType || 'Trauma Alert'}
               </Text>
               <Text style={styles.incomingSub} numberOfLines={2}>
-                📍 {pendingEmergency.locationAddress || (pendingEmergency.location ? `${pendingEmergency.location.latitude?.toFixed(4)}°N, ${pendingEmergency.location.longitude?.toFixed(4)}°E` : 'Live Incident Location')} · Tap to review & dispatch
+                📍 {pendingEmergency.locationAddress || (pendingEmergency.location ? `${pendingEmergency.location.latitude?.toFixed(4)}°N, ${pendingEmergency.location.longitude?.toFixed(4)}°E` : 'Live Incident Location')} · {lang === 'mr' ? 'तपशील व डिस्पॅचसाठी टॅप करा' : lang === 'hi' ? 'समीक्षा और डिस्पैच के लिए टैप करें' : 'Tap to review & dispatch'}
               </Text>
             </Card>
           ) : (
             <Card style={styles.incomingCard}>
               <View style={styles.rowTop}>
-                <Pill color="success">DISPATCH · STANDBY</Pill>
-                <Text style={styles.eta}>All Normal</Text>
+                <Pill color="success">
+                  {lang === 'mr' ? 'डिस्पॅच · स्टँडबाय' : lang === 'hi' ? 'डिस्पैच · स्टैंडबाय' : 'DISPATCH · STANDBY'}
+                </Pill>
+                <Text style={styles.eta}>{lang === 'mr' ? 'सर्व सामान्य' : lang === 'hi' ? 'सब सामान्य' : 'All Normal'}</Text>
               </View>
-              <Text style={styles.incomingName}>Emergency Dispatch · Standby</Text>
+              <Text style={styles.incomingName}>
+                {lang === 'mr' ? 'आपत्कालीन डिस्पॅच · स्टँडबाय' : lang === 'hi' ? 'आपातकालीन डिस्पैच · स्टैंडबाय' : 'Emergency Dispatch · Standby'}
+              </Text>
               <Text style={styles.incomingSub}>
-                0 active incoming emergency requests · All trauma stations on standby
+                {lang === 'mr'
+                  ? 'कोणतीही आपत्कालीन विनंती प्रलंबित नाही · सर्व ट्रॉमा स्टेशन्स सज्ज'
+                  : lang === 'hi'
+                  ? 'कोई सक्रिय आपातकालीन अनुरोध नहीं · सभी ट्रॉमा स्टेशन तैयार'
+                  : '0 active incoming emergency requests · All trauma stations on standby'}
               </Text>
             </Card>
           )}
@@ -331,44 +349,52 @@ export default function HospitalDashboard() {
               <Text style={[styles.statNum, { color: criticalCount > 0 ? colors.red : colors.inkSoft }]}>
                 {criticalCount}
               </Text>
-              <Text style={styles.statLabel}>CRITICAL</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'गंभीर रुग्ण' : lang === 'hi' ? 'क्रिटिकल' : 'CRITICAL'}
+              </Text>
             </Card>
           </Pressable>
           <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/capacity')}>
             <Card style={styles.stat}>
               <Text style={styles.statNum}>{capacity.availableBeds}/{capacity.totalBeds}</Text>
-              <Text style={styles.statLabel}>BEDS FREE</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'रिक्त बेड्स' : lang === 'hi' ? 'खाली बेड' : 'BEDS FREE'}
+              </Text>
             </Card>
           </Pressable>
           <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/capacity')}>
             <Card style={styles.stat}>
               <Text style={[styles.statNum, { color: colors.success }]}>{capacity.availableIcuBeds}</Text>
-              <Text style={styles.statLabel}>ICU FREE</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'रिक्त आयसीयू' : lang === 'hi' ? 'खाली ICU' : 'ICU FREE'}
+              </Text>
             </Card>
           </Pressable>
         </View>
 
         {activeInbound.length > 0 && (
           <View style={{ marginBottom: 16 }}>
-            <LabelEyebrow>INBOUND PATIENTS & DISPATCHED AMBULANCES ({activeInbound.length})</LabelEyebrow>
+            <LabelEyebrow>
+              {lang === 'mr' ? 'येणारे रुग्ण व पाठवलेल्या रुग्णवाहिका' : lang === 'hi' ? 'इनबाउंड मरीज और डिस्पैच एम्बुलेंस' : 'INBOUND PATIENTS & DISPATCHED AMBULANCES'} ({activeInbound.length})
+            </LabelEyebrow>
             {activeInbound.map((item, idx) => {
               const st = String(item.status || 'ACCEPTED').toUpperCase();
               const tripSt = String(item.tripStatus || '').toUpperCase();
-              let statusPill = 'ACCEPTED';
+              let statusPill = lang === 'mr' ? 'स्वीकारले' : lang === 'hi' ? 'स्वीकृत' : 'ACCEPTED';
               let pillColor: 'red' | 'amber' | 'success' | 'blue' = 'amber';
 
               if (tripSt === 'AT_HOSPITAL' || st === 'PATIENT ARRIVED') {
-                statusPill = 'ARRIVED AT ER';
+                statusPill = lang === 'mr' ? 'ER मध्ये दाखल' : lang === 'hi' ? 'ER पहुंचा' : 'ARRIVED AT ER';
                 pillColor = 'success';
               } else if (tripSt === 'PATIENT_ONBOARD' || tripSt === 'EN_ROUTE_TO_HOSPITAL') {
-                statusPill = 'PATIENT IN TRANSIT';
+                statusPill = lang === 'mr' ? 'रुग्ण मार्गावर' : lang === 'hi' ? 'मरीज रास्ते में' : 'PATIENT IN TRANSIT';
                 pillColor = 'red';
               } else if (tripSt === 'EN_ROUTE_TO_PATIENT' || tripSt === 'AT_PATIENT' || st === 'AMBULANCE EN ROUTE') {
-                statusPill = 'AMBULANCE EN ROUTE';
+                statusPill = lang === 'mr' ? 'रुग्णवाहिका मार्गावर' : lang === 'hi' ? 'एम्बुलेंस रास्ते में' : 'AMBULANCE EN ROUTE';
                 pillColor = 'blue';
               }
 
-              const driverName = item.assignedDriverName || 'Assigned Pilot';
+              const driverName = item.assignedDriverName || (lang === 'hi' ? 'नियुक्त चालक' : 'Assigned Pilot');
               const vehicle = item.assignedAmbulanceId || 'Ambulance';
               const driverPhone = item.assignedDriverPhone || item.driverPhone || item.driverContact;
               const patientPhone = item.patientPhone || item.phone || item.contactPhone || item.userPhone;
@@ -377,17 +403,17 @@ export default function HospitalDashboard() {
                 <Card key={item.requestId || item.id || idx} style={styles.inboundCard}>
                   <View style={styles.rowTop}>
                     <Pill color={pillColor}>{statusPill}</Pill>
-                    <Text style={styles.eta}>{item.eta || 'Live'}</Text>
+                    <Text style={styles.eta}>{item.eta || (lang === 'hi' ? 'लाइव' : 'Live')}</Text>
                   </View>
 
                   <Text style={styles.inboundTitle}>
-                    {item.patientName || 'Emergency Patient'} · {item.incidentType || 'Trauma'}
+                    {item.patientName || (lang === 'hi' ? 'आपातकालीन मरीज' : 'Emergency Patient')} · {item.incidentType || 'Trauma'}
                   </Text>
 
                   <View style={styles.inboundMetaRow}>
                     <Icon name="ambulance" size={16} color={colors.inkSoft} />
                     <Text style={styles.inboundMetaText}>
-                      Pilot: {driverName} (Unit {vehicle}) {item.ambulanceType ? `· ${item.ambulanceType}` : ''}
+                      {lang === 'mr' ? 'चालक' : lang === 'hi' ? 'पायलट' : 'Pilot'}: {driverName} (Unit {vehicle}) {item.ambulanceType ? `· ${item.ambulanceType}` : ''}
                     </Text>
                   </View>
 
@@ -406,7 +432,9 @@ export default function HospitalDashboard() {
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.actionBtnTextNav}>📡 Live Track</Text>
+                      <Text style={styles.actionBtnTextNav}>
+                        📡 {lang === 'mr' ? 'थेट ट्रॅक' : lang === 'hi' ? 'लाइव ट्रैक' : 'Live Track'}
+                      </Text>
                     </TouchableOpacity>
 
                     {driverPhone ? (
@@ -415,7 +443,9 @@ export default function HospitalDashboard() {
                         onPress={() => Linking.openURL(`tel:${driverPhone}`)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.actionBtnTextBlue}>📞 Pilot</Text>
+                        <Text style={styles.actionBtnTextBlue}>
+                          📞 {lang === 'mr' ? 'चालक' : lang === 'hi' ? 'पायलट' : 'Pilot'}
+                        </Text>
                       </TouchableOpacity>
                     ) : null}
 
@@ -425,7 +455,9 @@ export default function HospitalDashboard() {
                         onPress={() => Linking.openURL(`tel:${patientPhone}`)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.actionBtnTextGreen}>📞 Patient</Text>
+                        <Text style={styles.actionBtnTextGreen}>
+                          📞 {lang === 'mr' ? 'रुग्ण' : lang === 'hi' ? 'मरीज' : 'Patient'}
+                        </Text>
                       </TouchableOpacity>
                     ) : null}
 
@@ -437,7 +469,9 @@ export default function HospitalDashboard() {
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.actionBtnTextGrey}>Review →</Text>
+                      <Text style={styles.actionBtnTextGrey}>
+                        {lang === 'mr' ? 'तपशील →' : lang === 'hi' ? 'समीक्षा →' : 'Review →'}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </Card>

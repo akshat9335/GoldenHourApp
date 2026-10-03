@@ -8,8 +8,12 @@ import { api } from '@/services/api';
 import { authService } from '@/services/auth';
 import { watchDeviceLocation } from '@/services/deviceLocation';
 import LanguageSelector from '@/components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 export default function AmbulanceDashboard() {
+  const { i18n } = useTranslation();
+  const lang = i18n.language;
+
   const userProfile = useAppStore((s) => s.userProfile);
   const activeTripId = useAppStore((s) => s.activeTripId);
   const setActiveTripId = useAppStore((s) => s.setActiveTripId);
@@ -352,7 +356,9 @@ export default function AmbulanceDashboard() {
           hitSlop={8}
         >
           <Text style={{ fontSize: 18, color: colors.ink }}>‹</Text>
-          <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>Ambulance Console</Text>
+          <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>
+            {lang === 'mr' ? 'रुग्णवाहिका कन्सोल' : lang === 'hi' ? 'एम्बुलेंस कंसोल' : 'Ambulance Console'}
+          </Text>
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <LanguageSelector />
@@ -361,14 +367,18 @@ export default function AmbulanceDashboard() {
             style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' }}
             hitSlop={8}
           >
-            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft }}>‹ Switch Role</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft }}>
+              {lang === 'mr' ? '‹ भूमिका बदला' : lang === 'hi' ? '‹ रोल बदलें' : '‹ Switch Role'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleAccountOptions}
             style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' }}
             hitSlop={8}
           >
-            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.red }}>🚪 Logout</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.red }}>
+              {lang === 'mr' ? '🚪 बाहेर पडा' : lang === 'hi' ? '🚪 लॉगआउट' : '🚪 Logout'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -378,18 +388,20 @@ export default function AmbulanceDashboard() {
         <View style={styles.header}>
           <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={styles.unitPlate}>{vehiclePlate}</Text>
-            <Text style={styles.driverName}>Pilot: {driverName}</Text>
+            <Text style={styles.driverName}>
+              {lang === 'mr' ? 'चालक' : lang === 'hi' ? 'पायलट / चालक' : 'Pilot'}: {driverName}
+            </Text>
 
             {isLinkedToHospital ? (
               <View style={styles.hospitalAffiliationBadge}>
                 <Text style={styles.hospitalAffiliationText}>
-                  🏥 Affiliated: {hospitalAffiliation}
+                  🏥 {lang === 'mr' ? 'संलग्न रुग्णालय' : lang === 'hi' ? 'संबद्ध अस्पताल' : 'Affiliated'}: {hospitalAffiliation}
                 </Text>
               </View>
             ) : (
               <View style={styles.independentBadge}>
                 <Text style={styles.independentBadgeText}>
-                  🚑 Independent Fleet · 108 Responder
+                  🚑 {lang === 'mr' ? 'स्वतंत्र फ्लीट · 108 आपत्कालीन' : lang === 'hi' ? 'स्वतंत्र फ्लीट · 108 रिस्पॉन्डर' : 'Independent Fleet · 108 Responder'}
                 </Text>
               </View>
             )}
@@ -403,12 +415,16 @@ export default function AmbulanceDashboard() {
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
             <TouchableOpacity onPress={() => setOnDuty(!onDuty)} activeOpacity={0.8}>
               <Pill color={onDuty ? 'success' : 'grey'}>
-                {onDuty ? '● ON DUTY' : '○ OFFLINE'}
+                {onDuty
+                  ? (lang === 'mr' ? '● ड्युटीवर' : lang === 'hi' ? '● ड्यूटी पर' : '● ON DUTY')
+                  : (lang === 'mr' ? '○ ऑफलाइन' : lang === 'hi' ? '○ ऑफ़लाइन' : '○ OFFLINE')}
               </Pill>
             </TouchableOpacity>
             {onDuty && (
               <View style={styles.gpsStreamBadge}>
-                <Text style={styles.gpsStreamText}>📡 GPS STREAMING</Text>
+                <Text style={styles.gpsStreamText}>
+                  📡 {lang === 'mr' ? 'GPS सुरू आहे' : lang === 'hi' ? 'GPS चालू है' : 'GPS STREAMING'}
+                </Text>
               </View>
             )}
           </View>
@@ -429,7 +445,7 @@ export default function AmbulanceDashboard() {
           activeOpacity={0.8}
         >
           <Text style={{ fontSize: 13, fontWeight: '700', color: dashboardTab === 'active' ? colors.red : colors.inkSoft }}>
-            🚨 Active Dispatches {requests.length > 0 ? `(${requests.length})` : ''}
+            🚨 {lang === 'mr' ? 'सक्रिय कॉल्स' : lang === 'hi' ? 'सक्रिय डिस्पैच' : 'Active Dispatches'} {requests.length > 0 ? `(${requests.length})` : ''}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -444,7 +460,7 @@ export default function AmbulanceDashboard() {
           activeOpacity={0.8}
         >
           <Text style={{ fontSize: 13, fontWeight: '700', color: dashboardTab === 'history' ? colors.blue : colors.inkSoft }}>
-            📋 Mission History ({completedMissions.length})
+            📋 {lang === 'mr' ? 'मिशन इतिहास' : lang === 'hi' ? 'मिशन इतिहास' : 'Mission History'} ({completedMissions.length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -455,11 +471,13 @@ export default function AmbulanceDashboard() {
           {activeTrip && (
             <Card style={styles.activeTripCard}>
               <View style={styles.rowTop}>
-                <Pill color="amber">MISSION IN PROGRESS</Pill>
+                <Pill color="amber">
+                  {lang === 'mr' ? 'मिशन सुरू आहे' : lang === 'hi' ? 'चालू आपातकालीन मिशन' : 'MISSION IN PROGRESS'}
+                </Pill>
                 <Text style={styles.activeTripStatus}>{String(activeTrip.status).replace(/_/g, ' ')}</Text>
               </View>
               <Text style={styles.activeTripEmergency}>
-                Emergency ID: {activeTrip.emergencyId?.slice(-6)?.toUpperCase() || 'ACTIVE'}
+                {lang === 'mr' ? 'आपत्कालीन आयडी' : lang === 'hi' ? 'इमरजेंसी ID' : 'Emergency ID'}: {activeTrip.emergencyId?.slice(-6)?.toUpperCase() || 'ACTIVE'}
               </Text>
               <View style={{ gap: 8, marginTop: 10 }}>
                 <TouchableOpacity
@@ -467,7 +485,9 @@ export default function AmbulanceDashboard() {
                   onPress={handleResumeTrip}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.liveUpdateBtnText}>📡 Live Updates & Route</Text>
+                  <Text style={styles.liveUpdateBtnText}>
+                    📡 {lang === 'mr' ? 'थेट अपडेट्स व मार्ग' : lang === 'hi' ? 'लाइव अपडेट और नेविगेशन' : 'Live Updates & Route'}
+                  </Text>
                 </TouchableOpacity>
 
                 <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -476,7 +496,9 @@ export default function AmbulanceDashboard() {
                     onPress={handleResumeTrip}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.resumeBtnText}>Resume Mission →</Text>
+                    <Text style={styles.resumeBtnText}>
+                      {lang === 'mr' ? 'मिशन सुरू ठेवा →' : lang === 'hi' ? 'मिशन जारी रखें →' : 'Resume Mission →'}
+                    </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -484,7 +506,9 @@ export default function AmbulanceDashboard() {
                     onPress={handleEndMission}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.endMissionBtnText}>End Mission</Text>
+                    <Text style={styles.endMissionBtnText}>
+                      {lang === 'mr' ? 'मिशन संपवा' : lang === 'hi' ? 'मिशन पूरा करें' : 'End Mission'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -497,10 +521,10 @@ export default function AmbulanceDashboard() {
               <>
                 <View style={styles.queueHeader}>
                   <Text style={styles.queueCount}>
-                    {requests.length} Incoming Dispatch {requests.length === 1 ? 'Alert' : 'Alerts'}
+                    {requests.length} {lang === 'mr' ? 'नवीन आपत्कालीन अलर्ट' : lang === 'hi' ? 'इनकमिंग डिस्पैच अलर्ट' : (requests.length === 1 ? 'Incoming Dispatch Alert' : 'Incoming Dispatch Alerts')}
                   </Text>
                   <TouchableOpacity onPress={handleClearAllRequests} style={styles.clearBtn} hitSlop={8}>
-                    <Text style={styles.clearBtnText}>Clear All</Text>
+                    <Text style={styles.clearBtnText}>{lang === 'mr' ? 'सर्व हटवा' : lang === 'hi' ? 'सभी हटाएं' : 'Clear All'}</Text>
                   </TouchableOpacity>
                 </View>
                 {requests.map((req, idx) => {
@@ -515,15 +539,15 @@ export default function AmbulanceDashboard() {
                   return (
                     <Card key={req.id || idx} style={styles.requestCard}>
                       <View style={styles.rowTop}>
-                        <Pill color={pillColor}>DISPATCH · {sev}</Pill>
+                        <Pill color={pillColor}>{lang === 'mr' ? 'डिस्पॅच' : lang === 'hi' ? 'डिस्पैच' : 'DISPATCH'} · {sev}</Pill>
                         <Text style={styles.dist}>
                           {req.incidentType || 'TRAUMA ALERT'}
                         </Text>
                       </View>
-                      <Text style={styles.pickup}>Pickup: {locationStr}</Text>
+                      <Text style={styles.pickup}>📍 {lang === 'mr' ? 'पिकअप ठिकाण' : lang === 'hi' ? 'पिकअप लोकेशन' : 'Pickup'}: {locationStr}</Text>
                       {req.assignedHospitalName ? (
                         <Text style={styles.hospTag}>
-                          🏥 Dispatched by: {req.assignedHospitalName}
+                          🏥 {lang === 'mr' ? 'रुग्णालय' : lang === 'hi' ? 'अस्पताल' : 'Dispatched by'}: {req.assignedHospitalName}
                         </Text>
                       ) : null}
                       {req.description ? (
@@ -538,7 +562,9 @@ export default function AmbulanceDashboard() {
                           onPress={() => handleDirectAccept(req)}
                           activeOpacity={0.85}
                         >
-                          <Text style={styles.directAcceptText}>✓ Confirm & Accept Trip</Text>
+                          <Text style={styles.directAcceptText}>
+                            ✓ {lang === 'mr' ? 'स्वीकारा व सुरू करा' : lang === 'hi' ? 'स्वीकारें और शुरू करें' : 'Confirm & Accept Trip'}
+                          </Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -546,7 +572,9 @@ export default function AmbulanceDashboard() {
                           onPress={() => handleRequestPress(req)}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.reviewBtnText}>Review →</Text>
+                          <Text style={styles.reviewBtnText}>
+                            {lang === 'mr' ? 'तपशील →' : lang === 'hi' ? 'विवरण →' : 'Review →'}
+                          </Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -566,17 +594,31 @@ export default function AmbulanceDashboard() {
               <Card style={styles.standbyCard}>
                 <View style={styles.standbyDotRow}>
                   <View style={styles.pulseDot} />
-                  <Text style={styles.standbyTitle}>Emergency Dispatch · Standby</Text>
+                  <Text style={styles.standbyTitle}>
+                    {lang === 'mr' ? 'आपत्कालीन डिस्पॅच · स्टँडबाय' : lang === 'hi' ? 'आपातकालीन डिस्पैच · स्टैंडबाय' : 'Emergency Dispatch · Standby'}
+                  </Text>
                 </View>
                 <Text style={styles.standbySub}>
-                  No pending emergency requests in your quadrant. Your unit is broadcast as available to 108 network.
+                  {lang === 'mr'
+                    ? 'आपल्या परिसरात सध्या कोणतेही आपत्कालीन कॉल नाहीत. आपली रुग्णवाहिका 108 नेटवर्कवर उपलब्ध आहे.'
+                    : lang === 'hi'
+                    ? 'आपके क्षेत्र में कोई लंबित आपातकालीन अनुरोध नहीं है। आपकी एम्बुलेंस 108 नेटवर्क पर उपलब्ध है।'
+                    : 'No pending emergency requests in your quadrant. Your unit is broadcast as available to 108 network.'}
                 </Text>
               </Card>
             )
           ) : (
             <Card style={styles.offlineCard}>
-              <Text style={styles.offlineTitle}>Crew is Currently Offline</Text>
-              <Text style={styles.offlineSub}>Toggle ON DUTY above to receive emergency dispatch alerts.</Text>
+              <Text style={styles.offlineTitle}>
+                {lang === 'mr' ? 'चालक सध्या ऑफलाइन आहे' : lang === 'hi' ? 'क्रू वर्तमान में ऑफ़लाइन है' : 'Crew is Currently Offline'}
+              </Text>
+              <Text style={styles.offlineSub}>
+                {lang === 'mr'
+                  ? 'आपत्कालीन अलर्ट मिळवण्यासाठी वरील बटण दाबून ऑन ड्युटी व्हा.'
+                  : lang === 'hi'
+                  ? 'आपातकालीन डिस्पैच अलर्ट प्राप्त करने के लिए ऊपर ऑन ड्यूटी टॉगल करें।'
+                  : 'Toggle ON DUTY above to receive emergency dispatch alerts.'}
+              </Text>
             </Card>
           )}
         </>
@@ -584,14 +626,22 @@ export default function AmbulanceDashboard() {
         /* History Tab */
         <View style={{ marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <LabelEyebrow>COMPLETED RESCUE MISSIONS ({completedMissions.length})</LabelEyebrow>
+            <LabelEyebrow>
+              {lang === 'mr' ? 'पूर्ण झालेले मिशन' : lang === 'hi' ? 'पूर्ण हुए रेस्क्यू मिशन' : 'COMPLETED RESCUE MISSIONS'} ({completedMissions.length})
+            </LabelEyebrow>
           </View>
           {completedMissions.length === 0 ? (
             <Card style={{ padding: 24, alignItems: 'center', backgroundColor: '#F8FAFC' }}>
               <Text style={{ fontSize: 28, marginBottom: 8 }}>📋</Text>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.ink }}>No Mission History Yet</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.ink }}>
+                {lang === 'mr' ? 'अद्याप कोणताही इतिहास नाही' : lang === 'hi' ? 'कोई मिशन इतिहास नहीं है' : 'No Mission History Yet'}
+              </Text>
               <Text style={{ fontSize: 12, color: colors.inkFaint, textAlign: 'center', marginTop: 4 }}>
-                Completed emergency trips and hospital handovers for this crew will appear here.
+                {lang === 'mr'
+                  ? 'पूर्ण झालेल्या ट्रिप्स आणि रुग्णालयात सोडलेले रुग्ण येथे दिसतील.'
+                  : lang === 'hi'
+                  ? 'पूर्ण की गई आपातकालीन यात्राएं और अस्पताल हैंडओवर यहां दिखाई देंगे।'
+                  : 'Completed emergency trips and hospital handovers for this crew will appear here.'}
               </Text>
             </Card>
           ) : (
@@ -602,20 +652,20 @@ export default function AmbulanceDashboard() {
                 <Card key={trip.id || trip._id || idx} style={{ padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#86EFAC', backgroundColor: '#F0FDF4' }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={{ fontSize: 13.5, fontWeight: '800', color: colors.ink }}>
-                      Mission #{String(trip.id || trip._id || idx).slice(-6).toUpperCase()} · {trip.incidentType || 'Emergency Rescue'}
+                      {lang === 'mr' ? 'मिशन' : lang === 'hi' ? 'मिशन' : 'Mission'} #{String(trip.id || trip._id || idx).slice(-6).toUpperCase()} · {trip.incidentType || 'Emergency Rescue'}
                     </Text>
-                    <Pill color="success">COMPLETED</Pill>
+                    <Pill color="success">{lang === 'mr' ? 'पूर्ण' : lang === 'hi' ? 'पूर्ण' : 'COMPLETED'}</Pill>
                   </View>
                   <Text style={{ fontSize: 12, color: colors.inkSoft, marginTop: 6, fontWeight: '600' }}>
-                    🏥 Handed over at: {trip.hospitalName || 'Emergency ER Center'}
+                    🏥 {lang === 'mr' ? 'हस्तांतरण रुग्णालय' : lang === 'hi' ? 'हैंडओवर अस्पताल' : 'Handed over at'}: {trip.hospitalName || 'Emergency ER Center'}
                   </Text>
                   {trip.pickupAddress ? (
                     <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 2 }}>
-                      📍 Origin: {trip.pickupAddress}
+                      📍 {lang === 'mr' ? 'पिकअप' : lang === 'hi' ? 'पिकअप' : 'Origin'}: {trip.pickupAddress}
                     </Text>
                   ) : null}
                   <Text style={{ fontSize: 10.5, color: '#15803D', marginTop: 6, fontWeight: '600' }}>
-                    ✓ Safely Completed · {formattedDate}
+                    ✓ {lang === 'mr' ? 'सुरक्षितरीत्या पूर्ण' : lang === 'hi' ? 'सुरक्षित रूप से पूरा' : 'Safely Completed'} · {formattedDate}
                   </Text>
                 </Card>
               );
@@ -624,25 +674,25 @@ export default function AmbulanceDashboard() {
         </View>
       )}
 
-      <LabelEyebrow>SHIFT SUMMARY</LabelEyebrow>
+      <LabelEyebrow>{lang === 'mr' ? 'शिफ्ट सारांश' : lang === 'hi' ? 'शिफ्ट सारांश' : 'SHIFT SUMMARY'}</LabelEyebrow>
       <View style={styles.statsRow}>
         <Card style={styles.stat}>
           <Text style={styles.statNum}>{tripCount}</Text>
-          <Text style={styles.statLabel}>TRIPS TODAY</Text>
+          <Text style={styles.statLabel}>{lang === 'mr' ? 'आजच्या फेऱ्या' : lang === 'hi' ? 'आज की ट्रिप' : 'TRIPS TODAY'}</Text>
         </Card>
         <Card style={styles.stat}>
           <Text style={styles.statNum}>92%</Text>
-          <Text style={styles.statLabel}>FUEL LEVEL</Text>
+          <Text style={styles.statLabel}>{lang === 'mr' ? 'इंधन पातळी' : lang === 'hi' ? 'ईंधन स्तर' : 'FUEL LEVEL'}</Text>
         </Card>
         <Card style={styles.stat}>
-          <Text style={[styles.statNum, { color: colors.success }]}>ACTIVE</Text>
-          <Text style={styles.statLabel}>GPS SYNC</Text>
+          <Text style={[styles.statNum, { color: colors.success }]}>{lang === 'mr' ? 'सुरू' : lang === 'hi' ? 'चालू' : 'ACTIVE'}</Text>
+          <Text style={styles.statLabel}>{lang === 'mr' ? 'जीपीएस सिंक' : lang === 'hi' ? 'GPS सिंक' : 'GPS SYNC'}</Text>
         </Card>
       </View>
 
       <View style={{ marginTop: 24, marginBottom: 36, gap: 10 }}>
         <Button
-          title="‹ Switch Role"
+          title={lang === 'mr' ? '‹ भूमिका बदला' : lang === 'hi' ? '‹ रोल बदलें' : '‹ Switch Role'}
           variant="secondary"
           onPress={() => router.replace('/role-selection')}
         />
@@ -651,7 +701,9 @@ export default function AmbulanceDashboard() {
           onPress={handleAccountOptions}
           activeOpacity={0.85}
         >
-          <Text style={styles.driverLogoutText}>🚪 Log Out Driver Account</Text>
+          <Text style={styles.driverLogoutText}>
+            🚪 {lang === 'mr' ? 'चालक खाते लॉगआउट करा' : lang === 'hi' ? 'ड्राइवर अकाउंट लॉगआउट करें' : 'Log Out Driver Account'}
+          </Text>
         </TouchableOpacity>
       </View>
     </Screen>

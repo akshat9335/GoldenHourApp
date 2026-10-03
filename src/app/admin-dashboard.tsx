@@ -10,6 +10,7 @@ import { Screen, TopBar, Button, Card, Pill, Chip, HTitle, Banner, Icon, Divider
 import { api } from '@/services/api';
 import { authService } from '@/services/auth';
 import LanguageSelector from '@/components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 type Tab = 'PENDING_DOCTORS' | 'ACTIVE_DOCTORS' | 'HOSPITALS' | 'AMBULANCES' | 'WORKERS' | 'ALL';
 type AdminState = 'LOGIN' | 'NOT_AUTHORIZED' | 'DASHBOARD';
@@ -29,6 +30,9 @@ interface ApplicationItem {
 
 function AdminLoginScreen({ onLogin, loading }: { onLogin: () => void; loading: boolean }) {
   const insets = useSafeAreaInsets();
+  const { i18n } = useTranslation();
+  const lang = i18n.language;
+
   return (
     <SafeAreaView style={gateStyles.container}>
       <View style={gateStyles.content}>
@@ -38,7 +42,9 @@ function AdminLoginScreen({ onLogin, loading }: { onLogin: () => void; loading: 
           activeOpacity={0.7}
         >
           <Text style={gateStyles.backArrow}>&#8249;</Text>
-          <Text style={gateStyles.backText}>Back</Text>
+          <Text style={gateStyles.backText}>
+            {lang === 'mr' ? 'मागे' : lang === 'hi' ? 'वापस' : 'Back'}
+          </Text>
         </TouchableOpacity>
         <View style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, right: 16, zIndex: 10 }}>
           <LanguageSelector />
@@ -47,19 +53,39 @@ function AdminLoginScreen({ onLogin, loading }: { onLogin: () => void; loading: 
         <View style={gateStyles.shieldWrap}>
           <Text style={gateStyles.shieldIcon}>🛡️</Text>
         </View>
-        <Text style={gateStyles.title}>Admin Console</Text>
-        <Text style={gateStyles.subtitle}>Restricted access — authorised personnel only</Text>
+        <Text style={gateStyles.title}>
+          {lang === 'mr' ? 'प्रशासक कन्सोल' : lang === 'hi' ? 'एडमिन कंसोल' : 'Admin Console'}
+        </Text>
+        <Text style={gateStyles.subtitle}>
+          {lang === 'mr' ? 'मर्यादित प्रवेश — केवळ अधिकृत व्यक्तींसाठी' : lang === 'hi' ? 'प्रतिबंधित पहुंच — केवल अधिकृत कर्मियों के लिए' : 'Restricted access — authorised personnel only'}
+        </Text>
         <View style={gateStyles.card}>
-          <Text style={gateStyles.cardTitle}>Verify Your Identity</Text>
+          <Text style={gateStyles.cardTitle}>
+            {lang === 'mr' ? 'आपली ओळख सत्यापित करा' : lang === 'hi' ? 'अपनी पहचान सत्यापित करें' : 'Verify Your Identity'}
+          </Text>
           <Text style={gateStyles.cardSub}>
-            Sign in with your authorised Google account to access the professional credential verification desk.
+            {lang === 'mr'
+              ? 'प्रशासकीय पडताळणी कक्षात प्रवेश करण्यासाठी आपल्या अधिकृत Google खात्याने साइन इन करा.'
+              : lang === 'hi'
+              ? 'सत्यापन और शासन डेस्क तक पहुंचने के लिए अपने अधिकृत Google खाते से साइन इन करें।'
+              : 'Sign in with your authorised Google account to access the professional credential verification desk.'}
           </Text>
           <TouchableOpacity style={gateStyles.googleButton} activeOpacity={0.85} onPress={onLogin} disabled={loading}>
             <View style={gateStyles.googleIcon}><Text style={gateStyles.googleG}>G</Text></View>
-            <Text style={gateStyles.googleText}>{loading ? 'Verifying access...' : 'Continue with Google'}</Text>
+            <Text style={gateStyles.googleText}>
+              {loading
+                ? (lang === 'mr' ? 'पडताळणी सुरू आहे...' : lang === 'hi' ? 'पहुंच की पुष्टि हो रही है...' : 'Verifying access...')
+                : (lang === 'mr' ? 'Google सह पुढे जा' : lang === 'hi' ? 'Google के साथ आगे बढ़ें' : 'Continue with Google')}
+            </Text>
           </TouchableOpacity>
         </View>
-        <Text style={gateStyles.notice}>Only accounts authorised by the system administrator can access this panel.</Text>
+        <Text style={gateStyles.notice}>
+          {lang === 'mr'
+            ? 'केवळ प्रणाली प्रशासकाद्वारे अधिकृत खाती या पॅनेलमध्ये प्रवेश करू शकतात.'
+            : lang === 'hi'
+            ? 'केवल सिस्टम एडमिन द्वारा अधिकृत खाते ही इस पैनल तक पहुंच सकते हैं।'
+            : 'Only accounts authorised by the system administrator can access this panel.'}
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -106,6 +132,9 @@ function NotAuthorizedScreen({ email, onRetry }: { email?: string; onRetry: () =
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
+  const { i18n } = useTranslation();
+  const lang = i18n.language;
+
   const [adminState, setAdminState] = useState<AdminState>('LOGIN');
   const [loginLoading, setLoginLoading] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
@@ -716,7 +745,11 @@ export default function AdminDashboard() {
 
   return (
     <Screen>
-      <TopBar title="Admin Console" onPressBack={handleExitAdmin} right={<LanguageSelector />} />
+      <TopBar
+        title={lang === 'mr' ? 'प्रशासक कन्सोल' : lang === 'hi' ? 'एडमिन कंसोल' : 'Admin Console'}
+        onPressBack={handleExitAdmin}
+        right={<LanguageSelector />}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 40 }}
@@ -724,15 +757,23 @@ export default function AdminDashboard() {
       >
         <View style={styles.adminBar}>
           <View style={{ flex: 1, marginRight: 8 }}>
-            <Text style={styles.adminBadge}>🛡️ Authorized Administrator</Text>
+            <Text style={styles.adminBadge}>
+              🛡️ {lang === 'mr' ? 'अधिकृत प्रशासक' : lang === 'hi' ? 'अधिकृत एडमिन' : 'Authorized Administrator'}
+            </Text>
             {adminEmail ? <Text style={styles.adminEmailText}>{adminEmail}</Text> : null}
           </View>
           <TouchableOpacity style={styles.lockBtn} onPress={handleExitAdmin} activeOpacity={0.8}>
-            <Text style={styles.lockBtnText}>🔒 Lock & Exit</Text>
+            <Text style={styles.lockBtnText}>
+              🔒 {lang === 'mr' ? 'लॉक व बाहेर पडा' : lang === 'hi' ? 'लॉक और बाहर निकलें' : 'Lock & Exit'}
+            </Text>
           </TouchableOpacity>
         </View>
         <Banner color="blue" icon={<Icon name="idCard" size={14} color={colors.blue} />}>
-          Golden Hour Administrative Gateway — Professional Credential Verification Desk.
+          {lang === 'mr'
+            ? 'गोल्डन अवर प्रशासकीय पोर्टल — व्यावसायिक पात्रता पडताळणी डेस्क.'
+            : lang === 'hi'
+            ? 'गोल्डन ऑवर प्रशासनिक पोर्टल — व्यावसायिक साख सत्यापन डेस्क।'
+            : 'Golden Hour Administrative Gateway — Professional Credential Verification Desk.'}
         </Banner>
         <View style={{ height: 16 }} />
 
@@ -745,7 +786,9 @@ export default function AdminDashboard() {
           >
             <Card style={[styles.statCard, activeTab === 'PENDING_DOCTORS' && styles.statCardActive]}>
               <Text style={styles.statNumber}>{pendingDoctors.length}</Text>
-              <Text style={styles.statLabel}>Pending Doctors</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'प्रलंबित डॉक्टर्स' : lang === 'hi' ? 'पेंडिंग डॉक्टर' : 'Pending Doctors'}
+              </Text>
             </Card>
           </TouchableOpacity>
 
@@ -756,7 +799,9 @@ export default function AdminDashboard() {
           >
             <Card style={[styles.statCard, activeTab === 'ACTIVE_DOCTORS' && styles.statCardActive]}>
               <Text style={[styles.statNumber, { color: colors.success }]}>{approvedDoctors.length}</Text>
-              <Text style={styles.statLabel}>Active Doctors</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'सक्रिय डॉक्टर्स' : lang === 'hi' ? 'सक्रिय डॉक्टर' : 'Active Doctors'}
+              </Text>
             </Card>
           </TouchableOpacity>
 
@@ -767,7 +812,9 @@ export default function AdminDashboard() {
           >
             <Card style={[styles.statCard, activeTab === 'ALL' && styles.statCardActive]}>
               <Text style={[styles.statNumber, { color: colors.inkSoft }]}>{applications.length}</Text>
-              <Text style={styles.statLabel}>Total Reviews</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'एकूण अर्ज' : lang === 'hi' ? 'कुल समीक्षा' : 'Total Reviews'}
+              </Text>
             </Card>
           </TouchableOpacity>
         </View>
@@ -776,37 +823,37 @@ export default function AdminDashboard() {
         {/* Tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
           <Chip
-            label={`Pending (${pendingDoctors.length})`}
+            label={`${lang === 'mr' ? 'प्रलंबित' : lang === 'hi' ? 'पेंडिंग' : 'Pending'} (${pendingDoctors.length})`}
             selected={activeTab === 'PENDING_DOCTORS'}
             onPress={() => setActiveTab('PENDING_DOCTORS')}
           />
           <View style={{ width: 8 }} />
           <Chip
-            label={`Active Doctors (${approvedDoctors.length})`}
+            label={`${lang === 'mr' ? 'सक्रिय डॉक्टर्स' : lang === 'hi' ? 'सक्रिय डॉक्टर' : 'Active Doctors'} (${approvedDoctors.length})`}
             selected={activeTab === 'ACTIVE_DOCTORS'}
             onPress={() => setActiveTab('ACTIVE_DOCTORS')}
           />
           <View style={{ width: 8 }} />
           <Chip
-            label={`Hospitals (${pendingHospitals.length > 0 ? `${pendingHospitals.length} new` : allHospitals.length})`}
+            label={`${lang === 'mr' ? 'रुग्णालये' : lang === 'hi' ? 'अस्पताल' : 'Hospitals'} (${pendingHospitals.length > 0 ? `${pendingHospitals.length} new` : allHospitals.length})`}
             selected={activeTab === 'HOSPITALS'}
             onPress={() => setActiveTab('HOSPITALS')}
           />
           <View style={{ width: 8 }} />
           <Chip
-            label={`Ambulances (${pendingDrivers.length > 0 ? `${pendingDrivers.length} new` : allDrivers.length})`}
+            label={`${lang === 'mr' ? 'रुग्णवाहिका' : lang === 'hi' ? 'एम्बुलेंस बेड़ा' : 'Ambulances'} (${pendingDrivers.length > 0 ? `${pendingDrivers.length} new` : allDrivers.length})`}
             selected={activeTab === 'AMBULANCES'}
             onPress={() => setActiveTab('AMBULANCES')}
           />
           <View style={{ width: 8 }} />
           <Chip
-            label={`ASHA / Workers (${pendingWorkers.length > 0 ? `${pendingWorkers.length} new` : allWorkers.length})`}
+            label={`${lang === 'mr' ? 'आशा सेविका' : lang === 'hi' ? 'आशा कार्यकर्ता' : 'ASHA / Workers'} (${pendingWorkers.length > 0 ? `${pendingWorkers.length} new` : allWorkers.length})`}
             selected={activeTab === 'WORKERS'}
             onPress={() => setActiveTab('WORKERS')}
           />
           <View style={{ width: 8 }} />
           <Chip
-            label={`All Reviews (${applications.length})`}
+            label={`${lang === 'mr' ? 'सर्व अर्ज' : lang === 'hi' ? 'सभी आवेदन' : 'All Reviews'} (${applications.length})`}
             selected={activeTab === 'ALL'}
             onPress={() => setActiveTab('ALL')}
           />
