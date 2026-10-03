@@ -514,9 +514,14 @@ export async function getTripHistory(
 
       if (
         emStatus === "COMPLETED" ||
+        emTripStatus === "COMPLETED" ||
         emStatus === "CANCELLED" ||
         emStatus === "RESOLVED" ||
-        emStatus === "REJECTED"
+        emStatus === "REJECTED" ||
+        emStatus === "PATIENT_ARRIVED" ||
+        emStatus === "IN_TREATMENT" ||
+        emStatus === "IN TREATMENT" ||
+        emStatus === "TREATMENT"
       ) {
         continue;
       }
@@ -565,7 +570,16 @@ export async function getTripHistory(
           const emData = emSnap.data() || {};
           const emSt = String(emData.status || "").toUpperCase();
           const emTripSt = String(emData.tripStatus || "").toUpperCase();
-          if (emSt === "COMPLETED" || emSt === "CANCELLED" || emSt === "RESOLVED" || emTripSt === "COMPLETED") {
+          if (
+            emSt === "COMPLETED" ||
+            emSt === "CANCELLED" ||
+            emSt === "RESOLVED" ||
+            emTripSt === "COMPLETED" ||
+            emSt === "PATIENT_ARRIVED" ||
+            emSt === "IN_TREATMENT" ||
+            emSt === "IN TREATMENT" ||
+            emSt === "TREATMENT"
+          ) {
             trip.status = "COMPLETED";
             firestore!.collection(TRIP_COLLECTION).doc(id).update({
               status: "COMPLETED",
