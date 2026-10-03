@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Chip, Button, Icon, Input, Banner, PatientNav } from '@/components/ui';
@@ -71,25 +71,68 @@ export default function ConsultDoctor() {
         // Offline demo fallback preserves DOCTORS
       });
 
-    // Fetch user's booked appointments with patientId
+    // Fetch user's booked appointments with patientId & poll every 4s
     const pid = userProfile?.uid || (userProfile as any)?.id || 'patient-1';
-    api.appointments
-      .getMyAppointments(pid)
-      .then((res: any) => {
-        const appts = Array.isArray(res) ? res : res?.data;
-        if (mounted && Array.isArray(appts) && appts.length > 0) {
-          setMyAppointments(appts);
-          setStoreAppointments(appts);
-        }
-      })
-      .catch(() => {});
+    const fetchAppts = () => {
+      api.appointments
+        .getMyAppointments(pid)
+        .then((res: any) => {
+          const appts = Array.isArray(res) ? res : res?.data;
+          if (mounted && Array.isArray(appts)) {
+            setMyAppointments(appts);
+            setStoreAppointments(appts);
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchAppts();
+    const timer = setInterval(fetchAppts, 4000);
 
     return () => {
       mounted = false;
+      clearInterval(timer);
     };
   }, [selectedSpecialty, lastKnownLocation?.latitude, lastKnownLocation?.longitude, userProfile?.uid]);
 
   const combinedAppointments = myAppointments.length > 0 ? myAppointments : storeAppointments;
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const activeAppointments = combinedAppointments.filter(
+    (a: any) =>
+      (a.status || '').toUpperCase() !== 'COMPLETED' &&
+      (a.status || '').toUpperCase() !== 'CANCELLED' &&
+      (a.status || '').toUpperCase() !== 'NO_SHOW' &&
+      (!a.date || a.date >= todayStr)
+  );
+
+  const completedAppointments = combinedAppointments.filter(
+    (a: any) => (a.status || '').toUpperCase() === 'COMPLETED'
+  );
+
+  const expiredAppointments = combinedAppointments.filter(
+    (a: any) =>
+      (a.status || '').toUpperCase() !== 'COMPLETED' &&
+      (a.status || '').toUpperCase() !== 'CANCELLED' &&
+      (a.status || '').toUpperCase() !== 'NO_SHOW' &&
+      a.date &&
+      a.date < todayStr
+  );
+
+  const handleCancelAppointment = async (apptId: string) => {
+    try {
+      await api.appointments.cancel(apptId);
+    } catch {}
+    setMyAppointments((prev) =>
+      prev.map((a) => ((a.appointmentId || a.id) === apptId ? { ...a, status: 'CANCELLED' } : a))
+    );
+    setStoreAppointments(
+      useAppStore.getState().bookedAppointments.map((a) =>
+        (a.appointmentId || a.id) === apptId ? { ...a, status: 'CANCELLED' } : a
+      )
+    );
+    Alert.alert('Appointment Cancelled', 'The appointment has been removed from active list.');
+  };
 
   const doctors = allDoctors.filter((d) => {
     const matchesSpecialty = selectedSpecialty === 'All' || d.specialization.toLowerCase().includes(selectedSpecialty.toLowerCase());
@@ -135,107 +178,146 @@ export default function ConsultDoctor() {
         <View style={{ height: 14 }} />
 
         {/* My Booked Appointments Section */}
-        {/* Active Booked Appointments */}
-        {combinedAppointments.filter((a: any) => a.status !== 'COMPLETED' && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW').length > 0 && (
+        {/* Active Booked Appointments (Today or Future) */}
+        {activeAppointments.length > 0 && (
           <View style={{ marginBottom: 18 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <Text style={styles.eyebrow}>MY ACTIVE APPOINTMENTS</Text>
-              <Pill color="blue">{combinedAppointments.filter((a: any) => a.status !== 'COMPLETED' && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW').length} In Progress</Pill>
+              <Pill color="blue">{activeAppointments.length} In Progress</Pill>
             </View>
-            {combinedAppointments
-              .filter((a: any) => a.status !== 'COMPLETED' && a.status !== 'CANCELLED' && a.status !== 'NO_SHOW')
-              .map((apt: any) => {
-                const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
-                const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
-                const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';
+            {activeAppointments.map((apt: any) => {
+              const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
+              const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
+              const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';
 
-                return (
-                  <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.blue, borderWidth: 1.5, backgroundColor: '#f9fbff', marginBottom: 10 }]}>
-                    <View style={styles.rowTop}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.name, { color: colors.blue }]}>{docName}</Text>
-                        <Text style={styles.sub}>{clinicName}</Text>
-                        <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot}</Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                        <Pill color="blue">
-                          {apt.status || 'CONFIRMED'}
-                        </Pill>
-                        <View style={{ backgroundColor: colors.blue, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-                          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Token #{apt.tokenNumber}</Text>
-                        </View>
+              return (
+                <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.blue, borderWidth: 1.5, backgroundColor: '#f9fbff', marginBottom: 10 }]}>
+                  <View style={styles.rowTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.name, { color: colors.blue }]}>{docName}</Text>
+                      <Text style={styles.sub}>{clinicName}</Text>
+                      <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Pill color="blue">
+                        {apt.status || 'CONFIRMED'}
+                      </Pill>
+                      <View style={{ backgroundColor: colors.blue, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Token #{apt.tokenNumber}</Text>
                       </View>
                     </View>
+                  </View>
 
-                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                      <Button
-                        title="Track Live Queue"
-                        style={{ flex: 1 }}
-                        onPress={() => {
-                          setSelectedDoctorId(apt.doctorId);
-                          if (matchedDoc) setSelectedDoctor(matchedDoc);
-                          setUserToken(apt.tokenNumber);
-                          router.push('/(patient)/consult-doctor/live-queue');
-                        }}
-                      />
-                      <Button
-                        title="Directions"
-                        variant="blue"
-                        style={{ flex: 1 }}
-                        onPress={() => {
-                          setSelectedDoctorId(apt.doctorId);
-                          if (matchedDoc) setSelectedDoctor(matchedDoc);
-                          router.push('/(patient)/consult-doctor/clinic-location');
-                        }}
-                      />
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    <Button
+                      title="Track Queue"
+                      style={{ flex: 1.2 }}
+                      onPress={() => {
+                        setSelectedDoctorId(apt.doctorId);
+                        if (matchedDoc) setSelectedDoctor(matchedDoc);
+                        setUserToken(apt.tokenNumber);
+                        router.push('/(patient)/consult-doctor/live-queue');
+                      }}
+                    />
+                    <Button
+                      title="Directions"
+                      variant="blue"
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        setSelectedDoctorId(apt.doctorId);
+                        if (matchedDoc) setSelectedDoctor(matchedDoc);
+                        router.push('/(patient)/consult-doctor/clinic-location');
+                      }}
+                    />
+                    <Button
+                      title="Cancel"
+                      variant="ghost"
+                      style={{ flex: 0.8 }}
+                      onPress={() => handleCancelAppointment(apt.appointmentId || apt.id)}
+                    />
+                  </View>
+                </Card>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Past Stale / Expired Appointments */}
+        {expiredAppointments.length > 0 && (
+          <View style={{ marginBottom: 18 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <Text style={[styles.eyebrow, { color: colors.inkFaint }]}>PAST UNATTENDED APPOINTMENTS ({expiredAppointments.length})</Text>
+              <Pressable
+                onPress={() => {
+                  expiredAppointments.forEach((a) => handleCancelAppointment(a.appointmentId || a.id));
+                }}
+                style={{ paddingVertical: 3, paddingHorizontal: 8, backgroundColor: '#f1f3f5', borderRadius: 6 }}
+              >
+                <Text style={{ fontSize: 11, color: colors.inkFaint, fontWeight: '700' }}>Clear All</Text>
+              </Pressable>
+            </View>
+            {expiredAppointments.map((apt: any) => {
+              const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
+              const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
+              return (
+                <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.line, borderWidth: 1, backgroundColor: '#f8f9fa', marginBottom: 8 }]}>
+                  <View style={styles.rowTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.name, { color: colors.inkFaint }]}>{docName}</Text>
+                      <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot} · Token #{apt.tokenNumber}</Text>
                     </View>
-                  </Card>
-                );
-              })}
+                    <Pressable
+                      onPress={() => handleCancelAppointment(apt.appointmentId || apt.id)}
+                      style={{ paddingVertical: 4, paddingHorizontal: 10, backgroundColor: '#e9ecef', borderRadius: 6 }}
+                    >
+                      <Text style={{ fontSize: 11, color: colors.ink, fontWeight: '600' }}>Dismiss</Text>
+                    </Pressable>
+                  </View>
+                </Card>
+              );
+            })}
           </View>
         )}
 
         {/* Past Completed Consultations */}
-        {combinedAppointments.filter((a: any) => a.status === 'COMPLETED').length > 0 && (
+        {completedAppointments.length > 0 && (
           <View style={{ marginBottom: 18 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <Text style={styles.eyebrow}>COMPLETED CONSULTATIONS</Text>
-              <Pill color="success">{combinedAppointments.filter((a: any) => a.status === 'COMPLETED').length} Finished</Pill>
+              <Pill color="success">{completedAppointments.length} Finished</Pill>
             </View>
-            {combinedAppointments
-              .filter((a: any) => a.status === 'COMPLETED')
-              .map((apt: any) => {
-                const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
-                const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
-                const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';
+            {completedAppointments.map((apt: any) => {
+              const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
+              const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
+              const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';
 
-                return (
-                  <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.line, borderWidth: 1, backgroundColor: '#fcfdfd', marginBottom: 10 }]}>
-                    <View style={styles.rowTop}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.name, { color: colors.ink }]}>{docName}</Text>
-                        <Text style={styles.sub}>{clinicName}</Text>
-                        <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot}</Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                        <Pill color="success">✓ COMPLETED</Pill>
-                        <Text style={{ fontSize: 11, color: colors.inkFaint }}>Token #{apt.tokenNumber}</Text>
-                      </View>
+              return (
+                <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.line, borderWidth: 1, backgroundColor: '#fcfdfd', marginBottom: 10 }]}>
+                  <View style={styles.rowTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.name, { color: colors.ink }]}>{docName}</Text>
+                      <Text style={styles.sub}>{clinicName}</Text>
+                      <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot}</Text>
                     </View>
-                    <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={{ fontSize: 12, color: colors.success, fontWeight: '600', flex: 1 }}>
-                        ✓ Health record & prescription recorded
-                      </Text>
-                      <Pressable
-                        onPress={() => router.push('/(patient)/health-records' as any)}
-                        style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colors.blueBg, borderRadius: 6 }}
-                      >
-                        <Text style={{ fontSize: 11, color: colors.blue, fontWeight: '700' }}>View Rx →</Text>
-                      </Pressable>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Pill color="success">✓ COMPLETED</Pill>
+                      <Text style={{ fontSize: 11, color: colors.inkFaint }}>Token #{apt.tokenNumber}</Text>
                     </View>
-                  </Card>
-                );
-              })}
+                  </View>
+                  <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, color: colors.success, fontWeight: '600', flex: 1 }}>
+                      ✓ Health record & prescription recorded
+                    </Text>
+                    <Pressable
+                      onPress={() => router.push('/(patient)/health-records' as any)}
+                      style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colors.blueBg, borderRadius: 6 }}
+                    >
+                      <Text style={{ fontSize: 11, color: colors.blue, fontWeight: '700' }}>View Rx →</Text>
+                    </Pressable>
+                  </View>
+                </Card>
+              );
+            })}
           </View>
         )}
 

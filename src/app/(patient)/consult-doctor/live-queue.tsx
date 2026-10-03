@@ -16,9 +16,10 @@ export default function LiveQueue() {
   const advanceServingToken = useAppStore((s) => s.advanceServingToken);
   const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
 
+  const [isConsultCompleted, setIsConsultCompleted] = React.useState(false);
   const myToken = userToken ?? (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
-  const isCompleted = servingToken > myToken;
-  const isMyTurn = servingToken === myToken;
+  const isCompleted = isConsultCompleted || (servingToken > myToken && servingToken > 0);
+  const isMyTurn = !isCompleted && servingToken === myToken && servingToken > 0;
   const patientsAhead = Math.max(myToken - servingToken, 0);
 
   useEffect(() => {
@@ -30,6 +31,24 @@ export default function LiveQueue() {
         .then((data: any) => {
           if (mounted && data && typeof data.servingToken === 'number') {
             useAppStore.setState({ servingToken: data.servingToken });
+          }
+        })
+        .catch(() => {});
+
+      const pid = useAppStore.getState().userProfile?.uid || 'patient-1';
+      api.appointments
+        .getMyAppointments(pid)
+        .then((res: any) => {
+          const appts = Array.isArray(res) ? res : res?.data;
+          if (mounted && Array.isArray(appts)) {
+            const current = appts.find(
+              (a: any) =>
+                a.doctorId === selectedDoctorId &&
+                ((a.tokenNumber || a.token) === myToken || (a.status || '').toUpperCase() === 'COMPLETED')
+            );
+            if (current && (current.status || '').toUpperCase() === 'COMPLETED') {
+              setIsConsultCompleted(true);
+            }
           }
         })
         .catch(() => {});
@@ -119,12 +138,19 @@ export default function LiveQueue() {
         )}
 
         {isCompleted ? (
-          <Button
-            title="✓ Return to Consultations"
-            variant="primary"
-            style={{ marginTop: 12, backgroundColor: colors.success }}
-            onPress={handleFinish}
-          />
+          <View style={{ gap: 10, marginTop: 12 }}>
+            <Button
+              title="📄 View Prescription & Health Record"
+              variant="blue"
+              onPress={() => router.push('/(patient)/health-records' as any)}
+            />
+            <Button
+              title="✓ Return to Doctor OPD"
+              variant="primary"
+              style={{ backgroundColor: colors.success }}
+              onPress={handleFinish}
+            />
+          </View>
         ) : isMyTurn ? (
           <Button
             title="Done / Return Home"

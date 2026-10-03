@@ -68,7 +68,7 @@ export default function Booking() {
 
     // Check client-side first
     const existingClientAppt = useAppStore.getState().bookedAppointments.find(
-      (a) => a.doctorId === selectedDoctorId && a.date === bookingDate && a.status !== 'CANCELLED'
+      (a) => a.doctorId === selectedDoctorId && a.date === bookingDate && a.status !== 'CANCELLED' && a.status !== 'COMPLETED'
     );
     if (existingClientAppt) {
       setUserToken(existingClientAppt.tokenNumber);

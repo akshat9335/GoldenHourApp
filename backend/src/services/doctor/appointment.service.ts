@@ -9,10 +9,10 @@ export class AppointmentService {
    * Valid transition matrix for strict server-side state enforcement.
    */
   private readonly validTransitions: Record<AppointmentStatus, AppointmentStatus[]> = {
-    BOOKED: ["CONFIRMED", "CANCELLED"],
-    CONFIRMED: ["WAITING", "CANCELLED", "NO_SHOW"],
-    WAITING: ["IN_PROGRESS", "NO_SHOW", "CANCELLED"],
-    IN_PROGRESS: ["COMPLETED", "CANCELLED"],
+    BOOKED: ["CONFIRMED", "WAITING", "IN_PROGRESS", "CANCELLED"],
+    CONFIRMED: ["WAITING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"],
+    WAITING: ["IN_PROGRESS", "COMPLETED", "NO_SHOW", "CANCELLED"],
+    IN_PROGRESS: ["COMPLETED", "CANCELLED", "WAITING"],
     COMPLETED: [],
     CANCELLED: [],
     NO_SHOW: [],
@@ -136,7 +136,16 @@ export class AppointmentService {
   }
 
   public async getAppointmentById(appointmentId: string): Promise<Appointment> {
-    const appt = dataStore.appointments.get(appointmentId);
+    let appt = dataStore.appointments.get(appointmentId);
+    if (!appt && firestore) {
+      try {
+        const snap = await firestore.collection("appointments").doc(appointmentId).get();
+        if (snap.exists) {
+          appt = snap.data() as Appointment;
+          if (appt) dataStore.appointments.set(appointmentId, appt);
+        }
+      } catch {}
+    }
     if (!appt) {
       throw new AppError(404, "APPOINTMENT_NOT_FOUND", `Appointment '${appointmentId}' not found.`);
     }
@@ -213,13 +222,36 @@ export class AppointmentService {
     appt.updatedAt = new Date().toISOString();
     dataStore.appointments.set(appointmentId, appt);
 
+    if (nextStatus === "COMPLETED" || nextStatus === "CANCELLED" || nextStatus === "NO_SHOW") {
+      const queue = dataStore.queues.get(`${appt.doctorId}_${appt.date}`);
+      if (queue && queue.waitingCount > 0) {
+        queue.waitingCount = Math.max(0, queue.waitingCount - 1);
+        dataStore.queues.set(`${appt.doctorId}_${appt.date}`, queue);
+      }
+      const doctor = dataStore.doctors.get(appt.doctorId);
+      if (doctor && doctor.queueLength > 0) {
+        doctor.queueLength = Math.max(0, doctor.queueLength - 1);
+        doctor.estimatedWaitMinutes = doctor.queueLength * 8;
+        dataStore.doctors.set(appt.doctorId, doctor);
+        if (firestore && process.env.NODE_ENV !== "test") {
+          firestore.collection("doctors").doc(appt.doctorId).set({
+            queueLength: doctor.queueLength,
+            estimatedWaitMinutes: doctor.estimatedWaitMinutes,
+          }, { merge: true }).catch(() => {});
+        }
+      }
+    }
+
     if (firestore && process.env.NODE_ENV !== "test") {
       try {
-        await firestore.collection("appointments").doc(appointmentId).update({
+        await firestore.collection("appointments").doc(appointmentId).set({
           status: nextStatus,
           updatedAt: appt.updatedAt,
-        });
-      } catch {}
+        }, { merge: true });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[appointment] Failed to sync status to Firestore:", err);
+      }
     }
 
     return appt;

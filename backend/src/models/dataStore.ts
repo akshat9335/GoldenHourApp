@@ -191,69 +191,16 @@ class InMemoryDataStore {
     this.doctors.set(doc3.doctorId, doc3);
     this.doctors.set(doc4.doctorId, doc4);
 
-    // Seed Queues and realistic appointments
+    // Seed Queues: start clean with 0 tokens so real patient bookings populate the queue
     const today = new Date().toISOString().split("T")[0];
-
-    // Seed Appointments for doc-1 (Dr. Alok Tripathi) with Rahul Patel (patient-demo-1)
-    const apptRahul: Appointment = {
-      appointmentId: "appt-rahul-001",
-      patientId: "patient-demo-1",
-      patientName: "Rahul Patel",
-      doctorId: doc1.doctorId,
-      clinicId: clinicMedanta.clinicId,
-      date: today,
-      timeSlot: "10:30 AM",
-      tokenNumber: 1,
-      status: "COMPLETED",
-      notes: "Cardiology follow-up & BP check",
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      updatedAt: new Date(Date.now() - 1800000).toISOString(),
-    };
-
-    const apptPooja: Appointment = {
-      appointmentId: "appt-pooja-002",
-      patientId: "patient-demo-2",
-      patientName: "Pooja Verma",
-      doctorId: doc1.doctorId,
-      clinicId: clinicMedanta.clinicId,
-      date: today,
-      timeSlot: "11:15 AM",
-      tokenNumber: 2,
-      status: "CONFIRMED",
-      notes: "Post-op trauma checkup",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const apptAmit: Appointment = {
-      appointmentId: "appt-amit-003",
-      patientId: "patient-demo-3",
-      patientName: "Amit Singh",
-      doctorId: doc1.doctorId,
-      clinicId: clinicMedanta.clinicId,
-      date: today,
-      timeSlot: "12:00 PM",
-      tokenNumber: 3,
-      status: "CONFIRMED",
-      notes: "Emergency follow-up",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const appts = [apptRahul, apptPooja, apptAmit];
-    for (const a of appts) {
-      this.appointments.set(a.appointmentId, a);
-      this.appointments.set(`${a.appointmentId}_demo`, { ...a, doctorId: "doc-demo-1" });
-      this.appointments.set(`${a.appointmentId}_docdoc`, { ...a, doctorId: "doc-doc-demo-1" });
-    }
 
     const qState: LiveQueueState = {
       doctorId: doc1.doctorId,
       date: today,
-      servingToken: 2,
-      totalTokensIssued: 3,
+      servingToken: 0,
+      totalTokensIssued: 0,
       avgConsultationMinutes: 10,
-      waitingCount: 1,
+      waitingCount: 0,
     };
 
     this.queues.set(`${doc1.doctorId}_${today}`, qState);
@@ -261,9 +208,9 @@ class InMemoryDataStore {
     this.queues.set(`doc-doc-demo-1_${today}`, { ...qState, doctorId: "doc-doc-demo-1" });
     this.queues.set(`doc-doc-1_${today}`, { ...qState, doctorId: "doc-doc-1" });
 
-    doc1.servingToken = 2;
-    doc1.queueLength = 1;
-    doc1.estimatedWaitMinutes = 10;
+    doc1.servingToken = 0;
+    doc1.queueLength = 0;
+    doc1.estimatedWaitMinutes = 0;
 
     this.doctors.set("doc-demo-1", { ...doc1, doctorId: "doc-demo-1" });
     this.doctors.set("doc-doc-demo-1", { ...doc1, doctorId: "doc-doc-demo-1" });

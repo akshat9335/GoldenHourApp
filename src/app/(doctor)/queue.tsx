@@ -106,8 +106,9 @@ export default function DoctorQueue() {
       })
       .catch(() => {});
 
+    const todayStr = new Date().toISOString().split('T')[0];
     api.appointments
-      .getDoctorAppointments({ doctorId })
+      .getDoctorAppointments({ doctorId, date: todayStr })
       .then((data: any) => {
         if (Array.isArray(data)) {
           setAppointments(data);
@@ -142,11 +143,11 @@ export default function DoctorQueue() {
   }, [doctorId]);
 
   const currentAppt = appointments.find(
-    (a) => (a.tokenNumber || a.token) === servingToken
+    (a) => (a.tokenNumber || a.token) === servingToken && (a.status || '').toUpperCase() !== 'CANCELLED'
   );
   const currentPatientName =
     currentAppt?.patientName ||
-    (servingToken > 0 ? `Walk-in Patient (Token #${servingToken})` : 'No Active Patient');
+    (servingToken > 0 ? (appointments.length > 0 ? `Token #${servingToken} (Unassigned)` : 'No Active Patient') : 'No Active Patient');
   const currentStatus =
     (currentAppt?.status || (servingToken > 0 ? 'WAITING' : 'IDLE')).toUpperCase();
 
@@ -299,8 +300,15 @@ export default function DoctorQueue() {
     await handleNext();
   };
 
+  const isCompletedOrEnded = (status: string) => {
+    const s = (status || '').toUpperCase();
+    return s === 'COMPLETED' || s === 'CANCELLED' || s === 'NO_SHOW';
+  };
+
   const waitingAppointments = appointments.filter(
-    (a) => (a.tokenNumber || a.token) > servingToken && (a.status || '').toUpperCase() !== 'CANCELLED'
+    (a) =>
+      !isCompletedOrEnded(a.status) &&
+      (a.tokenNumber || a.token) > servingToken
   );
 
   const handleResetQueue = async () => {
@@ -322,6 +330,7 @@ export default function DoctorQueue() {
                 Alert.alert('Queue Rolled Over', `${unservedCount} patients shifted to tomorrow's priority list.`);
               } catch {
                 useAppStore.setState({ servingToken: 0 });
+                fetchQueueData();
               }
             },
           },
@@ -335,6 +344,7 @@ export default function DoctorQueue() {
                 fetchQueueData();
               } catch {
                 useAppStore.setState({ servingToken: 0 });
+                fetchQueueData();
               }
             },
           },
@@ -352,14 +362,13 @@ export default function DoctorQueue() {
               fetchQueueData();
             } catch {
               useAppStore.setState({ servingToken: 0 });
+              fetchQueueData();
             }
           },
         },
       ]);
     }
   };
-
-  const fallbackWaitingTokens = [servingToken + 1, servingToken + 2, servingToken + 3];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -451,15 +460,14 @@ export default function DoctorQueue() {
               );
             })
           ) : (
-            fallbackWaitingTokens.map((t, i) => (
-              <React.Fragment key={t}>
-                <View style={styles.row}>
-                  <Text style={styles.rowToken}>Token #{t} (Upcoming)</Text>
-                  <Pill color={i === 0 ? 'amber' : 'grey'}>{i === 0 ? 'NEXT' : 'WAITING'}</Pill>
-                </View>
-                {i < fallbackWaitingTokens.length - 1 && <Divider />}
-              </React.Fragment>
-            ))
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+              <Text style={{ fontSize: 13, color: colors.inkFaint, fontWeight: '600' }}>
+                No patients currently waiting in queue
+              </Text>
+              <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 4 }}>
+                New patient bookings and walk-ins will appear here automatically
+              </Text>
+            </View>
           )}
         </Card>
       </Screen>

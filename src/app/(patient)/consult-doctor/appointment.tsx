@@ -20,13 +20,25 @@ export default function AppointmentDetail() {
   React.useEffect(() => {
     let mounted = true;
     const fetchStatus = () => {
+      const pid = useAppStore.getState().userProfile?.uid;
       api.appointments
-        .getMyAppointments()
+        .getMyAppointments(pid)
         .then((res: any) => {
           const appts = Array.isArray(res) ? res : res?.data;
           if (mounted && Array.isArray(appts) && appts.length > 0) {
+            const active = appts.find(
+              (a: any) =>
+                a.doctorId === selectedDoctorId &&
+                a.status !== 'CANCELLED' &&
+                a.status !== 'COMPLETED'
+            );
+            const completed = appts.find(
+              (a: any) => a.doctorId === selectedDoctorId && a.status === 'COMPLETED'
+            );
             const matched =
-              appts.find((a: any) => a.doctorId === selectedDoctorId && a.status !== 'CANCELLED') ||
+              active ||
+              completed ||
+              appts.find((a: any) => a.doctorId === selectedDoctorId) ||
               appts[0];
             if (matched) {
               setActiveAppt(matched);

@@ -2,6 +2,7 @@ import { LiveQueueState, PatientQueueView } from "../../types/appointment";
 import { AppError } from "../../utils/AppError";
 import { dataStore } from "../../models/dataStore";
 import { doctorService } from "./doctor.service";
+import { firestore } from "../../config/firebase";
 
 export class QueueService {
   /**
@@ -129,8 +130,10 @@ export class QueueService {
 
   /**
    * Resets today's queue for a doctor back to clean 0 state.
+   * Cancels unserved appointments for today so they don't linger or reappear as waiting.
+   * Completed appointments remain COMPLETED.
    */
-  public async resetQueue(doctorId: string): Promise<LiveQueueState> {
+  public async resetQueue(doctorId: string, cancelUnserved: boolean = true): Promise<LiveQueueState> {
     const today = new Date().toISOString().split("T")[0];
     const key = `${doctorId}_${today}`;
     const queue: LiveQueueState = {
@@ -143,12 +146,43 @@ export class QueueService {
     };
     dataStore.queues.set(key, queue);
 
+    if (cancelUnserved) {
+      for (const appt of dataStore.appointments.values()) {
+        if (
+          appt.doctorId === doctorId &&
+          appt.date === today &&
+          appt.status !== "COMPLETED" &&
+          appt.status !== "CANCELLED"
+        ) {
+          appt.status = "CANCELLED";
+          appt.notes = (appt.notes ? `${appt.notes} · ` : "") + "[Cancelled during queue reset]";
+          appt.updatedAt = new Date().toISOString();
+          dataStore.appointments.set(appt.appointmentId, appt);
+
+          if (firestore && process.env.NODE_ENV !== "test") {
+            firestore.collection("appointments").doc(appt.appointmentId).set({
+              status: "CANCELLED",
+              notes: appt.notes,
+              updatedAt: appt.updatedAt,
+            }, { merge: true }).catch(() => {});
+          }
+        }
+      }
+    }
+
     const doctor = dataStore.doctors.get(doctorId);
     if (doctor) {
       doctor.servingToken = 0;
       doctor.queueLength = 0;
       doctor.estimatedWaitMinutes = 0;
       dataStore.doctors.set(doctorId, doctor);
+      if (firestore && process.env.NODE_ENV !== "test") {
+        firestore.collection("doctors").doc(doctorId).set({
+          servingToken: 0,
+          queueLength: 0,
+          estimatedWaitMinutes: 0,
+        }, { merge: true }).catch(() => {});
+      }
     }
 
     return queue;
