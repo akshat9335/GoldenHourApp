@@ -28,6 +28,20 @@ function mapRequest(
   };
 }
 
+function calculateHaversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export async function getAmbulanceRequests(
   driverUid?: string,
 ): Promise<AmbulanceRequest[]> {
@@ -35,6 +49,7 @@ export async function getAmbulanceRequests(
 
   let driverHospId: string | null = null;
   let driverPhone: string | null = null;
+  let driverLoc: { latitude: number; longitude: number } | null = null;
   let isIndependent = true;
 
   if (driverUid && firestore) {
@@ -44,24 +59,49 @@ export async function getAmbulanceRequests(
         const dData = driverDoc.data();
         driverHospId = dData?.hospitalId || null;
         driverPhone = dData?.phone || null;
+        const rawLoc = dData?.location;
+        if (rawLoc?.latitude && rawLoc?.longitude) {
+          driverLoc = { latitude: rawLoc.latitude, longitude: rawLoc.longitude };
+        } else if (dData?.latitude && dData?.longitude) {
+          driverLoc = { latitude: dData.latitude, longitude: dData.longitude };
+        }
         const hospName = String(dData?.hospitalName || "").toLowerCase();
         isIndependent = !driverHospId || hospName.includes("independent") || driverHospId === "independent";
       }
 
-      // Also check user profile doc for hospital affiliation
-      if (!driverHospId) {
-        const userDoc = await firestore.collection("users").doc(driverUid).get();
-        if (userDoc.exists) {
-          const uData = userDoc.data();
-          driverHospId = uData?.hospitalId || uData?.assignedHospitalId || null;
-          if (!driverPhone) driverPhone = uData?.phone || null;
-          const uHospName = String(uData?.hospitalName || "").toLowerCase();
-          if (driverHospId && !uHospName.includes("independent")) {
-            isIndependent = false;
+      // Also check user profile doc for hospital affiliation and location
+      const userDoc = await firestore.collection("users").doc(driverUid).get();
+      if (userDoc.exists) {
+        const uData = userDoc.data();
+        if (!driverHospId) driverHospId = uData?.hospitalId || uData?.assignedHospitalId || null;
+        if (!driverPhone) driverPhone = uData?.phone || null;
+        if (!driverLoc) {
+          const uLoc = uData?.location;
+          if (uLoc?.latitude && uLoc?.longitude) {
+            driverLoc = { latitude: uLoc.latitude, longitude: uLoc.longitude };
+          }
+        }
+        const uHospName = String(uData?.hospitalName || "").toLowerCase();
+        if (driverHospId && !uHospName.includes("independent")) {
+          isIndependent = false;
+        }
+      }
+
+      if (!driverLoc) {
+        const locDoc = await firestore.collection("locations").doc(driverUid).get();
+        if (locDoc.exists) {
+          const lData = locDoc.data();
+          if (lData?.lat && lData?.lng) {
+            driverLoc = { latitude: lData.lat, longitude: lData.lng };
           }
         }
       }
     } catch {}
+  }
+
+  // Fallback demo driver location (Civil Lines, Prayagraj) so distance checks always operate cleanly
+  if (!driverLoc) {
+    driverLoc = { latitude: 25.4484, longitude: 81.8460 };
   }
 
   const snapshot = await firestore!
@@ -98,30 +138,42 @@ export async function getAmbulanceRequests(
         return false;
       }
 
-      // If hospital dispatched to AFFILIATED fleet:
+      // 1. Exclude stale emergencies older than 45 minutes to prevent flood of past requests
+      const emTime = new Date((req.createdAt as string) || (req.updatedAt as string) || 0).getTime();
+      if (emTime && Date.now() - emTime > 45 * 60 * 1000) {
+        return false;
+      }
+
+      // 2. Geographic Proximity / Radius Filter (Max 35 km)
+      const pLoc = (req.location as any) || (req.patientLocation as any);
+      if (pLoc && typeof pLoc.latitude === "number" && typeof pLoc.longitude === "number" && driverLoc) {
+        const dist = calculateHaversineKm(driverLoc.latitude, driverLoc.longitude, pLoc.latitude, pLoc.longitude);
+        if (dist > 35) {
+          return false; // Out of operational range!
+        }
+        (req as any).distanceKm = Number(dist.toFixed(1));
+        (req as any).etaMinutes = Math.max(3, Math.round(dist * 2.5));
+      }
+
+      // 3. Hospital Fleet Affiliation Check
+      if (!isIndependent && driverHospId && req.assignedHospitalId && driverHospId !== req.assignedHospitalId) {
+        return false; // Assigned to a different hospital's catchment
+      }
+
+      // 4. If hospital dispatched to AFFILIATED fleet explicitly:
       if (req.dispatchMode === "AFFILIATED") {
-        // 1. Direct target match
         if (req.targetDriverId && driverUid && req.targetDriverId === driverUid) {
           return true;
         }
-        // 2. Affiliated hospital fleet match (all on-duty drivers belonging to this hospital)
         if (driverHospId && req.assignedHospitalId && driverHospId === req.assignedHospitalId) {
           return true;
         }
-        // 3. If targetDriverId was set to a manual fleet entry, check if driver's phone matches
-        if (req.targetDriverId && driverPhone) {
-          // If this driver belongs to the hospital or has matching phone
-          if (driverHospId && req.assignedHospitalId && driverHospId === req.assignedHospitalId) {
-            return true;
-          }
-        }
-        // If driver belongs to a DIFFERENT hospital, exclude
         if (driverHospId && req.assignedHospitalId && driverHospId !== req.assignedHospitalId) {
           return false;
         }
       }
 
-      // If dismissed by this driver
+      // 5. If dismissed by this driver
       if (Array.isArray((req as any).dismissedBy) && driverUid && (req as any).dismissedBy.includes(driverUid)) {
         return false;
       }
@@ -129,10 +181,11 @@ export async function getAmbulanceRequests(
       return true;
     })
     .sort((a, b) => {
-      const aTime = (a.createdAt as any) || 0;
-      const bTime = (b.createdAt as any) || 0;
-      return String(bTime).localeCompare(String(aTime));
-    });
+      const aTime = new Date((a.createdAt as any) || 0).getTime();
+      const bTime = new Date((b.createdAt as any) || 0).getTime();
+      return bTime - aTime;
+    })
+    .slice(0, 5);
 }
 
 export async function dismissAmbulanceRequest(

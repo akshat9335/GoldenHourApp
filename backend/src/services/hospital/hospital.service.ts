@@ -864,20 +864,57 @@ export async function getHospitalRequests(uid: string) {
       const primaryHospId = candidateIds[0] || hospital.docId;
       for (const emDoc of activeSnap.docs) {
         const em = emDoc.data();
-        // Strict hospital targeting check: Only bridge if this hospital is specifically targeted/assigned
+        // 1. If this emergency has already been assigned to or accepted by a hospital:
+        const hasAssignedHospital = Boolean(em.assignedHospitalId || em.targetHospitalId);
+        if (hasAssignedHospital) {
+          const isAssignedToThisHospital =
+            candidateIds.includes(em.assignedHospitalId) ||
+            candidateIds.includes(em.targetHospitalId);
+          if (!isAssignedToThisHospital) {
+            continue; // Strictly assigned to another hospital! Do NOT bridge or show to this hospital!
+          }
+        }
+
+        // 2. If emergency is already in treatment / admitted / inbound, it MUST be directly assigned to this hospital
+        const emStatus = String(em.status || "").toUpperCase();
+        const isPostAcceptance =
+          emStatus === "HOSPITAL_ACCEPTED" ||
+          emStatus === "AMBULANCE_ASSIGNED" ||
+          emStatus === "EN_ROUTE" ||
+          emStatus === "AT_PATIENT" ||
+          emStatus === "PATIENT_ONBOARD" ||
+          emStatus === "AT_HOSPITAL" ||
+          emStatus === "PATIENT ARRIVED" ||
+          emStatus === "IN TREATMENT" ||
+          emStatus === "TREATMENT";
+
+        if (isPostAcceptance) {
+          const isAssignedToUs =
+            candidateIds.includes(em.assignedHospitalId) ||
+            candidateIds.includes(em.targetHospitalId) ||
+            candidateIds.includes(em.hospitalId);
+          if (!isAssignedToUs) {
+            continue; // Belongs to a different hospital! Do NOT show to this hospital!
+          }
+        }
+
+        // 3. For pending / new emergencies, only bridge if this hospital is the currently alerted candidate
         const isTargeted =
           candidateIds.includes(em.hospitalId) ||
           candidateIds.includes(em.alertedHospitalId) ||
           candidateIds.includes(em.targetHospitalId) ||
           candidateIds.includes(em.assignedHospitalId) ||
-          (Array.isArray(em.hospitalCandidates) &&
-            em.hospitalCandidates.some((c: any) => candidateIds.includes(c.hospitalId)));
+          (!isPostAcceptance &&
+            (emStatus === "PENDING" || emStatus === "REPORTED" || emStatus === "SEARCHING_HOSPITAL") &&
+            Array.isArray(em.hospitalCandidates) &&
+            em.hospitalCandidates.length > 0 &&
+            candidateIds.includes(em.hospitalCandidates[0].hospitalId));
 
         if (!isTargeted) continue;
 
-        // Skip emergencies older than 30 minutes to prevent stale request resurrection
+        // Skip emergencies older than 45 minutes to prevent stale request resurrection
         const emTime = new Date(em.createdAt || 0).getTime();
-        if (emTime && Date.now() - emTime > 30 * 60 * 1000) continue;
+        if (emTime && Date.now() - emTime > 45 * 60 * 1000) continue;
 
         const reqDocId = `${emDoc.id}_${primaryHospId}`;
         const bridgedData = {
@@ -885,6 +922,7 @@ export async function getHospitalRequests(uid: string) {
           requestId: reqDocId,
           emergencyId: emDoc.id,
           hospitalId: primaryHospId,
+          assignedHospitalId: em.assignedHospitalId || primaryHospId,
           hospitalName: hospital.data?.hospitalName || hospital.data?.name || "Hospital Facility",
           patientName: em.patientName || em.userName || "Emergency Patient",
           patientPhone: em.patientPhone || null,
@@ -910,8 +948,12 @@ export async function getHospitalRequests(uid: string) {
   }
 
   // Hospital must ONLY see active requests intended for them right now:
-  // Must NOT show QUEUED_STANDBY (until escalated to NEW), TIMEOUT, REJECTED, COMPLETED, or CANCELLED
+  // Must NOT show requests assigned to other hospitals, or QUEUED_STANDBY, TIMEOUT, REJECTED, COMPLETED, or CANCELLED
   const activeResults = results.filter((item: any) => {
+    // Strictly exclude if assigned to a different hospital
+    if (item.assignedHospitalId && !candidateIds.includes(item.assignedHospitalId)) {
+      return false;
+    }
     const st = String(item.status || "").toUpperCase();
     return (
       st === "NEW" ||
