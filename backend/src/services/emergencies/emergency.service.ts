@@ -513,7 +513,9 @@ export async function createEmergency(
 
       // Update emergency record with ranked hospital candidates
       const emergencyUpdates = {
+        allHospitalCandidates: rankedCandidates,
         hospitalCandidates: rankedCandidates,
+        escalationRank: 0,
         alertedCandidateIndex: 0,
         alertedHospitalId: topRank.hospitalId,
         alertedHospitalName: topRank.name,
@@ -801,20 +803,29 @@ export async function escalateEmergencyToNextHospital(
     return em;
   }
 
-  const candidates: Array<any> = Array.isArray(em.hospitalCandidates) ? em.hospitalCandidates : [];
-  const currentIdx = typeof em.alertedCandidateIndex === "number" ? em.alertedCandidateIndex : 0;
-  const nextIdx = currentIdx + 1;
+  const masterCandidates: Array<any> =
+    Array.isArray(em.allHospitalCandidates) && em.allHospitalCandidates.length > 0
+      ? em.allHospitalCandidates
+      : (Array.isArray(em.hospitalCandidates) ? em.hospitalCandidates : []);
+
+  const currentRank = typeof em.escalationRank === "number"
+    ? em.escalationRank
+    : (typeof em.alertedCandidateIndex === "number" ? em.alertedCandidateIndex : 0);
+
+  const nextRank = currentRank + 1;
 
   const now = new Date().toISOString();
 
-  if (nextIdx < candidates.length) {
-    const nextHospital = candidates[nextIdx];
-    candidates[currentIdx].status = "TIMEOUT";
-    candidates[nextIdx].status = "ALERTED";
-    candidates[nextIdx].alertedAt = now;
+  if (nextRank < masterCandidates.length) {
+    const prevHospital = masterCandidates[currentRank];
+    const nextHospital = masterCandidates[nextRank];
+    if (prevHospital) prevHospital.status = "TIMEOUT";
+    if (nextHospital) {
+      nextHospital.status = "ALERTED";
+      nextHospital.alertedAt = now;
+    }
 
     // 1. Mark previous hospital's request doc in hospitalEmergencyRequests as TIMEOUT
-    const prevHospital = candidates[currentIdx];
     if (prevHospital?.hospitalId) {
       const prevDocId = `${emergencyId}_${prevHospital.hospitalId}`;
       try {
@@ -835,7 +846,7 @@ export async function escalateEmergencyToNextHospital(
         {
           status: "NEW",
           escalated: true,
-          escalatedFrom: candidates[currentIdx]?.name || "Previous ER",
+          escalatedFrom: prevHospital?.name || "Previous ER",
           escalationReason: reason,
           updatedAt: now,
         },
@@ -843,22 +854,41 @@ export async function escalateEmergencyToNextHospital(
       );
     } catch (_e) {}
 
+    // Display candidates window for the mobile APK (which does hospitalCandidates.slice(0, 3)):
+    // When nextRank < 3: Keep original order, alertedCandidateIndex = nextRank.
+    // When nextRank >= 3: Put nextHospital in slot 0, followed by subsequent standbys,
+    // so mobile screen's slice(0, 3) visibly updates to show the 4th/5th hospital in slot 0 with ALERT ACTIVE!
+    let displayCandidates: Array<any>;
+    let displayAlertedIndex: number;
+
+    if (nextRank < 3) {
+      displayCandidates = [...masterCandidates];
+      displayAlertedIndex = nextRank;
+    } else {
+      const activeAndUpcoming = masterCandidates.slice(nextRank);
+      const pastHospitals = masterCandidates.slice(0, nextRank);
+      displayCandidates = [...activeAndUpcoming, ...pastHospitals];
+      displayAlertedIndex = 0;
+    }
+
     const updates = {
-      hospitalCandidates: candidates,
-      alertedCandidateIndex: nextIdx,
+      allHospitalCandidates: masterCandidates,
+      hospitalCandidates: displayCandidates,
+      escalationRank: nextRank,
+      alertedCandidateIndex: displayAlertedIndex,
       alertedHospitalId: nextHospital.hospitalId,
       alertedHospitalName: nextHospital.name,
       assignedHospitalName: null,
       assignedHospitalLocation: null,
       assignedHospitalPhone: null,
       status: "HOSPITAL_SEARCH",
-      escalationMessage: `ER desk ${candidates[currentIdx]?.name || "initial hospital"} busy. Automatically escalating alert to ${nextHospital.name}...`,
+      escalationMessage: `ER desk ${prevHospital?.name || "initial hospital"} busy. Automatically escalating alert to ${nextHospital.name}...`,
       alertedAt: now,
       updatedAt: now,
     };
 
     await emergencyRef.set(updates, { merge: true });
-    console.log(`[Auto-Escalation] Emergency ${emergencyId} successfully escalated to ${nextHospital.name}`);
+    console.log(`[Auto-Escalation] Emergency ${emergencyId} successfully escalated to ${nextHospital.name} (rank ${nextRank + 1})`);
     return { ...em, ...updates };
   } else {
     // All local candidates exhausted -> Fallback to Central 108 Dispatch
