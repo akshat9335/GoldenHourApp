@@ -184,8 +184,8 @@ async function getHospitalByOwnerUid(uid: string) {
 
   const hospitalData = typeof hospitalDoc.data === "function" ? hospitalDoc.data() : hospitalDoc.data;
 
-  // Enforce consistent Apollo Multi-Specialty Hospital name for demo hospital desk
-  if (uid === "hosp-demo-apollo" || uid.includes("apollo") || hospitalData?.name === "Emergency Hospital Facility") {
+  // Enforce consistent Apollo Multi-Specialty Hospital name for demo hospital desk ONLY
+  if (uid === "hosp-demo-apollo" || uid === "hosp-hosp-demo-apollo" || uid === "hosp-demo-token-hospital") {
     hospitalData.name = "Apollo Multi-Specialty Hospital";
     hospitalData.hospitalName = "Apollo Multi-Specialty Hospital";
     if (firestore && hospitalDoc?.id) {

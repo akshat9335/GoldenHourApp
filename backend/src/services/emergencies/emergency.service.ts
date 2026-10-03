@@ -842,20 +842,9 @@ export async function escalateEmergencyToNextHospital(
       );
     } catch (_e) {}
 
-    // Dynamic Top 3 Promotion:
-    // If escalating to Rank 4 or beyond (nextIdx >= 3), bring the active alerted candidate into the top slots
-    // so any mobile screens doing hospitalCandidates.slice(0, 3) will immediately display Rank 4 without an APK update!
-    let displayCandidates = [...candidates];
-    if (nextIdx >= 3) {
-      displayCandidates = [
-        nextHospital,
-        ...candidates.filter((_, idx) => idx !== nextIdx),
-      ];
-    }
-
     const updates = {
-      hospitalCandidates: displayCandidates,
-      alertedCandidateIndex: nextIdx >= 3 ? 0 : nextIdx,
+      hospitalCandidates: candidates,
+      alertedCandidateIndex: nextIdx,
       alertedHospitalId: nextHospital.hospitalId,
       alertedHospitalName: nextHospital.name,
       assignedHospitalName: null,

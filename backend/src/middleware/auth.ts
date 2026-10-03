@@ -41,7 +41,24 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
     const path = (req.baseUrl || "") + (req.path || "");
 
-    if (isExplicitDemoUser) {
+    const isRealFirebaseToken = Boolean(
+      token &&
+      token.includes(".") &&
+      !token.startsWith("demo-") &&
+      !token.startsWith("mock-") &&
+      !token.startsWith("test-") &&
+      !token.startsWith("dev-")
+    );
+
+    if (isRealFirebaseToken) {
+      if (!auth) {
+        throw new AppError(500, "FIREBASE_NOT_CONFIGURED", "Firebase Admin is not configured on this server.");
+      }
+      const decoded = await auth.verifyIdToken(token!);
+      decodedUid = decoded.uid;
+      decodedEmail = decoded.email;
+      decodedRole = (decoded as any).role || (decoded as any).claims?.role;
+    } else if (isExplicitDemoUser) {
       decodedUid = devUid || (token?.startsWith("demo-token-") ? token.replace("demo-token-", "") : "hosp-demo-apollo");
       if (decodedUid.includes("hosp") || path.includes("hospitals")) {
         decodedUid = "hosp-demo-apollo";
@@ -65,7 +82,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
         decodedEmail = "rahul.patel@gmail.com";
       }
     } else if (!token) {
-      // In demo mode or for emergency triage & fleet dispatch, allow seamless demo access
+      // In demo mode without token, allow role-based demo fallbacks
       if (path.includes("emergencies")) {
         decodedUid = devUid || (req.body?.patientId as string) || "patient-demo-1";
         decodedEmail = "rahul.patel@gmail.com";
@@ -87,36 +104,10 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
         decodedEmail = "user@goldenhour.org";
         decodedRole = (req.headers["x-dev-role"] as string) || "PATIENT";
       }
-    } else if (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("test-") || token.startsWith("dev-") || isDemoMode && !token.includes(".")) {
+    } else {
       decodedUid = (req.headers["x-dev-uid"] as string) || token.slice(0, 32);
       decodedEmail = (req.headers["x-dev-email"] as string) || "user@goldenhour.org";
       decodedRole = req.headers["x-dev-role"] as string;
-    } else {
-      if (!auth) {
-        throw new AppError(500, "FIREBASE_NOT_CONFIGURED", "Firebase Admin is not configured on this server.");
-      }
-      const decoded = await auth.verifyIdToken(token);
-      decodedUid = decoded.uid;
-      decodedEmail = decoded.email;
-      decodedRole = (decoded as any).role || (decoded as any).claims?.role;
-
-      // Endpoint role alignment for demo testing:
-      // If a user with a PATIENT token hits /hospitals or /ambulances in demo mode, auto-align role
-      if (isDemoMode) {
-        if (path.includes("hospitals") && decodedRole !== "HOSPITAL") {
-          decodedUid = "hosp-demo-apollo";
-          decodedRole = "HOSPITAL";
-          decodedEmail = "er.command@apollohospitals.com";
-        } else if (path.includes("ambulances") && decodedRole !== "AMBULANCE_DRIVER") {
-          decodedUid = "driver-demo-ramesh";
-          decodedRole = "AMBULANCE_DRIVER";
-          decodedEmail = "ramesh.als108@goldenhour.org";
-        } else if ((path.includes("doctors") || path.includes("appointments")) && decodedRole !== "DOCTOR") {
-          decodedUid = "doc-1";
-          decodedRole = "DOCTOR";
-          decodedEmail = "dr.ananya.cardio@medanta.org";
-        }
-      }
     }
 
     const profile = await getUserProfile(decodedUid);
