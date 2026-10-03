@@ -41,7 +41,19 @@ export default function RegisterPatient() {
   const [chronicBP, setChronicBP] = useState(false);
   const [diabetes, setDiabetes] = useState(false);
   const [heartDisease, setHeartDisease] = useState(false);
+  const [customCondition, setCustomCondition] = useState('');
+  const [selectedQuickConditions, setSelectedQuickConditions] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  const QUICK_CONDITIONS = [
+    'Severe Anemia',
+    'Asthma',
+    'Tuberculosis (TB)',
+    'Thyroid',
+    'High-Risk Pregnancy',
+    'Malnutrition',
+    'Epilepsy / Fits',
+  ];
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -54,6 +66,15 @@ export default function RegisterPatient() {
     if (chronicBP) knownConditions.push('Chronic BP');
     if (diabetes) knownConditions.push('Diabetes');
     if (heartDisease) knownConditions.push('Heart Disease');
+    selectedQuickConditions.forEach((c) => {
+      if (!knownConditions.includes(c)) knownConditions.push(c);
+    });
+    if (customCondition.trim()) {
+      const extra = customCondition.split(',').map((s) => s.trim()).filter(Boolean);
+      extra.forEach((c) => {
+        if (!knownConditions.includes(c)) knownConditions.push(c);
+      });
+    }
 
     const userProfile = useAppStore.getState().userProfile;
     const workerUid = userProfile?.uid || 'asha-worker-prayagraj';
@@ -246,6 +267,44 @@ export default function RegisterPatient() {
               />
             </View>
           ))}
+
+          {/* Quick Common Condition Chips */}
+          <Text style={[styles.label, { marginTop: 14, marginBottom: 8 }]}>
+            अन्य सामान्य स्थितियाँ (Quick Select):
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {QUICK_CONDITIONS.map((cond) => {
+              const active = selectedQuickConditions.includes(cond);
+              return (
+                <TouchableOpacity
+                  key={cond}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => {
+                    setSelectedQuickConditions((prev) =>
+                      active ? prev.filter((c) => c !== cond) : [...prev, cond]
+                    );
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {active ? '✓ ' : '+ '}{cond}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Manual Input for Any Other Condition */}
+          <Text style={[styles.label, { marginTop: 4, marginBottom: 5 }]}>
+            अन्य स्वास्थ्य स्थिति / बीमारी (Manual Type):
+          </Text>
+          <TextInput
+            style={[styles.input, { marginBottom: 4 }]}
+            placeholder="उदा. Severe Anemia, Allergy, Surgery history..."
+            value={customCondition}
+            onChangeText={setCustomCondition}
+            placeholderTextColor={colors.inkFaint}
+          />
         </View>
 
         {/* Save Button */}
@@ -335,6 +394,27 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   toggleLabel: { fontSize: 13.5, fontWeight: '600', color: colors.ink },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  chipActive: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#DC2626',
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.inkSoft,
+  },
+  chipTextActive: {
+    color: '#DC2626',
+    fontWeight: '700',
+  },
   saveBtn: {
     backgroundColor: colors.red,
     borderRadius: 12,

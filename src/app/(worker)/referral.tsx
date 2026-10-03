@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -47,6 +48,8 @@ export default function CreateReferralScreen() {
 
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(paramPatientId || '');
+  const [patientPickerVisible, setPatientPickerVisible] = useState(false);
+  const [patientSearch, setPatientSearch] = useState('');
   const [facilities, setFacilities] = useState<FacilityItem[]>(FALLBACK_FACILITIES);
   const [selectedHospitalId, setSelectedHospitalId] = useState<string>(FALLBACK_FACILITIES[0].id);
   const [destinationFacility, setDestinationFacility] = useState(FALLBACK_FACILITIES[0].name);
@@ -204,30 +207,58 @@ export default function CreateReferralScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* Patient Picker */}
+        {/* Patient Picker Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('asha.selectPatient')} *</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={styles.cardTitle}>{t('asha.selectPatient')} *</Text>
+            {patients.length > 0 && (
+              <TouchableOpacity onPress={() => setPatientPickerVisible(true)}>
+                <Text style={{ fontSize: 12, color: '#0284C7', fontWeight: '700' }}>
+                  {lang === 'hi' ? 'सूची देखें ▾' : 'View All ▾'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {patients.length === 0 ? (
             <Text style={{ color: colors.inkFaint }}>{t('asha.noPatients')}</Text>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.pillRow}>
-                {patients.map((p) => (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[styles.pill, selectedPatientId === p.id && styles.pillActive]}
-                    onPress={() => setSelectedPatientId(p.id)}
-                  >
-                    <Text style={[styles.pillText, selectedPatientId === p.id && { color: '#fff' }]}>
-                      {p.name}
-                    </Text>
-                    <Text style={[styles.pillSub, selectedPatientId === p.id && { color: '#FECACA' }]}>
-                      {p.villageOrArea}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+          ) : selectedPatient ? (
+            <TouchableOpacity
+              style={styles.selectedPatientBox}
+              onPress={() => setPatientPickerVisible(true)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.selectedAvatar}>
+                <Text style={styles.selectedAvatarText}>
+                  {(selectedPatient.name ? selectedPatient.name.charAt(0) : 'P').toUpperCase()}
+                </Text>
               </View>
-            </ScrollView>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.selectedName} numberOfLines={1}>{selectedPatient.name}</Text>
+                  {selectedPatient.isPregnant && (
+                    <Text style={{ fontSize: 11 }}>🤰</Text>
+                  )}
+                </View>
+                <Text style={styles.selectedMeta}>
+                  {selectedPatient.age}y / {selectedPatient.gender} • {selectedPatient.villageOrArea}
+                  {selectedPatient.bloodGroup ? ` • ${selectedPatient.bloodGroup}` : ''}
+                </Text>
+              </View>
+              <View style={styles.selectArrowBadge}>
+                <Text style={styles.selectArrowText}>{lang === 'hi' ? 'बदलें ▾' : 'Change ▾'}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.selectTriggerBtn}
+              onPress={() => setPatientPickerVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectTriggerText}>
+                {lang === 'hi' ? 'मरीज चुनें — टैप करें ▾' : 'Choose Patient — Tap here ▾'}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -364,6 +395,112 @@ export default function CreateReferralScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+
+      {/* Patient Picker Modal */}
+      <Modal
+        visible={patientPickerVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setPatientPickerVisible(false);
+          setPatientSearch('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>
+                  {lang === 'hi' ? 'मरीज का चयन करें' : 'Select Community Patient'}
+                </Text>
+                <Text style={styles.modalSub}>
+                  {patients.length} {lang === 'hi' ? 'पंजीकृत मरीज उपलब्ध' : 'registered patients'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setPatientPickerVisible(false);
+                  setPatientSearch('');
+                }}
+                style={styles.modalCloseBtn}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Box */}
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder={lang === 'hi' ? 'नाम या गाँव से खोजें...' : 'Search by name or village...'}
+              value={patientSearch}
+              onChangeText={setPatientSearch}
+              placeholderTextColor={colors.inkFaint}
+            />
+
+            {/* Patients List */}
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {patients
+                .filter(
+                  (p) =>
+                    p.name?.toLowerCase().includes(patientSearch.toLowerCase()) ||
+                    (p.villageOrArea && p.villageOrArea.toLowerCase().includes(patientSearch.toLowerCase())) ||
+                    (p.crisisId && p.crisisId.toLowerCase().includes(patientSearch.toLowerCase()))
+                )
+                .map((p) => {
+                  const isSel = p.id === selectedPatientId;
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[styles.modalItem, isSel && styles.modalItemActive]}
+                      onPress={() => {
+                        setSelectedPatientId(p.id);
+                        setPatientPickerVisible(false);
+                        setPatientSearch('');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.modalAvatar, isSel && { backgroundColor: '#0284C7' }]}>
+                        <Text style={[styles.modalAvatarText, isSel && { color: '#fff' }]}>
+                          {(p.name ? p.name.charAt(0) : 'P').toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={[styles.modalItemName, isSel && { color: '#0369A1', fontWeight: '800' }]}>
+                            {p.name}
+                          </Text>
+                          {p.isPregnant && <Text style={{ fontSize: 11 }}>🤰</Text>}
+                        </View>
+                        <Text style={styles.modalItemMeta}>
+                          {p.age}y / {p.gender} • {p.villageOrArea}
+                          {p.bloodGroup ? ` • ${p.bloodGroup}` : ''}
+                        </Text>
+                        {p.knownConditions?.length ? (
+                          <Text style={styles.modalItemCond} numberOfLines={1}>
+                            ⚠️ {p.knownConditions.join(', ')}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {isSel && <Text style={styles.modalItemCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              {patients.length > 0 &&
+                patients.filter(
+                  (p) =>
+                    p.name?.toLowerCase().includes(patientSearch.toLowerCase()) ||
+                    (p.villageOrArea && p.villageOrArea.toLowerCase().includes(patientSearch.toLowerCase())) ||
+                    (p.crisisId && p.crisisId.toLowerCase().includes(patientSearch.toLowerCase()))
+                ).length === 0 && (
+                  <View style={{ padding: 24, alignItems: 'center' }}>
+                    <Text style={{ color: colors.inkFaint }}>कोई मरीज नहीं मिला</Text>
+                  </View>
+                )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -456,4 +593,168 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+
+  // Patient Selector Card
+  selectedPatientBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
+    backgroundColor: '#F0F9FF',
+    gap: 12,
+  },
+  selectedAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#0284C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedAvatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  selectedName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  selectedMeta: {
+    fontSize: 12,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  selectArrowBadge: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  selectArrowText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  selectTriggerBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+  },
+  selectTriggerText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: colors.inkSoft,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.inkSoft,
+  },
+  modalSearchInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    color: colors.ink,
+    marginBottom: 12,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    backgroundColor: '#fff',
+    marginBottom: 8,
+    gap: 12,
+  },
+  modalItemActive: {
+    borderColor: '#0284C7',
+    backgroundColor: '#F0F9FF',
+  },
+  modalAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.inkSoft,
+  },
+  modalItemName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  modalItemMeta: {
+    fontSize: 11.5,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  modalItemCond: {
+    fontSize: 11,
+    color: '#D97706',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  modalItemCheck: {
+    color: '#0284C7',
+    fontWeight: '800',
+    fontSize: 16,
+  },
 });

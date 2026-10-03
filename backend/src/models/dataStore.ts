@@ -406,6 +406,146 @@ class InMemoryDataStore {
     this.hospitals.set(hospBlr2.hospitalId, hospBlr2);
     this.hospitals.set(hospBlr3.hospitalId, hospBlr3);
 
+    // Seed Prayagraj Regional Registered Hospitals
+    const hospPrayag1: HospitalFacility = {
+      hospitalId: "hosp-srn-prayagraj",
+      name: "Swaroop Rani Nehru Hospital (District Trauma)",
+      address: "MG Marg, Civil Lines, Prayagraj",
+      phone: "+91-532-2500011",
+      lat: 25.4484,
+      lng: 81.8460,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Level 1 Trauma", "24/7 Emergency", "Critical ICU", "Blood Bank"],
+      availableCapacity: 24,
+      totalBeds: 60,
+      availableBeds: 24,
+      icuBeds: 12,
+      availableIcuBeds: 6,
+      traumaLevel: 1,
+      icuAvailable: true,
+      specialistsAvailable: ["Trauma Surgeon", "Orthopedic Surgeon", "Anesthetist"],
+      diagnosticAvailability: ["CT 128 Slice", "Digital X-Ray", "Pathology Lab"],
+      verified: true,
+    };
+
+    const hospPrayag2: HospitalFacility = {
+      hospitalId: "hosp-a3T8en1zB3NvXvwDEKxCG0HR0hi1",
+      name: "Medanta Hospital Prayagraj",
+      address: "Civil Lines, Prayagraj",
+      phone: "+91-532-2407777",
+      lat: 25.4538,
+      lng: 81.8540,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Super Specialty", "Cardiology", "Neuro Trauma", "ICU"],
+      availableCapacity: 20,
+      totalBeds: 50,
+      availableBeds: 20,
+      icuBeds: 10,
+      availableIcuBeds: 5,
+      traumaLevel: 1,
+      icuAvailable: true,
+      specialistsAvailable: ["Cardiologist", "Critical Care Specialist", "Neurosurgeon"],
+      diagnosticAvailability: ["MRI 3T", "Cath Lab", "CT Scan", "Blood Bank"],
+      verified: true,
+    };
+
+    const hospPrayag3: HospitalFacility = {
+      hospitalId: "hosp-7KdTMePBTBdIY7s4tlVcl5dnN702",
+      name: "Saket Hospital",
+      address: "George Town, Prayagraj",
+      phone: "+91-532-2465123",
+      lat: 25.4358,
+      lng: 81.8463,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["General & Emergency Care", "Emergency OT", "ICU Bay"],
+      availableCapacity: 33,
+      totalBeds: 45,
+      availableBeds: 33,
+      icuBeds: 8,
+      availableIcuBeds: 4,
+      traumaLevel: 2,
+      icuAvailable: true,
+      specialistsAvailable: ["General Surgeon", "Emergency Physician"],
+      diagnosticAvailability: ["Digital X-Ray", "Ultrasound", "Pathology Lab"],
+      verified: true,
+    };
+
+    const hospPrayag4: HospitalFacility = {
+      hospitalId: "hosp-demo-apollo",
+      name: "Apollo Multi-Specialty Hospital",
+      address: "Katra, Prayagraj",
+      phone: "+91-532-2890123",
+      lat: 25.4410,
+      lng: 81.8380,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Tertiary Care & Trauma", "Emergency OT", "Cardiac ICU"],
+      availableCapacity: 18,
+      totalBeds: 40,
+      availableBeds: 18,
+      icuBeds: 8,
+      availableIcuBeds: 3,
+      traumaLevel: 1,
+      icuAvailable: true,
+      specialistsAvailable: ["Cardiologist", "Trauma Specialist", "Pediatrician"],
+      diagnosticAvailability: ["CT Scan", "Digital X-Ray", "Blood Bank"],
+      verified: true,
+    };
+
+    const hospPrayag5: HospitalFacility = {
+      hospitalId: "hosp-kamla-nehru",
+      name: "Kamla Nehru Memorial Hospital",
+      address: "Tagore Town, Prayagraj",
+      phone: "+91-532-2466000",
+      lat: 25.4510,
+      lng: 81.8610,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Maternal & Child Health", "Gynecology OT", "NICU/PICU"],
+      availableCapacity: 15,
+      totalBeds: 35,
+      availableBeds: 15,
+      icuBeds: 6,
+      availableIcuBeds: 2,
+      traumaLevel: 2,
+      icuAvailable: true,
+      specialistsAvailable: ["Obstetrician", "Gynecologist", "Pediatrician"],
+      diagnosticAvailability: ["Ultrasound 4D", "Digital X-Ray", "Blood Bank"],
+      verified: true,
+    };
+
+    const hospPrayag6: HospitalFacility = {
+      hospitalId: "phc-naini",
+      name: "Naini Primary Health Centre (PHC)",
+      address: "Naini Rural, Prayagraj",
+      phone: "+91-532-2691000",
+      lat: 25.3950,
+      lng: 81.8650,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Primary Emergency Care", "Maternity Stabilization", "Minor Dressing"],
+      availableCapacity: 6,
+      totalBeds: 12,
+      availableBeds: 6,
+      icuBeds: 2,
+      availableIcuBeds: 1,
+      traumaLevel: 3,
+      icuAvailable: false,
+      specialistsAvailable: ["Medical Officer (MO)", "Staff Nurse"],
+      diagnosticAvailability: ["Rapid Blood Test", "ECG", "Basic Pathology"],
+      verified: true,
+    };
+
+    this.hospitals.set(hospPrayag1.hospitalId, hospPrayag1);
+    this.hospitals.set(hospPrayag2.hospitalId, hospPrayag2);
+    this.hospitals.set(hospPrayag3.hospitalId, hospPrayag3);
+    this.hospitals.set(hospPrayag4.hospitalId, hospPrayag4);
+    this.hospitals.set(hospPrayag5.hospitalId, hospPrayag5);
+    this.hospitals.set(hospPrayag6.hospitalId, hospPrayag6);
+
     // Seed Nearby Incidents (For Nearby Alerts testing)
     const inc1: NearbyIncidentSummary = {
       incidentId: "inc-delhi-001",
