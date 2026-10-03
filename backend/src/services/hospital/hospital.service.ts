@@ -608,6 +608,18 @@ export async function getHospitalProfile(uid: string) {
       isOnline: true,
       lastHeartbeat: nowIso,
     }, { merge: true });
+    if (uid === "hosp-demo-apollo" || uid === "hosp-hosp-demo-apollo" || uid === "hosp-demo-token-hospital") {
+      void firestore.collection("hospitals").doc("hosp-demo-apollo").set({
+        lastActive: nowIso,
+        isOnline: true,
+        lastHeartbeat: nowIso,
+      }, { merge: true });
+      void firestore.collection("hospitals").doc("hosp-hosp-demo-apollo").set({
+        lastActive: nowIso,
+        isOnline: true,
+        lastHeartbeat: nowIso,
+      }, { merge: true });
+    }
   }
 
   return hospital.data;
@@ -842,6 +854,18 @@ export async function getHospitalRequests(uid: string) {
       isOnline: true,
       lastHeartbeat: nowIso,
     }, { merge: true });
+    if (uid === "hosp-demo-apollo" || uid === "hosp-hosp-demo-apollo" || uid === "hosp-demo-token-hospital") {
+      void firestore.collection("hospitals").doc("hosp-demo-apollo").set({
+        lastActive: nowIso,
+        isOnline: true,
+        lastHeartbeat: nowIso,
+      }, { merge: true });
+      void firestore.collection("hospitals").doc("hosp-hosp-demo-apollo").set({
+        lastActive: nowIso,
+        isOnline: true,
+        lastHeartbeat: nowIso,
+      }, { merge: true });
+    }
   }
 
   const candidateIds = Array.from(

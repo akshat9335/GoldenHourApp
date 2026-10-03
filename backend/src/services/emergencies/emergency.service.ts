@@ -192,26 +192,23 @@ function computeHospitalMatchScore(
   // Hospitals actively on duty with live app session receive priority for immediate dispatch
   let liveBonus = 0;
   const hAny = hosp as any;
-  const lastActiveStr = hAny.lastActive || hAny.lastHeartbeat || hAny.updatedAt;
-  const isExplicitOnline = hAny.isOnline === true || hAny.status === "ACTIVE" || hAny.availability === "AVAILABLE";
+  const lastActiveStr = hAny.lastHeartbeat || hAny.lastActive;
 
-  if (lastActiveStr) {
+  if (lastActiveStr && hAny.isOnline !== false) {
     const lastActiveTime = typeof lastActiveStr.toDate === "function"
       ? lastActiveStr.toDate().getTime()
       : (typeof lastActiveStr === "object" && typeof lastActiveStr._seconds === "number"
           ? lastActiveStr._seconds * 1000
           : new Date(lastActiveStr).getTime());
-    const elapsedMinutes = (Date.now() - lastActiveTime) / (60 * 1000);
+    const elapsedSeconds = (Date.now() - lastActiveTime) / 1000;
 
-    if (elapsedMinutes <= 30 || isExplicitOnline) {
+    // 1-minute window: If polled within last 60 seconds, hospital ER console is actively online!
+    if (elapsedSeconds <= 60) {
       liveBonus = 40;
       matchReason += " • Live ER Console Online";
-    } else if (elapsedMinutes <= 120) {
-      liveBonus = 20;
+    } else if (elapsedSeconds <= 120) {
+      liveBonus = 15;
     }
-  } else if (isExplicitOnline) {
-    liveBonus = 40;
-    matchReason += " • Live ER Console Online";
   }
 
   score += liveBonus;

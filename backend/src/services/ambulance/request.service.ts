@@ -171,13 +171,12 @@ export async function getAmbulanceRequests(
 
       // 3. Hospital Fleet Affiliation Check
       if (driverUid === "driver-demo-ramesh") {
-        // Demo driver Ramesh is affiliated with Apollo (hosp-demo-apollo) and ALS 108 Emergency Dispatch
-        const isApolloOrUnassigned =
-          !req.assignedHospitalId ||
+        // Demo driver Ramesh is affiliated with Apollo (hosp-demo-apollo)
+        const isApollo =
           req.assignedHospitalId === "hosp-demo-apollo" ||
           req.assignedHospitalId === "hosp-hosp-demo-apollo" ||
           req.assignedHospitalId === "hosp-demo-token-hospital";
-        if (!isApolloOrUnassigned && !isIndependent) {
+        if (!isApollo) {
           return false;
         }
       } else if (!isIndependent && driverHospId) {
