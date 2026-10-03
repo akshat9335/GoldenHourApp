@@ -12,6 +12,7 @@ import {
   subscribeTeleconsultation, markActive, markCompleted,
   escalateToEmergency, userHasAccess, type Teleconsultation,
 } from '@/services/teleconsultation';
+import { api } from '@/services/api';
 import {
   WebRTCPeer, publishSignal, subscribeSignals, ensureRoomDoc,
   type SignalPayload,
@@ -50,6 +51,9 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
         if (t.status === 'scheduled') markActive(consultationId).catch(() => {});
         if (t.status === 'completed' && !hasAlertedEnd) {
           hasAlertedEnd = true;
+          if (t.appointmentId && !t.appointmentId.startsWith('apt_tc_')) {
+            api.appointments.complete(t.appointmentId).catch(() => {});
+          }
           Alert.alert('Consultation Ended', 'The teleconsultation session has ended.', [
             { text: 'OK', onPress: () => router.back() }
           ]);
@@ -129,7 +133,12 @@ export const ConsultationRoom = ({ consultationId, selfId, selfRole }: Props) =>
   }, []);
 
   const onEnd = async () => {
-    await markCompleted(consultationId);
+    try {
+      await markCompleted(consultationId);
+    } catch {}
+    if (consult?.appointmentId && !consult.appointmentId.startsWith('apt_tc_')) {
+      api.appointments.complete(consult.appointmentId).catch(() => {});
+    }
     Alert.alert('Consultation Ended', 'The teleconsultation session has ended.', [
       { text: 'OK', onPress: () => router.back() }
     ]);
