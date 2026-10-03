@@ -19,7 +19,9 @@ export default function LiveQueue() {
   const [isConsultCompleted, setIsConsultCompleted] = React.useState(false);
   const [currentAppt, setCurrentAppt] = React.useState<any>(null);
   const myToken = userToken ?? (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
-  const isCompleted = isConsultCompleted || (servingToken > myToken && servingToken > 0);
+  const isCompleted =
+    isConsultCompleted ||
+    (currentAppt ? (currentAppt.status || '').toUpperCase() === 'COMPLETED' : false);
   const isMyTurn = !isCompleted && servingToken === myToken && servingToken > 0;
   const patientsAhead = Math.max(myToken - servingToken, 0);
 
@@ -42,17 +44,28 @@ export default function LiveQueue() {
         .then((res: any) => {
           const appts = Array.isArray(res) ? res : res?.data;
           if (mounted && Array.isArray(appts)) {
-            const current = appts.find(
+            const activeMatch = appts.find(
               (a: any) =>
-                a.doctorId === selectedDoctorId &&
+                (a.doctorId === selectedDoctorId ||
+                  a.doctorId === selectedDoctorId.replace(/^doc-/, '') ||
+                  `doc-${a.doctorId}` === selectedDoctorId) &&
                 (a.tokenNumber || a.token) === myToken &&
-                (a.status || '').toUpperCase() !== 'CANCELLED'
+                (a.status || '').toUpperCase() !== 'CANCELLED' &&
+                (a.status || '').toUpperCase() !== 'COMPLETED'
             );
+            const current =
+              activeMatch ||
+              appts.find(
+                (a: any) =>
+                  (a.doctorId === selectedDoctorId ||
+                    a.doctorId === selectedDoctorId.replace(/^doc-/, '') ||
+                    `doc-${a.doctorId}` === selectedDoctorId) &&
+                  (a.tokenNumber || a.token) === myToken &&
+                  (a.status || '').toUpperCase() !== 'CANCELLED'
+              );
             if (current) {
               setCurrentAppt(current);
-              if ((current.status || '').toUpperCase() === 'COMPLETED') {
-                setIsConsultCompleted(true);
-              }
+              setIsConsultCompleted((current.status || '').toUpperCase() === 'COMPLETED');
             }
           }
         })

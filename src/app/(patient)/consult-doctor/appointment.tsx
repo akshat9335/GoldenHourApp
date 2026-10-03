@@ -26,19 +26,23 @@ export default function AppointmentDetail() {
         .then((res: any) => {
           const appts = Array.isArray(res) ? res : res?.data;
           if (mounted && Array.isArray(appts) && appts.length > 0) {
+            const matchesDoc = (a: any) =>
+              a.doctorId === selectedDoctorId ||
+              a.doctorId === selectedDoctorId.replace(/^doc-/, '') ||
+              `doc-${a.doctorId}` === selectedDoctorId;
             const active = appts.find(
               (a: any) =>
-                a.doctorId === selectedDoctorId &&
+                matchesDoc(a) &&
                 a.status !== 'CANCELLED' &&
                 a.status !== 'COMPLETED'
             );
             const completed = appts.find(
-              (a: any) => a.doctorId === selectedDoctorId && a.status === 'COMPLETED'
+              (a: any) => matchesDoc(a) && a.status === 'COMPLETED'
             );
             const matched =
               active ||
               completed ||
-              appts.find((a: any) => a.doctorId === selectedDoctorId) ||
+              appts.find((a: any) => matchesDoc(a)) ||
               appts[0];
             if (matched) {
               setActiveAppt(matched);
