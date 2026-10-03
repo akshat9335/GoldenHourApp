@@ -299,19 +299,65 @@ export default function DoctorQueue() {
     await handleNext();
   };
 
-  const handleResetQueue = async () => {
-    try {
-      await api.queues.resetQueue(doctorId);
-      useAppStore.setState({ servingToken: 0 });
-      fetchQueueData();
-    } catch {
-      useAppStore.setState({ servingToken: 0 });
-    }
-  };
-
   const waitingAppointments = appointments.filter(
     (a) => (a.tokenNumber || a.token) > servingToken && (a.status || '').toUpperCase() !== 'CANCELLED'
   );
+
+  const handleResetQueue = async () => {
+    const unservedCount = waitingAppointments.length;
+    if (unservedCount > 0) {
+      Alert.alert(
+        '⚠️ Active Patients in Queue',
+        `There are currently ${unservedCount} patient(s) waiting in queue. Resetting will reset the serving counter back to 0.\n\nChoose an action:`,
+        [
+          { text: 'Keep Queue', style: 'cancel' },
+          {
+            text: 'Rollover & Reset',
+            onPress: async () => {
+              try {
+                await api.doctors.closeClinicAndRollover();
+                await api.queues.resetQueue(doctorId);
+                useAppStore.setState({ servingToken: 0 });
+                fetchQueueData();
+                Alert.alert('Queue Rolled Over', `${unservedCount} patients shifted to tomorrow's priority list.`);
+              } catch {
+                useAppStore.setState({ servingToken: 0 });
+              }
+            },
+          },
+          {
+            text: 'Force Reset',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await api.queues.resetQueue(doctorId);
+                useAppStore.setState({ servingToken: 0 });
+                fetchQueueData();
+              } catch {
+                useAppStore.setState({ servingToken: 0 });
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert('Reset Queue', 'Queue is clear. Reset serving token counter back to 0?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset to 0',
+          onPress: async () => {
+            try {
+              await api.queues.resetQueue(doctorId);
+              useAppStore.setState({ servingToken: 0 });
+              fetchQueueData();
+            } catch {
+              useAppStore.setState({ servingToken: 0 });
+            }
+          },
+        },
+      ]);
+    }
+  };
 
   const fallbackWaitingTokens = [servingToken + 1, servingToken + 2, servingToken + 3];
 

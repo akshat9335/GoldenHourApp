@@ -147,11 +147,60 @@ export default function DoctorDashboard() {
   };
 
   const handleResetQueue = async () => {
-    try {
-      await api.queues.resetQueue(doctorId);
-      useAppStore.setState({ servingToken: 0 });
-    } catch {
-      useAppStore.setState({ servingToken: 0 });
+    const unservedCount = activeAppointments.filter((a) => a.token > servingToken).length;
+    if (unservedCount > 0) {
+      Alert.alert(
+        '⚠️ Active Patients in Queue',
+        `There are currently ${unservedCount} patient(s) waiting in queue. Resetting the queue to 0 will break their turn sequence.\n\nWhat would you like to do?`,
+        [
+          { text: 'Keep Queue', style: 'cancel' },
+          {
+            text: 'Rollover & Reset',
+            onPress: async () => {
+              try {
+                await api.doctors.closeClinicAndRollover();
+                setIsClinicOpen(false);
+                await api.queues.resetQueue(doctorId);
+                useAppStore.setState({ servingToken: 0 });
+                Alert.alert('Queue Rolled Over', `${unservedCount} patients shifted to tomorrow's priority queue and queue reset to 0.`);
+              } catch {
+                useAppStore.setState({ servingToken: 0 });
+              }
+            },
+          },
+          {
+            text: 'Force Reset',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await api.queues.resetQueue(doctorId);
+                useAppStore.setState({ servingToken: 0 });
+              } catch {
+                useAppStore.setState({ servingToken: 0 });
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Reset Queue Counter',
+        'Queue is clear. Reset current serving token counter back to 0 for next session?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reset to 0',
+            onPress: async () => {
+              try {
+                await api.queues.resetQueue(doctorId);
+                useAppStore.setState({ servingToken: 0 });
+              } catch {
+                useAppStore.setState({ servingToken: 0 });
+              }
+            },
+          },
+        ]
+      );
     }
   };
 
