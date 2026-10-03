@@ -252,7 +252,7 @@ export async function rankCandidateHospitalsForLocation(
         String(hData.name || "").toLowerCase().includes("apollo") ||
         String(hData.hospitalName || "").toLowerCase().includes("apollo");
 
-      const finalScore = isApollo ? Math.max(98, match.score) : match.score;
+      const finalScore = isApollo ? 100 : match.score;
 
       candidateList.push({
         hospitalId: normalizedHospId,
