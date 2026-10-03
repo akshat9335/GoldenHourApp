@@ -68,24 +68,29 @@ export default function DoctorDashboard() {
         .catch(() => {});
     };
 
-    // Load authenticated doctor profile from backend
-    api.doctors
-      .getMyProfile()
-      .then((res: any) => {
-        const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
-        if (mounted && doc && (doc.doctorId || doc.name)) {
-          setDoctorDetails(doc);
-          if (doc.availability) {
-            setIsClinicOpen(doc.availability !== 'OFFLINE');
+    const isDemo = useAppStore.getState().isDemoMode || doctorId === 'doc-1' || doctorId?.includes('demo');
+    if (isDemo) {
+      loadDoctorData(doctorId);
+    } else {
+      // Load authenticated doctor profile from backend
+      api.doctors
+        .getMyProfile()
+        .then((res: any) => {
+          const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
+          if (mounted && doc && (doc.doctorId || doc.name)) {
+            setDoctorDetails(doc);
+            if (doc.availability) {
+              setIsClinicOpen(doc.availability !== 'OFFLINE');
+            }
+            loadDoctorData(doc.doctorId || doctorId);
+          } else {
+            loadDoctorData(doctorId);
           }
-          loadDoctorData(doc.doctorId || doctorId);
-        } else {
+        })
+        .catch(() => {
           loadDoctorData(doctorId);
-        }
-      })
-      .catch(() => {
-        loadDoctorData(doctorId);
-      });
+        });
+    }
 
     const pollTimer = setInterval(() => {
       loadDoctorData(doctorId);

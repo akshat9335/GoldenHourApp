@@ -48,14 +48,17 @@ export default function PatientHome() {
     // Dynamically request OS location permission and acquire live satellite GPS from user's phone hardware
     initDeviceLocation();
 
-    api.users.getProfile().then((profile) => {
-      if (profile) {
-        setUserProfile(profile);
-        if (profile.trustScore !== undefined) {
-          useAppStore.getState().setTrustScore(profile.trustScore);
+    const isDemo = useAppStore.getState().isDemoMode || userProfile?.uid?.startsWith('patient-demo-');
+    if (!isDemo) {
+      api.users.getProfile().then((profile) => {
+        if (profile) {
+          setUserProfile(profile);
+          if (profile.trustScore !== undefined) {
+            useAppStore.getState().setTrustScore(profile.trustScore);
+          }
         }
-      }
-    }).catch(() => {});
+      }).catch(() => {});
+    }
   }, []);
 
   const emergencyId = useAppStore((s) => s.emergencyId);

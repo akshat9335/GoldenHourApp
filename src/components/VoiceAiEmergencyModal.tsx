@@ -37,6 +37,7 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
   const [triageResult, setTriageResult] = useState<any>(null);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const inputRef = useRef<TextInput | null>(null);
   const activeRecognizerRef = useRef<any>(null);
   const nativeSimTimerRef = useRef<any>(null);
   const scenarioIndexRef = useRef<number>(0);
@@ -151,40 +152,12 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
       }
     }
 
-    // On Native Android where window.SpeechRecognition is absent in Hermes runtime:
+    // On Native Android: focus the input directly so user can dictate using their phone keyboard mic
     if (!startedWeb) {
-      if (nativeSimTimerRef.current) clearTimeout(nativeSimTimerRef.current);
-      nativeSimTimerRef.current = setTimeout(() => {
-        setIsListening(false);
-        setTranscript((prev) => {
-          if (prev && prev.trim().length > 0) return prev;
-          const emergencyScenarios = [
-            {
-              hi: 'सड़क दुर्घटना में गंभीर चोट लगी है, बहुत खून बह रहा है',
-              en: 'Severe road accident with deep trauma and heavy bleeding',
-              mr: 'रस्ता अपघात झाला आहे, खूप रक्तस्त्राव होत आहे',
-            },
-            {
-              hi: 'सीने में बहुत तेज दर्द और भारीपन हो रहा है, सांस फूल रही है',
-              en: 'Severe acute chest pain radiating to left arm with shortness of breath',
-              mr: 'छातीत खूप तीव्र वेदना होत आहेत आणि धाप लागते आहे',
-            },
-            {
-              hi: 'मरीज अचानक गिरकर बेहोश हो गया है, सांस लेने में तकलीफ है',
-              en: 'Patient collapsed unconscious with severe respiratory distress',
-              mr: 'रुग्ण अचानक बेशुद्ध पडला आहे, श्वास घेण्यास त्रास होत आहे',
-            },
-            {
-              hi: 'तेज बुखार के साथ मरीज को लगातार दौरे और झटके आ रहे हैं',
-              en: 'High fever with continuous convulsions and seizures',
-              mr: 'तीव्र ताप आणि सतत झटके येत आहेत',
-            },
-          ];
-          const choice = emergencyScenarios[scenarioIndexRef.current % emergencyScenarios.length];
-          scenarioIndexRef.current += 1;
-          return choice[currentLang] || choice.en;
-        });
-      }, 3000);
+      setIsListening(false);
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 150);
     }
   };
 
@@ -369,13 +342,14 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
                 </View>
               </View>
               <TextInput
+                ref={inputRef}
                 style={styles.transcriptInput}
                 value={transcript}
                 onChangeText={handleTranscriptChange}
                 onFocus={() => {
                   stopListening();
                 }}
-                placeholder={isListening ? '🎙️ Listening to voice… speak now' : '(Tap here to speak using keyboard mic 🎙️ or tap Quick Presets below)'}
+                placeholder={isListening ? '🎙️ Listening to voice… speak now' : '🎙️ Tap to speak using keyboard mic, or type emergency symptoms here...'}
                 placeholderTextColor={isListening ? colors.red : colors.inkFaint}
                 multiline
               />

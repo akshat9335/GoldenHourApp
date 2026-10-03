@@ -33,11 +33,12 @@ export default function AmbulanceDashboard() {
   // 1. Fetch static driver profile and completed mission history once on mount / refresh
   const loadDriverProfile = useCallback(async () => {
     try {
-      const profPromise = api.users.getProfile().catch(() => null);
+      const isDemo = useAppStore.getState().isDemoMode || userProfile?.uid?.includes('demo');
+      const profPromise = isDemo ? Promise.resolve(null) : api.users.getProfile().catch(() => null);
       const tripsPromise = api.ambulances.getTripHistory().catch(() => []);
       const [profRes, tripsRes]: any = await Promise.all([profPromise, tripsPromise]);
 
-      if (profRes) {
+      if (profRes && !isDemo) {
         useAppStore.getState().setUserProfile(profRes);
       }
 

@@ -49,6 +49,7 @@ export default function DriverLogin() {
         return;
       }
 
+      useAppStore.getState().setIsDemoMode(false);
       useAppStore.getState().setRole('AMBULANCE_DRIVER');
       useAppStore.getState().setRoles(Array.from(new Set([...userRoles, 'AMBULANCE_DRIVER'])) as any);
       useAppStore.getState().setVerificationStatus('APPROVED');
@@ -90,6 +91,7 @@ export default function DriverLogin() {
       await AsyncStorage.setItem('gh_user_uid', 'driver-demo-ramesh');
       await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
     } catch {}
+    useAppStore.getState().setIsDemoMode(true);
     useAppStore.getState().setRole('AMBULANCE_DRIVER');
     useAppStore.getState().setRoles(['AMBULANCE_DRIVER']);
     useAppStore.getState().setVerificationStatus('APPROVED');

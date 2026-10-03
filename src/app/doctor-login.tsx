@@ -49,6 +49,7 @@ export default function DoctorLogin() {
         return;
       }
 
+      useAppStore.getState().setIsDemoMode(false);
       useAppStore.getState().setRole('DOCTOR');
       useAppStore.getState().setRoles(Array.from(new Set([...userRoles, 'DOCTOR'])) as any);
       useAppStore.getState().setVerificationStatus('APPROVED');
@@ -92,6 +93,7 @@ export default function DoctorLogin() {
       await AsyncStorage.setItem('gh_user_uid', 'doc-1');
       await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
     } catch {}
+    useAppStore.getState().setIsDemoMode(true);
     useAppStore.getState().setRole('DOCTOR');
     useAppStore.getState().setRoles(['DOCTOR']);
     useAppStore.getState().setVerificationStatus('APPROVED');

@@ -32,12 +32,15 @@ export default function HospitalDashboard() {
   // Load hospital profile and capacity once on mount or manual refresh
   const loadStaticInfo = useCallback(async () => {
     try {
+      const isDemo = useAppStore.getState().isDemoMode || userProfile?.uid?.includes('demo');
+      const profilePromise = isDemo ? Promise.resolve(null) : api.hospitals.getProfile().catch(() => null);
+      const capPromise = isDemo ? Promise.resolve(null) : api.hospitals.getCapacity().catch(() => null);
       const [profileRes, capRes]: any = await Promise.all([
-        api.hospitals.getProfile().catch(() => null),
-        api.hospitals.getCapacity().catch(() => null),
+        profilePromise,
+        capPromise,
       ]);
 
-      if (profileRes) {
+      if (profileRes && !isDemo) {
         const data = profileRes?.data || profileRes;
         const hosp = data?.hospitalName || data?.name;
         if (hosp) {

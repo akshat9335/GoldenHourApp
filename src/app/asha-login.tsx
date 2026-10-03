@@ -56,6 +56,7 @@ export default function AshaLogin() {
         return;
       }
 
+      useAppStore.getState().setIsDemoMode(false);
       useAppStore.getState().setRole('FRONTLINE_WORKER');
       useAppStore.getState().setVerificationStatus('APPROVED');
       router.replace('/(worker)/dashboard');
@@ -89,6 +90,7 @@ export default function AshaLogin() {
       await AsyncStorage.setItem('gh_user_uid', 'asha-demo-1');
       await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
     } catch {}
+    useAppStore.getState().setIsDemoMode(true);
     useAppStore.getState().setRole('FRONTLINE_WORKER');
     useAppStore.getState().setRoles(['FRONTLINE_WORKER']);
     useAppStore.getState().setVerificationStatus('APPROVED');

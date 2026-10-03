@@ -359,9 +359,14 @@ export const authService = {
           if (cachedProfile.crisisId) {
             store.setGoldenHourId(cachedProfile.crisisId);
           }
+          const isDemoSession = !!(
+            cachedProfile.uid?.includes('demo') ||
+            storedUid?.includes('demo') ||
+            storedToken?.startsWith('demo-token')
+          );
           store.setIsAuthenticated(true);
           store.setProfileExists(true);
-          store.setIsDemoMode(false);
+          store.setIsDemoMode(isDemoSession);
 
           if (storedToken) {
             setAuthToken(storedToken);
@@ -382,31 +387,33 @@ export const authService = {
       }
 
       // If we have cached profile and token, return immediately so splash screen exits instantly!
-      // Then revalidate profile and refresh token in background.
+      // Then revalidate profile and refresh token in background (only for real accounts).
       if (cachedSession && storedToken) {
         store.setAuthLoading(false);
-        (async () => {
-          try {
-            let activeToken = storedToken;
-            let activeRefreshToken = storedRefreshToken;
-            if (storedRefreshToken) {
-              try {
-                const refreshed = await this.refreshIdToken(storedRefreshToken);
-                activeToken = refreshed.idToken;
-                activeRefreshToken = refreshed.refreshToken;
-              } catch {}
+        if (!store.isDemoMode) {
+          (async () => {
+            try {
+              let activeToken = storedToken;
+              let activeRefreshToken = storedRefreshToken;
+              if (storedRefreshToken) {
+                try {
+                  const refreshed = await this.refreshIdToken(storedRefreshToken);
+                  activeToken = refreshed.idToken;
+                  activeRefreshToken = refreshed.refreshToken;
+                } catch {}
+              }
+              if (activeToken) {
+                await this.establishSession(
+                  activeToken,
+                  activeRefreshToken || undefined,
+                  storedUid || undefined
+                );
+              }
+            } catch (e) {
+              console.warn('[auth] Background session revalidation delayed:', e);
             }
-            if (activeToken) {
-              await this.establishSession(
-                activeToken,
-                activeRefreshToken || undefined,
-                storedUid || undefined
-              );
-            }
-          } catch (e) {
-            console.warn('[auth] Background session revalidation delayed:', e);
-          }
-        })();
+          })();
+        }
         return cachedSession;
       }
 
@@ -472,7 +479,7 @@ export const authService = {
    */
   async syncProfile(): Promise<any> {
     const store = useAppStore.getState();
-    if (!store.authToken) return null;
+    if (!store.authToken || store.isDemoMode) return null;
 
     try {
       const res: any = await api.users.getProfile();
@@ -518,6 +525,7 @@ export const authService = {
     store.setUserProfile(null);
     store.setIsAuthenticated(false);
     store.setProfileExists(false);
+    store.setIsDemoMode(false);
     store.setVerificationStatus(null);
     store.setRole('PATIENT');
     store.setRoles(['PATIENT']);

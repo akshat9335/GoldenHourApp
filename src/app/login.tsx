@@ -43,6 +43,7 @@ export default function LoginScreen() {
         return;
       }
 
+      useAppStore.getState().setIsDemoMode(false);
       // When logging in via Patient Portal, always enter as PATIENT
       // This ensures Doctors and Hospital staff can also use Golden Hour as patients without being hijacked
       useAppStore.getState().setRole('PATIENT');
@@ -79,6 +80,7 @@ export default function LoginScreen() {
       await AsyncStorage.setItem('gh_user_uid', 'patient-demo-1');
       await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
     } catch {}
+    useAppStore.getState().setIsDemoMode(true);
     useAppStore.getState().setRole('PATIENT');
     useAppStore.getState().setRoles(['PATIENT']);
     useAppStore.getState().setUserProfile(profile as any);

@@ -57,6 +57,7 @@ export default function HospitalLogin() {
         name: session.profile?.name || officialName,
         role: 'HOSPITAL',
       };
+      useAppStore.getState().setIsDemoMode(false);
       useAppStore.getState().setUserProfile(updatedProfile);
       useAppStore.getState().setRole('HOSPITAL');
       useAppStore.getState().setRoles(Array.from(new Set([...rawRoles, 'HOSPITAL'])) as any);
@@ -99,6 +100,7 @@ export default function HospitalLogin() {
       await AsyncStorage.setItem('gh_user_uid', 'hosp-demo-apollo');
       await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
     } catch {}
+    useAppStore.getState().setIsDemoMode(true);
     useAppStore.getState().setRole('HOSPITAL');
     useAppStore.getState().setRoles(['HOSPITAL']);
     useAppStore.getState().setVerificationStatus('APPROVED');
