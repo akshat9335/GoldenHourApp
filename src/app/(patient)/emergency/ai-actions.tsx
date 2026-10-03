@@ -59,7 +59,7 @@ export default function AiActions() {
           </View>
         ))}
       </Card>
-      <Button title="Continue" onPress={() => router.push('/(patient)/emergency/ai-ambulance-rec')} />
+      <Button title="Continue" onPress={() => router.push('/(patient)/emergency/ai-hospital-rec')} />
     </Screen>
   );
 }

@@ -33,6 +33,12 @@ export default function HospitalReady() {
       </Card>
       <Stepper steps={STEPS} currentIndex={2} />
       <Button title="Mark Patient Arrived" onPress={handlePatientArrived} style={{ marginTop: 16 }} />
+      <Button
+        title="Return to Hospital Dashboard"
+        variant="secondary"
+        onPress={() => router.replace('/(hospital)/dashboard')}
+        style={{ marginTop: 10 }}
+      />
     </Screen>
   );
 }

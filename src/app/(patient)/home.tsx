@@ -1,11 +1,32 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+  Alert,
+} from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, SosHold, PatientNav, Divider } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
-import { initDeviceLocation } from '@/services/deviceLocation';
+import {
+  initDeviceLocation,
+  setManualLocation,
+  PRAYAGRAJ_HUBS,
+  searchAddressGeocode,
+  refreshDeviceLocation,
+} from '@/services/deviceLocation';
+import LanguageSelector from '@/components/LanguageSelector';
+import VoiceAiEmergencyModal from '@/components/VoiceAiEmergencyModal';
+import NearbyAlertBanner from '@/components/NearbyAlertBanner';
+import { useTranslation } from 'react-i18next';
 
 export default function PatientHome() {
   const voiceSosEnabled = useAppStore((s) => s.voiceSosEnabled);
@@ -15,18 +36,62 @@ export default function PatientHome() {
   const locationAddress = useAppStore((s) => s.locationAddress);
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
 
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ name: string; latitude: number; longitude: number }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [calibrating, setCalibrating] = useState(false);
+  const { t } = useTranslation();
+
   useEffect(() => {
-    // Pre-warm device GPS instantly on home mount
+    // Dynamically request OS location permission and acquire live satellite GPS from user's phone hardware
     initDeviceLocation();
 
-    api.users.getProfile().then((profile) => {
-      if (profile) {
-        setUserProfile(profile);
-      }
-    }).catch(() => {});
+    const isDemo = useAppStore.getState().isDemoMode || userProfile?.uid?.startsWith('patient-demo-');
+    if (!isDemo) {
+      api.users.getProfile().then((profile) => {
+        if (profile) {
+          setUserProfile(profile);
+          if (profile.trustScore !== undefined) {
+            useAppStore.getState().setTrustScore(profile.trustScore);
+          }
+        }
+      }).catch(() => {});
+    }
   }, []);
 
-  const displayName = userProfile?.name || 'Golden Hour User';
+  const emergencyId = useAppStore((s) => s.emergencyId);
+  const resetEmergencySession = useAppStore((s) => s.resetEmergencySession);
+
+  // Auto-clear active emergency banner and tracking if emergency has been resolved or cancelled
+  useEffect(() => {
+    if (emergencyId && !emergencyId.startsWith('emg-offline-') && !emergencyId.startsWith('emg-demo-')) {
+      api.emergencies.getById(emergencyId).then((emg) => {
+        const st = String(emg?.status || '').toUpperCase();
+        const tripSt = String(emg?.tripStatus || '').toUpperCase();
+        if (st === 'COMPLETED' || st === 'CANCELLED' || st === 'RESOLVED' || tripSt === 'COMPLETED') {
+          resetEmergencySession();
+        }
+      }).catch(() => {
+        // Do not auto-clear session on transient network error
+      });
+    }
+  }, [emergencyId, resetEmergencySession]);
+
+  const emailPrefix = userProfile?.email ? userProfile.email.split('@')[0] : '';
+  const formattedEmailName = emailPrefix
+    ? emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1).replace(/[0-9._-]+/g, '')
+    : '';
+  const rawName = userProfile?.displayName || userProfile?.patientName || userProfile?.name;
+  const isFacilityName = userProfile?.hospitalName && (rawName === userProfile?.hospitalName || rawName?.toLowerCase().includes('hospital'));
+
+  const displayName =
+    userProfile?.patientName ||
+    userProfile?.displayName ||
+    (!isFacilityName && rawName && rawName !== 'Golden Hour User' ? rawName : '') ||
+    formattedEmailName ||
+    'Member';
   const firstName = displayName.split(' ')[0] || 'User';
   const initials = displayName
     .split(' ')
@@ -36,22 +101,99 @@ export default function PatientHome() {
     .slice(0, 2)
     .toUpperCase() || 'GH';
 
-  const resetEmergencySession = useAppStore((s) => s.resetEmergencySession);
+  const handleCancelActiveEmergency = () => {
+    const doCancel = async (reason: string) => {
+      try {
+        if (emergencyId) {
+          await api.emergencies.cancel(emergencyId, reason);
+        } else {
+          await api.emergencies.cancelActive(reason);
+        }
+      } catch {}
+      resetEmergencySession();
+      try {
+        const me = await api.users.getProfile();
+        if (me?.trustScore !== undefined) {
+          useAppStore.getState().setTrustScore(me.trustScore);
+        }
+      } catch {}
+      Alert.alert('Emergency Cleared', 'The emergency SOS has been cancelled.');
+    };
+
+    Alert.alert(
+      'Cancel Emergency SOS?',
+      'Please select the reason for cancellation:',
+      [
+        { text: 'Keep Active', style: 'cancel' },
+        {
+          text: 'Situation Resolved / Help Arrived',
+          onPress: () => doCancel('Situation resolved safely - patient stable'),
+        },
+        {
+          text: 'Arranged Alternate Vehicle',
+          onPress: () => doCancel('Patient transported via alternative private vehicle'),
+        },
+        {
+          text: 'Accidental Trigger',
+          style: 'destructive',
+          onPress: () => doCancel('Accidental tap - cancelled by user within grace period'),
+        },
+      ]
+    );
+  };
 
   const startEmergency = () => {
     resetEmergencySession();
     router.push('/(patient)/emergency/select-type');
   };
 
+  const handleSelectHub = (hub: { name: string; latitude: number; longitude: number }) => {
+    setManualLocation({ latitude: hub.latitude, longitude: hub.longitude }, hub.name);
+    setPickerVisible(false);
+    setSearchQuery('');
+    setSearchResults([]);
+
+    const user = useAppStore.getState().userProfile;
+    const role = user?.role || (user?.roles && user.roles[0]) || 'patient';
+    api.location.updateLocation({ lat: hub.latitude, lng: hub.longitude, role }).catch(() => {});
+  };
+
+  const handleSearch = async (text: string) => {
+    setSearchQuery(text);
+    if (!text || text.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const results = await searchAddressGeocode(text);
+      setSearchResults(results);
+    } catch {} finally {
+      setSearching(false);
+    }
+  };
+
+  const handleCalibrateGps = async () => {
+    setCalibrating(true);
+    await refreshDeviceLocation();
+    setCalibrating(false);
+    setPickerVisible(false);
+  };
+
+  const storeTrustScore = useAppStore((s) => s.trustScore);
+  const trustScore = storeTrustScore ?? userProfile?.trustScore ?? 100;
+  const goldenHourId = useAppStore((s) => s.goldenHourId) || userProfile?.crisisId || userProfile?.uid?.slice?.(0, 8);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Screen padBottom={95}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>EMERGENCY DASHBOARD</Text>
+            <Text style={styles.greeting}>{t('home.title', 'EMERGENCY DASHBOARD')}</Text>
             <Text style={styles.name}>{displayName}</Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <LanguageSelector />
             <Pressable
               style={styles.switchRoleBtn}
               onPress={() => router.push('/role-selection')}
@@ -69,60 +211,272 @@ export default function PatientHome() {
           </View>
         </View>
 
-        <Card style={styles.locationCard}>
-          <Icon name="gps" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.locTitle}>Live location active</Text>
-            <Text style={styles.locSub}>
-              {locationAddress ||
-                (lastKnownLocation
-                  ? `${lastKnownLocation.latitude.toFixed(3)}°N, ${lastKnownLocation.longitude.toFixed(3)}°E`
-                  : 'Acquiring device GPS...')} · GPS active
-            </Text>
+        {/* User Identity & Safety Trust Score Bar */}
+        <TouchableOpacity
+          style={styles.profileBadgeCard}
+          onPress={() => router.push('/(patient)/profile')}
+          activeOpacity={0.85}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+              <View style={styles.profileBadgeIcon}>
+                <Text style={{ fontSize: 16 }}>🛡️</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.profileBadgeName} numberOfLines={1}>{displayName}</Text>
+                  <Pill color={trustScore >= 80 ? 'success' : trustScore >= 50 ? 'amber' : 'red'}>
+                    {trustScore >= 80 ? 'Verified' : 'Review'}
+                  </Pill>
+                </View>
+                <Text style={styles.profileBadgeSub} numberOfLines={1}>
+                  Trust Score: <Text style={{ fontWeight: '800', color: trustScore >= 80 ? colors.success : colors.amber }}>{trustScore}/100</Text> · Crisis ID: {goldenHourId || 'GH-USER'}
+                </Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: 8 }}>
+              <Text style={{ fontSize: 11.5, color: colors.blue, fontWeight: '700' }}>View Profile</Text>
+              <Icon name="chevR" size={13} color={colors.blue} />
+            </View>
           </View>
-          <Pill color="success">READY</Pill>
-        </Card>
+        </TouchableOpacity>
+
+        {/* Swiggy/Zomato style Interactive Location Bar */}
+        <TouchableOpacity onPress={() => setPickerVisible(true)} activeOpacity={0.8}>
+          <Card style={styles.locationCard}>
+            <Icon name="gps" color={lastKnownLocation ? colors.success : colors.amber} />
+            <View style={{ flex: 1, marginHorizontal: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.locTitle}>
+                  {lastKnownLocation ? `📍 ${t('home.currentLocation', 'Current Incident Area')}` : `🛰️ ${t('home.detectingGps', 'Acquiring GPS...')}`}
+                </Text>
+                <Text style={{ fontSize: 10, color: colors.red, fontWeight: '700' }}>[{t('home.changeArea', 'Change')} ▾]</Text>
+              </View>
+              <Text style={styles.locSub} numberOfLines={2}>
+                {locationAddress
+                  ? `${locationAddress}${lastKnownLocation ? ` (${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E)` : ''}`
+                  : (lastKnownLocation
+                      ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E`
+                      : 'Tap to select or detect area...')}
+              </Text>
+            </View>
+            <Pill color={lastKnownLocation ? 'success' : 'amber'}>
+              {lastKnownLocation ? 'LOCKED' : 'DETECTING'}
+            </Pill>
+          </Card>
+        </TouchableOpacity>
+
+        {/* Proactive Nearby Emergency Alert Banner */}
+        <NearbyAlertBanner />
+
+        {/* Active Emergency Banner with Cancel Button */}
+        {emergencyId ? (
+          <Card style={styles.activeEmergencyBanner}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={styles.pulseDot} />
+                <Text style={styles.activeEmergencyTitle}>ACTIVE EMERGENCY IN PROGRESS</Text>
+              </View>
+              <Pill color="red">LIVE</Pill>
+            </View>
+            <Text style={styles.activeEmergencySub}>
+              An emergency request is linked to your session. Responding ER units and triage are currently active.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <TouchableOpacity
+                style={styles.activeTrackBtn}
+                onPress={() => router.push('/(patient)/emergency/active')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.activeTrackBtnText}>Track Mission →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.activeCancelBtn}
+                onPress={handleCancelActiveEmergency}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.activeCancelBtnText}>Cancel / End SOS</Text>
+              </TouchableOpacity>
+            </View>
+          </Card>
+        ) : null}
+
+        {/* Area Selection / Search Modal (Swiggy / Zomato style) */}
+        <Modal visible={pickerVisible} animationType="slide" transparent={true}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Select Incident Location</Text>
+                  <Text style={styles.modalSub}>Choose your area or search any landmark</Text>
+                </View>
+                <TouchableOpacity onPress={() => setPickerVisible(false)} style={styles.modalCloseBtn}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Instant GPS Detect Button */}
+              <TouchableOpacity
+                style={styles.gpsDetectBtn}
+                onPress={handleCalibrateGps}
+                disabled={calibrating}
+                activeOpacity={0.8}
+              >
+                {calibrating ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Text style={{ fontSize: 15 }}>🛰️</Text>
+                    <Text style={styles.gpsDetectText}>Detect Current Device GPS</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Search Input */}
+              <View style={styles.searchBox}>
+                <Text style={{ fontSize: 16 }}>🔍</Text>
+                <TextInput
+                  placeholder="Search area (e.g., Allahpur, Katra, Civil Lines)..."
+                  value={searchQuery}
+                  onChangeText={handleSearch}
+                  style={styles.searchInput}
+                  placeholderTextColor={colors.inkFaint}
+                />
+                {searching ? <ActivityIndicator size="small" color={colors.red} /> : null}
+              </View>
+
+              {/* Search Autocomplete Results */}
+              {searchResults.length > 0 && (
+                <View style={styles.searchResultsWrap}>
+                  <Text style={styles.sectionHeading}>SEARCH RESULTS</Text>
+                  {searchResults.map((item, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.resultRow}
+                      onPress={() => handleSelectHub(item)}
+                    >
+                      <Icon name="pin" size={16} color={colors.red} />
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={styles.resultTitle}>{item.name}</Text>
+                        <Text style={styles.resultCoords}>
+                          {item.latitude.toFixed(4)}° N, {item.longitude.toFixed(4)}° E
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {/* Popular Neighborhood Hubs */}
+              <Text style={styles.sectionHeading}>POPULAR HUBS</Text>
+              <ScrollView style={{ maxHeight: 240 }} showsVerticalScrollIndicator={false}>
+                <View style={styles.hubGrid}>
+                  {PRAYAGRAJ_HUBS.map((hub) => {
+                    const isSelected = locationAddress === hub.name;
+                    return (
+                      <TouchableOpacity
+                        key={hub.name}
+                        style={[styles.hubCard, isSelected && styles.hubCardSelected]}
+                        onPress={() => handleSelectHub(hub)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Icon name="pin" size={14} color={isSelected ? '#fff' : colors.red} />
+                          <Text style={[styles.hubName, isSelected && styles.hubNameSelected]}>
+                            {hub.name.replace(', Prayagraj', '')}
+                          </Text>
+                        </View>
+                        <Text style={[styles.hubCoords, isSelected && styles.hubCoordsSelected]}>
+                          {hub.latitude.toFixed(3)}°N, {hub.longitude.toFixed(3)}°E
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
 
         <View style={styles.sosZone}>
-          <SosHold
-            label="SOS"
-            sublabel="EMERGENCY"
-            onPress={startEmergency}
-            onConfirm={startEmergency}
-          />
+          <View style={styles.sosDualContainer}>
+            <SosHold
+              label={t('emergency.sos', 'SOS')}
+              sublabel="EMERGENCY"
+              onPress={() =>
+                Alert.alert(
+                  'Hold for 3 Seconds',
+                  'To prevent accidental triggers, please press and HOLD the red SOS button for 3 seconds to launch emergency response.'
+                )
+              }
+              onConfirm={startEmergency}
+            />
+            {/* Dedicated Button for Voice SOS & AI Triage */}
+            <TouchableOpacity
+              style={styles.voiceSosBtn}
+              onPress={() => setVoiceModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={{ fontSize: 24 }}>🎙️</Text>
+              <Text style={styles.voiceSosBtnLabel}>
+                {t('home.voiceSosBtn', 'Voice SOS')}
+              </Text>
+              <Text style={styles.voiceSosBtnSub}>
+                {t('voiceSos.tapToSpeak', 'Tap to Speak')}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.sosHint}>
             {voiceSosEnabled
-              ? `Say "${voiceSosPhrase}" or press SOS to report emergency`
-              : 'Press SOS to report emergency with photo, voice & AI assistance'}
+              ? t('home.voiceSosHint', { phrase: voiceSosPhrase, defaultValue: `Say "${voiceSosPhrase}" or tap Voice SOS / Hold SOS to report` })
+              : t('home.sosHint', 'Press SOS or tap Voice SOS to report emergency with AI triage')}
           </Text>
         </View>
 
         <View style={styles.quickRow}>
-          <QuickAction icon="ai" color={colors.blue} label="AI First Aid" onPress={() => router.push('/(patient)/ai-home')} />
-          <QuickAction icon="ambulance" color={colors.red} label="Report Accident" onPress={startEmergency} />
-          <QuickAction icon="hospital" color={colors.ink} label="Hospitals" onPress={() => router.push('/nearby-hospitals')} />
+          <QuickAction icon="ai" color={colors.blue} label={t('home.aiFirstAid', 'AI First Aid')} onPress={() => router.push('/(patient)/ai-home')} />
+          <QuickAction icon="ambulance" color={colors.red} label={t('home.reportAccident', 'Report Accident')} onPress={startEmergency} />
+          <QuickAction icon="hospital" color={colors.ink} label={t('home.hospitals', 'Hospitals')} onPress={() => router.push('/nearby-hospitals')} />
         </View>
 
-        <Text style={styles.eyebrow}>QUICK ACCESS</Text>
+        <Text style={styles.eyebrow}>{t('home.quickAccess', 'QUICK ACCESS')}</Text>
         <Card style={{ padding: 4 }}>
           <Pressable style={styles.row} onPress={() => router.push('/(patient)/consult-doctor')}>
             <Icon name="doctor" color={colors.ink} />
-            <Text style={styles.rowLabel}>Consult Doctor</Text>
+            <Text style={styles.rowLabel}>{t('home.consultDoctor', 'Consult Doctor')}</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
+          <Pressable style={styles.row} onPress={() => router.push('/(patient)/health-records' as any)}>
+            <Icon name="history" color={colors.blue} />
+            <Text style={styles.rowLabel}>{t('home.healthRecords', 'My Health Records & Prescriptions (Rx)')}</Text>
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
           <Divider />
           <Pressable style={styles.row} onPress={() => router.push('/contacts-setup')}>
             <Icon name="phone" color={colors.ink} />
-            <Text style={styles.rowLabel}>Emergency Contacts</Text>
+            <Text style={styles.rowLabel}>{t('home.emergencyContacts', 'Emergency Contacts')}</Text>
+            <Icon name="chevR" color={colors.inkFaint} />
+          </Pressable>
+          <Divider />
+          <Pressable style={styles.row} onPress={() => router.push('/nearby-incident' as any)}>
+            <Icon name="pin" color={colors.red} />
+            <Text style={styles.rowLabel}>{t('home.nearbyAlerts', 'Nearby Alerts (Community Assist)')}</Text>
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
           <Divider />
           <Pressable style={styles.row} onPress={() => router.push('/(patient)/history')}>
             <Icon name="history" color={colors.ink} />
-            <Text style={styles.rowLabel}>Emergency History</Text>
+            <Text style={styles.rowLabel}>{t('home.emergencyHistory', 'Emergency History')}</Text>
             <Icon name="chevR" color={colors.inkFaint} />
           </Pressable>
         </Card>
+
+        {/* Voice AI Emergency Modal */}
+        <VoiceAiEmergencyModal
+          visible={voiceModalVisible}
+          onClose={() => setVoiceModalVisible(false)}
+        />
       </Screen>
       <PatientNav active="/(patient)/home" />
     </View>
@@ -151,12 +505,148 @@ const styles = StyleSheet.create({
   locationCard: { padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 16 },
   locTitle: { fontSize: 12, fontWeight: '700', color: colors.ink },
   locSub: { fontSize: 10.5, color: colors.inkFaint },
-  sosZone: { alignItems: 'center', marginVertical: 20 },
-  sosHint: { fontSize: 11, color: colors.inkFaint, marginTop: 14 },
+  sosZone: { alignItems: 'center', marginVertical: 18 },
+  sosDualContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18 },
+  voiceSosBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 2,
+    borderColor: '#F87171',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 105,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  voiceSosBtnLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.red,
+    marginTop: 4,
+  },
+  voiceSosBtnSub: {
+    fontSize: 9.5,
+    color: colors.inkFaint,
+    marginTop: 1,
+  },
+  sosHint: { fontSize: 11, color: colors.inkFaint, marginTop: 14, textAlign: 'center', paddingHorizontal: 16 },
   quickRow: { flexDirection: 'row', gap: 10, marginVertical: 18 },
   quickCard: { flex: 1, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: '#EEF1F5', padding: 14, alignItems: 'center', gap: 8 },
   quickLabel: { fontSize: 11.5, fontWeight: '700', textAlign: 'center', color: colors.ink },
   eyebrow: { fontSize: 10.5, fontWeight: '700', color: colors.inkFaint, letterSpacing: 1, marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
   rowLabel: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.ink },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: colors.ink },
+  modalSub: { fontSize: 11, color: colors.inkFaint, marginTop: 2 },
+  modalCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
+  modalCloseText: { fontSize: 13, fontWeight: '700', color: colors.inkSoft },
+  gpsDetectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#10B981', paddingVertical: 12, borderRadius: 12, marginBottom: 12 },
+  gpsDetectText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 },
+  searchInput: { flex: 1, fontSize: 13, color: colors.ink, padding: 0 },
+  sectionHeading: { fontSize: 10.5, fontWeight: '800', color: colors.inkFaint, letterSpacing: 0.8, marginBottom: 10, marginTop: 4 },
+  searchResultsWrap: { marginBottom: 14 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  resultTitle: { fontSize: 12.5, fontWeight: '700', color: colors.ink },
+  resultCoords: { fontSize: 10, color: colors.inkFaint, marginTop: 1 },
+  hubGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 16 },
+  hubCard: { width: '48%', backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 10, gap: 4 },
+  hubCardSelected: { backgroundColor: colors.red, borderColor: colors.red },
+  hubName: { fontSize: 12, fontWeight: '700', color: colors.ink },
+  hubNameSelected: { color: '#fff' },
+  hubCoords: { fontSize: 9.5, color: colors.inkFaint },
+  hubCoordsSelected: { color: 'rgba(255,255,255,0.8)' },
+  activeEmergencyBanner: {
+    padding: 14,
+    marginVertical: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#F87171',
+    borderRadius: 14,
+  },
+  pulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.red,
+  },
+  activeEmergencyTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.red,
+    letterSpacing: 0.5,
+  },
+  activeEmergencySub: {
+    fontSize: 11,
+    color: colors.inkSoft,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  activeTrackBtn: {
+    flex: 1,
+    backgroundColor: colors.red,
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTrackBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  activeCancelBtn: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#DC2626',
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeCancelBtnText: {
+    color: '#DC2626',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  profileBadgeCard: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  profileBadgeIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileBadgeName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  profileBadgeSub: {
+    fontSize: 11,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
 });

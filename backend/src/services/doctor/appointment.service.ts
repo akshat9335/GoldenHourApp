@@ -9,10 +9,10 @@ export class AppointmentService {
    * Valid transition matrix for strict server-side state enforcement.
    */
   private readonly validTransitions: Record<AppointmentStatus, AppointmentStatus[]> = {
-    BOOKED: ["CONFIRMED", "CANCELLED"],
-    CONFIRMED: ["WAITING", "CANCELLED", "NO_SHOW"],
-    WAITING: ["IN_PROGRESS", "NO_SHOW", "CANCELLED"],
-    IN_PROGRESS: ["COMPLETED", "CANCELLED"],
+    BOOKED: ["CONFIRMED", "WAITING", "IN_PROGRESS", "CANCELLED"],
+    CONFIRMED: ["WAITING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"],
+    WAITING: ["IN_PROGRESS", "COMPLETED", "NO_SHOW", "CANCELLED"],
+    IN_PROGRESS: ["COMPLETED", "CANCELLED", "WAITING"],
     COMPLETED: [],
     CANCELLED: [],
     NO_SHOW: [],
@@ -30,18 +30,40 @@ export class AppointmentService {
       );
     }
 
-    const doctor = dataStore.doctors.get(data.doctorId);
+    let doctor = dataStore.doctors.get(data.doctorId);
+    if (!doctor && firestore) {
+      try {
+        const docSnap = await firestore.collection("doctors").doc(data.doctorId).get();
+        if (docSnap.exists) {
+          doctor = docSnap.data() as any;
+          if (doctor) dataStore.doctors.set(data.doctorId, doctor);
+        }
+      } catch {}
+    }
+
+    if (!doctor) {
+      doctor = Array.from(dataStore.doctors.values()).find(
+        (d) => d.doctorId === data.doctorId || d.userId === data.doctorId
+      );
+    }
+
     if (!doctor) {
       throw new AppError(404, "DOCTOR_NOT_FOUND", `Doctor with ID '${data.doctorId}' not found.`);
     }
 
-    if (doctor.verificationStatus !== "VERIFIED") {
-      throw new AppError(400, "DOCTOR_UNAVAILABLE", "Cannot book appointments with unverified doctors.");
+    if (doctor.verificationStatus === "REJECTED") {
+      throw new AppError(400, "DOCTOR_UNAVAILABLE", "Cannot book appointments with rejected doctors.");
+    }
+
+    if (doctor.availability === "OFFLINE") {
+      throw new AppError(400, "CLINIC_CLOSED", "Doctor OPD is currently CLOSED. Booking and tokens open only when the doctor opens the clinic.");
     }
 
     // Check slot duplicate for the same patient & doctor on the same date
+    const isWalkIn = (data.timeSlot || "").toLowerCase().includes("walk-in");
     for (const appt of dataStore.appointments.values()) {
       if (
+        !isWalkIn &&
         appt.doctorId === data.doctorId &&
         appt.date === data.date &&
         appt.timeSlot === data.timeSlot &&
@@ -54,9 +76,13 @@ export class AppointmentService {
         appt.doctorId === data.doctorId &&
         appt.patientId === data.patientId &&
         appt.date === data.date &&
-        appt.status !== "CANCELLED"
+        appt.status !== "CANCELLED" &&
+        appt.status !== "COMPLETED"
       ) {
-        throw new AppError(409, "DUPLICATE_BOOKING", "Patient already has an active appointment with this doctor on this date.");
+        return {
+          ...appt,
+          isExisting: true,
+        } as any;
       }
     }
 
@@ -81,6 +107,26 @@ export class AppointmentService {
 
     dataStore.appointments.set(appointmentId, newAppointment);
 
+    // Update doctor's live queue counters across all aliases so doctor console and searches update immediately
+    const queue = queueService.getOrCreateQueue(data.doctorId, data.date);
+    const aliases = queueService.getDoctorAliases(data.doctorId);
+    for (const dId of aliases) {
+      const d = dataStore.doctors.get(dId);
+      if (d) {
+        d.queueLength = queue.waitingCount;
+        d.servingToken = queue.servingToken;
+        d.estimatedWaitMinutes = queue.waitingCount * 8;
+        dataStore.doctors.set(dId, d);
+      }
+      if (firestore && process.env.NODE_ENV !== "test") {
+        firestore.collection("doctors").doc(dId).set({
+          queueLength: queue.waitingCount,
+          servingToken: queue.servingToken,
+          estimatedWaitMinutes: queue.waitingCount * 8,
+        }, { merge: true }).catch(() => {});
+      }
+    }
+
     if (firestore && process.env.NODE_ENV !== "test") {
       try {
         await firestore.collection("appointments").doc(appointmentId).set(newAppointment);
@@ -94,7 +140,16 @@ export class AppointmentService {
   }
 
   public async getAppointmentById(appointmentId: string): Promise<Appointment> {
-    const appt = dataStore.appointments.get(appointmentId);
+    let appt = dataStore.appointments.get(appointmentId);
+    if (!appt && firestore) {
+      try {
+        const snap = await firestore.collection("appointments").doc(appointmentId).get();
+        if (snap.exists) {
+          appt = snap.data() as Appointment;
+          if (appt) dataStore.appointments.set(appointmentId, appt);
+        }
+      } catch {}
+    }
     if (!appt) {
       throw new AppError(404, "APPOINTMENT_NOT_FOUND", `Appointment '${appointmentId}' not found.`);
     }
@@ -102,6 +157,18 @@ export class AppointmentService {
   }
 
   public async getPatientAppointments(patientId: string): Promise<Appointment[]> {
+    if (firestore) {
+      try {
+        const snap = await firestore.collection("appointments").where("patientId", "==", patientId).get();
+        for (const doc of snap.docs) {
+          const a = doc.data() as Appointment;
+          if (a && a.appointmentId) {
+            dataStore.appointments.set(a.appointmentId, a);
+          }
+        }
+      } catch {}
+    }
+
     const results: Appointment[] = [];
     for (const appt of dataStore.appointments.values()) {
       if (appt.patientId === patientId) {
@@ -111,10 +178,30 @@ export class AppointmentService {
     return results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
-  public async getDoctorAppointments(doctorId: string, date?: string): Promise<Appointment[]> {
+  public async getDoctorAppointments(doctorId: string, date?: string, includeArchived = false): Promise<Appointment[]> {
+    const docIds = queueService.getDoctorAliases(doctorId);
+    if (firestore) {
+      try {
+        let q: FirebaseFirestore.Query = firestore.collection("appointments").where("doctorId", "in", docIds);
+        if (date) {
+          q = q.where("date", "==", date);
+        }
+        const snap = await q.get();
+        for (const doc of snap.docs) {
+          const a = doc.data() as Appointment;
+          if (a && a.appointmentId) {
+            dataStore.appointments.set(a.appointmentId, a);
+          }
+        }
+      } catch {}
+    }
+
     const results: Appointment[] = [];
     for (const appt of dataStore.appointments.values()) {
-      if (appt.doctorId === doctorId && (!date || appt.date === date)) {
+      if (docIds.includes(appt.doctorId) && (!date || appt.date === date)) {
+        if (!includeArchived && appt.isArchived) {
+          continue;
+        }
         results.push(appt);
       }
     }
@@ -142,6 +229,39 @@ export class AppointmentService {
     appt.status = nextStatus;
     appt.updatedAt = new Date().toISOString();
     dataStore.appointments.set(appointmentId, appt);
+
+    if (nextStatus === "COMPLETED" || nextStatus === "CANCELLED" || nextStatus === "NO_SHOW") {
+      const queue = dataStore.queues.get(`${appt.doctorId}_${appt.date}`);
+      if (queue && queue.waitingCount > 0) {
+        queue.waitingCount = Math.max(0, queue.waitingCount - 1);
+        dataStore.queues.set(`${appt.doctorId}_${appt.date}`, queue);
+      }
+      const doctor = dataStore.doctors.get(appt.doctorId);
+      if (doctor && doctor.queueLength > 0) {
+        doctor.queueLength = Math.max(0, doctor.queueLength - 1);
+        doctor.estimatedWaitMinutes = doctor.queueLength * 8;
+        dataStore.doctors.set(appt.doctorId, doctor);
+        if (firestore && process.env.NODE_ENV !== "test") {
+          firestore.collection("doctors").doc(appt.doctorId).set({
+            queueLength: doctor.queueLength,
+            estimatedWaitMinutes: doctor.estimatedWaitMinutes,
+          }, { merge: true }).catch(() => {});
+        }
+      }
+    }
+
+    if (firestore && process.env.NODE_ENV !== "test") {
+      try {
+        await firestore.collection("appointments").doc(appointmentId).set({
+          status: nextStatus,
+          updatedAt: appt.updatedAt,
+        }, { merge: true });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[appointment] Failed to sync status to Firestore:", err);
+      }
+    }
+
     return appt;
   }
 
@@ -159,6 +279,48 @@ export class AppointmentService {
 
   public async cancelAppointment(appointmentId: string): Promise<Appointment> {
     return this.updateAppointmentStatus(appointmentId, "CANCELLED");
+  }
+
+  /**
+   * Shifts all unserved patients for today to tomorrow's priority queue.
+   */
+  public async rolloverUnservedAppointments(
+    doctorId: string,
+    targetDate?: string
+  ): Promise<{ rolledOverCount: number; targetDate: string }> {
+    const today = new Date().toISOString().split("T")[0];
+    const tomorrow =
+      targetDate || new Date(Date.now() + 86400000).toISOString().split("T")[0];
+
+    const todayAppts = await this.getDoctorAppointments(doctorId, today);
+    const queue = dataStore.queues.get(`${doctorId}_${today}`) || { servingToken: 0 };
+    const serving = queue.servingToken || 0;
+
+    let count = 0;
+    for (const appt of todayAppts) {
+      if (
+        (appt.status === "CONFIRMED" || appt.status === "BOOKED" || appt.status === "WAITING") &&
+        appt.tokenNumber > serving
+      ) {
+        count++;
+        appt.date = tomorrow;
+        appt.notes = (appt.notes ? `${appt.notes} · ` : "") + `[Priority Rollover from ${today}]`;
+        appt.updatedAt = new Date().toISOString();
+        dataStore.appointments.set(appt.appointmentId, appt);
+
+        if (firestore) {
+          try {
+            await firestore.collection("appointments").doc(appt.appointmentId).update({
+              date: tomorrow,
+              notes: appt.notes,
+              updatedAt: appt.updatedAt,
+            });
+          } catch {}
+        }
+      }
+    }
+
+    return { rolledOverCount: count, targetDate: tomorrow };
   }
 }
 

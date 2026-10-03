@@ -10,10 +10,7 @@
     "submit": "Submit",
     "success": "Success",
     "error": "Error",
-    "or": "or",
-    "details": "Details",
-    "history": "History",
-    "phoneNotProvided": "No phone number"
+    "or": "or"
   },
   "roles": {
     "patient": "Patient / Public",
@@ -28,6 +25,44 @@
     "adminSub": "Verify credentials, doctors & fleet",
     "asha": "ASHA / ANM Frontline Worker",
     "ashaSub": "Register & refer rural patients"
+  },
+  "home": {
+    "title": "Emergency Dashboard",
+    "currentLocation": "Current Incident Area",
+    "changeArea": "Change",
+    "detectingGps": "Detecting GPS…",
+    "sosHint": "Press SOS to report emergency with photo, voice & AI assistance",
+    "voiceSosHint": "Say \"{{phrase}}\" or press SOS to report emergency",
+    "voiceSosBtn": "Voice SOS (Tap to Speak)",
+    "aiFirstAid": "AI First Aid",
+    "reportAccident": "Report Accident",
+    "hospitals": "Hospitals",
+    "quickAccess": "QUICK ACCESS",
+    "consultDoctor": "Consult Doctor",
+    "healthRecords": "My Health Records & Prescriptions (Rx)",
+    "emergencyContacts": "Emergency Contacts",
+    "emergencyHistory": "Emergency History",
+    "nearbyAlerts": "Nearby Alerts (Community Assist)"
+  },
+  "nearby": {
+    "alertTitle": "Nearby Emergency Alert",
+    "assistPrompt": "Tap to Assist Victim",
+    "distanceAway": "{{distance}} km away (~{{eta}} mins)",
+    "confirmedBy": "Confirmed by {{count}} citizens",
+    "iCanAssist": "I Can Assist / Respond",
+    "dismiss": "Dismiss",
+    "navigate": "Show Navigation Route"
+  },
+  "voiceSos": {
+    "listening": "Listening… Speak symptoms or emergency",
+    "speakNow": "Speak Now",
+    "analyzing": "AI Clinical Analysis in progress…",
+    "dispatchNow": "Dispatch Ambulance (SOS)",
+    "tapToSpeak": "Tap Mic & Speak",
+    "turnOn": "Turn Voice On",
+    "turnOff": "Stop Listening",
+    "detectedSymptoms": "Detected Symptoms",
+    "firstAidGuidance": "Immediate First Aid Advice"
   },
   "asha": {
     "title": "Golden Hour Frontline",
@@ -47,7 +82,7 @@
     "female": "Female",
     "other": "Other",
     "village": "Village / Locality",
-    "phone": "Phone Number (Optional)",
+    "phone": "Phone Number",
     "bloodGroup": "Blood Group",
     "isPregnant": "Pregnant",
     "expectedDelivery": "Expected Delivery Date",
@@ -60,7 +95,7 @@
     "pulseRate": "Pulse (BPM)",
     "bloodPressure": "Blood Pressure (e.g. 120/80)",
     "oxygenSpo2": "Oxygen SpO₂ (%)",
-    "temperature": "Temperature (°F)",
+    "temperature": "Temperature (°C)",
     "bloodSugar": "Blood Sugar (mg/dL)",
     "consciousness": "Consciousness Level",
     "alert": "Fully Alert",
@@ -69,9 +104,7 @@
     "unresponsive": "Unresponsive",
     "activeBleeding": "Severe / Active Bleeding Present",
     "suspectedFracture": "Suspected Trauma / Fracture",
-    "symptoms": "Symptoms & Clinical Notes",
-    "followUpRequired": "Follow-up Required?",
-    "followUpDate": "Follow-up Date (DD/MM/YYYY)",
+    "symptoms": "Symptoms (Hindi / English)",
     "runTriage": "Run AI Digital Triage",
     "triageAssessment": "AI Triage Recommendation",
     "criticalPriority": "CRITICAL — Immediate Tertiary Transfer",
@@ -79,18 +112,13 @@
     "moderatePriority": "MODERATE — PHC / Clinic",
     "normalPriority": "NORMAL — Home Care",
     "sendReferral": "Transmit Emergency Digital Referral",
-    "createPHCReferral": "Create Referral",
-    "referPatient": "Refer Patient to Hospital / Doctor",
-    "selectFacility": "Select Receiving Facility / Doctor",
-    "referralReason": "Referral Reason / Clinical Notes",
-    "referralPriority": "Referral Priority",
+    "createPHCReferral": "Create PHC Referral",
     "diagnosticAvailability": "Verified Diagnostic Availability",
     "offlineNotice": "Operating in Offline-Queue Mode. Data will auto-sync.",
     "syncSuccess": "Referral transmitted to nearest emergency facility.",
     "referralSent": "Referral Sent",
-    "referralSaved": "Referral saved and queued for sync.",
     "enterPatientName": "Please enter patient name.",
-    "visitTitle": "Record Home Visit",
+    "visitTitle": "Home Visit & Vitals",
     "selectPatient": "Select Patient",
     "aiGuidance": "AI Guidance",
     "recordVisit": "Record Home Visit",
@@ -99,19 +127,7 @@
     "visitSaved": "Visit has been saved and will sync when online.",
     "noPatients": "No patients registered yet. Tap + to add one.",
     "patientRegistered": "Patient Registered",
-    "patientSaved": "Patient has been registered and saved locally.",
-    "patientHistory": "Patient History & Timeline",
-    "communityPatients": "Community Patients",
-    "todaysVisits": "Today's Visits",
-    "pendingReferrals": "Pending Referrals",
-    "reportEmergency": "Report Emergency",
-    "noVisitsRecorded": "No visits recorded yet for this patient.",
-    "noReferralsRecorded": "No referrals created yet for this patient.",
-    "patientDetails": "Patient Details",
-    "pastVisits": "Past Visits",
-    "referrals": "Referrals",
-    "followUps": "Follow-ups",
-    "actionSos": "Emergency SOS for Patient"
+    "patientSaved": "Patient has been registered and saved locally."
   },
   "offline": {
     "synced": "Synced with Cloud",
@@ -122,5 +138,11 @@
   "emergency": {
     "sos": "SOS",
     "holdToActivate": "Hold to Activate SOS"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Select Language",
+    "voiceSosTitle": "Voice SOS Recognition",
+    "voiceSosDesc": "Trigger emergency by speaking your custom code phrase"
   }
 }

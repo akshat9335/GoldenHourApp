@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Button, IconPrompt, Icon } from '@/components/ui';
 
@@ -7,25 +7,28 @@ import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
 
 export default function HospitalArrival() {
+  const params = useLocalSearchParams<{ tripId?: string; emergencyId?: string }>();
   const activeTripId = useAppStore((s) => s.activeTripId);
   const setActiveTripId = useAppStore((s) => s.setActiveTripId);
   const setEmergencyId = useAppStore((s) => s.setEmergencyId);
   const [loading, setLoading] = useState(false);
 
   const handleComplete = async () => {
-    if (activeTripId) {
-      setLoading(true);
-      try {
-        await api.ambulances.completeTrip(activeTripId);
-      } catch (_err) {
-        // Handled
-      } finally {
-        setLoading(false);
+    const effectiveTripId = activeTripId || params.tripId || params.emergencyId || useAppStore.getState().activeTripId;
+    setLoading(true);
+    try {
+      if (effectiveTripId) {
+        await api.ambulances.completeTrip(effectiveTripId);
       }
+    } catch (_err) {
+      // Handled
+    } finally {
+      setActiveTripId(null);
+      setEmergencyId(null);
+      await api.ambulances.updateAvailability('AVAILABLE').catch(() => {});
+      setLoading(false);
+      router.replace('/(ambulance)/dashboard');
     }
-    setActiveTripId(null);
-    setEmergencyId(null);
-    router.replace('/(ambulance)/dashboard');
   };
 
   return (

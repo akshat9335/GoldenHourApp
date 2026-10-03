@@ -6,6 +6,9 @@ import { colors } from '@/constants/theme';
 import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function DoctorLogin() {
   const insets = useSafeAreaInsets();
@@ -18,53 +21,40 @@ export default function DoctorLogin() {
     try {
       const session = await authService.promptGoogleSignIn();
 
-      if (!session.profileExists) {
-        Alert.alert(
-          'Profile Not Found',
-          'No doctor profile exists for this account. Please register your professional details.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Register Now', onPress: () => router.push('/doctor-register') },
-          ]
-        );
-        return;
-      }
-
       const userRoles = (session.profile?.roles || [session.role || 'PATIENT']).map((r: string) => r.toUpperCase());
       const isDoctor = userRoles.includes('DOCTOR');
-      if (!isDoctor) {
+
+      if (!session.profileExists || !isDoctor) {
         Alert.alert(
           'Doctor Registration Required',
-          'This Google account does not have a registered Doctor profile. Please register your professional details to proceed.',
+          `No Doctor profile is registered for ${session.email || 'this Google account'}. Please complete your doctor registration first with your medical registration number and clinic details.`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Register as Doctor', onPress: () => router.push('/doctor-register') },
+            {
+              text: 'Register Now',
+              onPress: () => router.push('/doctor-register'),
+            },
           ]
         );
         return;
       }
 
-      // Activate DOCTOR role in app state for this session
-      useAppStore.getState().setRole('DOCTOR');
+      const status = session.profile?.roleVerificationStatus?.DOCTOR || session.profile?.verificationStatus || 'PENDING';
+      const isApproved = status === 'APPROVED' || status === 'VERIFIED';
 
-      const docStatus = session.profile?.roleVerificationStatus?.DOCTOR || session.verificationStatus;
-      if (docStatus === 'APPROVED') {
-        router.replace('/(doctor)/dashboard');
-        return;
-      }
-
-      if (docStatus === 'REJECTED') {
-        Alert.alert(
-          'Application Rejected',
-          'Your medical practitioner credentials were not approved. Please contact support@goldenhour.app.'
+      if (!isApproved) {
+        setPendingStatus(
+          `Your registration for Dr. ${session.profile?.name || ''} is currently under administrative review. Please wait for approval.`
         );
         return;
       }
 
-      // verificationStatus is PENDING
-      setPendingStatus(
-        'Your medical credentials have been submitted and are currently under review by Golden Hour administrators. You will be notified once verified.'
-      );
+      useAppStore.getState().setIsDemoMode(false);
+      useAppStore.getState().setRole('DOCTOR');
+      useAppStore.getState().setRoles(Array.from(new Set([...userRoles, 'DOCTOR'])) as any);
+      useAppStore.getState().setVerificationStatus('APPROVED');
+      router.replace('/(doctor)/dashboard');
+      return;
     } catch (err: any) {
       console.warn('[DoctorLogin] Google Sign-In error:', err);
       const msg = err?.message || 'Failed to sign in. Please try again.';
@@ -76,18 +66,57 @@ export default function DoctorLogin() {
     }
   };
 
+  const handleDemoDoctor = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-doctor');
+    const profile = {
+      uid: 'doc-1',
+      doctorId: 'doc-1',
+      name: 'Dr. Alok Tripathi',
+      doctorName: 'Dr. Alok Tripathi',
+      email: 'dr.alok@medanta.org',
+      phone: '+91 98765 67890',
+      role: 'DOCTOR',
+      roles: ['DOCTOR'],
+      specialty: 'Cardiologist',
+      specialization: 'Cardiologist',
+      qualification: 'MBBS, MD, DM (Cardiology)',
+      licenseNumber: 'UPMC-2010-45812',
+      clinicName: 'Medanta OPD & Diagnostic Center',
+      clinicAddress: 'Civil Lines, Prayagraj',
+      verificationStatus: 'APPROVED',
+      isPhoneVerified: true,
+      hasCompletedProfile: true,
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-doctor');
+      await AsyncStorage.setItem('gh_user_uid', 'doc-1');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setIsDemoMode(true);
+    useAppStore.getState().setRole('DOCTOR');
+    useAppStore.getState().setRoles(['DOCTOR']);
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile(profile as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
+    router.replace('/(doctor)/dashboard');
+  };
+
   return (
     <Screen center>
-      <View style={{ width: '100%', alignItems: 'flex-start', marginBottom: 12 }}>
-        <Pressable
-          onPress={() => router.replace('/role-selection')}
-          style={{ paddingVertical: 8, paddingHorizontal: 4 }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
-        </Pressable>
+      <Pressable
+        onPress={() => router.replace('/role-selection')}
+        style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, left: 16, zIndex: 10, padding: 8 }}
+      >
+        <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
+      </Pressable>
+
+      <View style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, right: 16, zIndex: 10 }}>
+        <LanguageSelector />
       </View>
 
-      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 10 }}>
+      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 40 }}>
         <View style={styles.iconCircle}>
           <Icon name="doctor" size={36} color={colors.red} />
         </View>
@@ -111,26 +140,10 @@ export default function DoctorLogin() {
       />
 
       <Button
-        title="🚀 Quick Doctor Demo Login"
-        variant="blue"
-        style={{ marginTop: 12 }}
-        onPress={() => {
-          const store = useAppStore.getState();
-          store.setIsAuthenticated(true);
-          store.setRole('DOCTOR');
-          store.setRoles(['DOCTOR']);
-          store.setVerificationStatus('APPROVED');
-          store.setUserProfile({
-            uid: 'demo-doctor-001',
-            name: 'Dr. Rajesh Sharma',
-            specialization: 'General Medicine & Emergency',
-            clinic: 'City Care Clinic',
-            role: 'DOCTOR',
-            roles: ['DOCTOR'],
-            verificationStatus: 'APPROVED',
-          });
-          router.replace('/(doctor)/dashboard');
-        }}
+        title="⚡ 1-Click Demo Access (Dr. Ananya Sharma)"
+        variant="secondary"
+        style={{ marginTop: 12, borderColor: '#16A34A', borderWidth: 1 }}
+        onPress={handleDemoDoctor}
       />
 
       <Button

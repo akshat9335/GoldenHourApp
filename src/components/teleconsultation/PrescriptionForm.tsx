@@ -42,25 +42,21 @@ export const PrescriptionForm = ({ consultationId, doctorId, patientId }: Props)
   return (
     <View style={styles.wrap}>
       <Text style={styles.title}>Prescription</Text>
-      <FlatList
-        data={items}
-        keyExtractor={(_, i) => String(i)}
-        renderItem={({ item, index }) => (
-          <View style={styles.row}>
-            {(['medicine', 'dosage', 'frequency', 'duration', 'instructions'] as const).map((k) => (
-              <View key={k} style={styles.field}>
-                <Text style={styles.label}>{k[0].toUpperCase() + k.slice(1)}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={item[k]}
-                  onChangeText={(v) => update(index, k, v)}
-                  placeholder={k}
-                />
-              </View>
-            ))}
-          </View>
-        )}
-      />
+      {items.map((item, index) => (
+        <View key={index} style={styles.row}>
+          {(['medicine', 'dosage', 'frequency', 'duration', 'instructions'] as const).map((k) => (
+            <View key={k} style={styles.field}>
+              <Text style={styles.label}>{k[0].toUpperCase() + k.slice(1)}</Text>
+              <TextInput
+                style={styles.input}
+                value={item[k]}
+                onChangeText={(v) => update(index, k, v)}
+                placeholder={k}
+              />
+            </View>
+          ))}
+        </View>
+      ))}
       <View style={styles.actions}>
         <Pressable onPress={onAddRow} style={[styles.btn, styles.btnGhost]}>
           <Text style={{ color: colors.ink, fontWeight: '600' }}>+ Add medicine</Text>

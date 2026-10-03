@@ -11,6 +11,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { getApiBaseUrl } from './api';
 
 const QUEUE_KEY = '@golden_hour_offline_queue';
 
@@ -50,8 +51,9 @@ export async function enqueueOfflineAction(
 
 /** Flush all queued items to the backend. Returns counts of success/failure. */
 export async function processOfflineQueue(
-  apiBaseUrl = 'http://localhost:5000',
+  apiBaseUrl?: string,
 ): Promise<{ success: number; failed: number }> {
+  const baseUrl = apiBaseUrl || (getApiBaseUrl ? getApiBaseUrl() : 'https://goldenhourapp.onrender.com');
   try {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
     if (!raw) return { success: 0, failed: 0 };
@@ -72,9 +74,9 @@ export async function processOfflineQueue(
 
     for (const item of queue) {
       try {
-        const res = await fetch(`${apiBaseUrl}${item.endpoint}`, {
+        const res = await fetch(`${baseUrl}${item.endpoint}`, {
           method: item.method,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': 'true' },
           body: JSON.stringify(item.data),
         });
 

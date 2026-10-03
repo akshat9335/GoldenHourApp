@@ -1,7 +1,6 @@
 import { DoctorProfile, ClinicDetails } from "../types/doctor";
 import { Appointment, LiveQueueState } from "../types/appointment";
 import { StoredLocation, HospitalFacility, NearbyIncidentSummary } from "../types/location";
-
 import { CommunityPatient, CommunityVisit, CommunityReferral } from "./worker.model";
 
 /**
@@ -52,85 +51,134 @@ class InMemoryDataStore {
     this.clinics.set(clinic1.clinicId, clinic1);
     this.clinics.set(clinic2.clinicId, clinic2);
 
-    const clinicBlr1: ClinicDetails = {
-      clinicId: "clinic-sharma-blr",
-      clinicName: "Sharma Heart Clinic",
-      address: "4th Cross, Koramangala, Bengaluru",
-      lat: 12.9352,
-      lng: 77.6146,
-      phone: "+91-80-25551234",
-      workingHours: "10:00 - 18:00",
-      facilities: ["ECG", "2D Echo", "Cardiac Triage", "Pharmacy"],
+    // Seed Prayagraj Regional Clinics
+    const clinicMedanta: ClinicDetails = {
+      clinicId: "clinic-medanta-prayagraj",
+      clinicName: "Medanta OPD & Diagnostic Center",
+      address: "Civil Lines, Prayagraj",
+      lat: 25.4538,
+      lng: 81.8540,
+      phone: "+91-532-2407777",
+      workingHours: "09:00 - 20:00",
+      facilities: ["Cardiology OPD", "2D Echo", "ECG", "Pathology Lab", "Triage Room"],
     };
 
-    const clinicBlr2: ClinicDetails = {
-      clinicId: "clinic-verma-blr",
-      clinicName: "Verma Family Clinic",
-      address: "80 Feet Road, Indiranagar, Bengaluru",
-      lat: 12.9719,
-      lng: 77.6412,
-      phone: "+91-80-25555678",
-      workingHours: "09:00 - 21:00",
-      facilities: ["General OPD", "Digital X-Ray", "Vaccination", "Minor Trauma"],
+    const clinicSRN: ClinicDetails = {
+      clinicId: "clinic-srn-prayagraj",
+      clinicName: "SRN Medical Campus OPD",
+      address: "MG Marg, Prayagraj",
+      lat: 25.4484,
+      lng: 81.8460,
+      phone: "+91-532-2500011",
+      workingHours: "08:30 - 18:30",
+      facilities: ["General OPD", "Internal Medicine", "Digital X-Ray", "Vaccination"],
     };
 
-    this.clinics.set(clinicBlr1.clinicId, clinicBlr1);
-    this.clinics.set(clinicBlr2.clinicId, clinicBlr2);
+    const clinicLifeline: ClinicDetails = {
+      clinicId: "clinic-lifeline-katra",
+      clinicName: "LifeLine Multispecialty Clinic",
+      address: "University Road, Katra, Prayagraj",
+      lat: 25.4610,
+      lng: 81.8570,
+      phone: "+91-532-2601234",
+      workingHours: "10:00 - 21:00",
+      facilities: ["Emergency Triage", "Minor OT", "Trauma Dressing", "Pharmacy"],
+    };
+
+    const clinicCityCare: ClinicDetails = {
+      clinicId: "clinic-city-georgetown",
+      clinicName: "City Heart & Orthopedic Care",
+      address: "George Town, Prayagraj",
+      lat: 25.4420,
+      lng: 81.8620,
+      phone: "+91-532-2708899",
+      workingHours: "09:30 - 19:30",
+      facilities: ["Orthopedic OPD", "Plaster Room", "Physiotherapy", "Digital X-Ray"],
+    };
+
+    this.clinics.set(clinicMedanta.clinicId, clinicMedanta);
+    this.clinics.set(clinicSRN.clinicId, clinicSRN);
+    this.clinics.set(clinicLifeline.clinicId, clinicLifeline);
+    this.clinics.set(clinicCityCare.clinicId, clinicCityCare);
+
+    // Legacy clinic aliases for backward compatibility
+    this.clinics.set("clinic-sharma-blr", clinicMedanta);
+    this.clinics.set("clinic-verma-blr", clinicSRN);
 
     // Seed Doctors
     const doc1: DoctorProfile = {
-      doctorId: "doc-sharma-trauma",
-      userId: "user-dr-sharma",
-      name: "Dr. Rajesh Sharma",
-      specialty: "Trauma & Emergency Care",
-      qualification: "MBBS, MS (General Surgery), Fellowship in Trauma",
+      doctorId: "doc-1",
+      userId: "user-dr-alok",
+      name: "Dr. Alok Tripathi",
+      specialty: "Cardiologist",
+      qualification: "MBBS, MD, DM (Cardiology)",
       experienceYears: 14,
-      licenseNumber: "MCI-DL-2009-45812",
+      licenseNumber: "UPMC-2010-45812",
       verificationStatus: "VERIFIED",
-      clinicId: clinic1.clinicId,
-      consultationFee: 700,
+      clinicId: clinicMedanta.clinicId,
+      consultationFee: 600,
       availability: "AVAILABLE",
       rating: 4.9,
-      servingToken: 3,
-      queueLength: 7,
-      estimatedWaitMinutes: 40,
+      servingToken: 0,
+      queueLength: 0,
+      estimatedWaitMinutes: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     const doc2: DoctorProfile = {
-      doctorId: "doc-verma-ortho",
-      userId: "user-dr-verma",
-      name: "Dr. Anjali Verma",
-      specialty: "Orthopedic Surgery & Fractures",
-      qualification: "MBBS, MS (Orthopedics), DNB",
+      doctorId: "doc-2",
+      userId: "user-dr-anita",
+      name: "Dr. Anita Verma",
+      specialty: "General Physician",
+      qualification: "MBBS, MD (General Medicine)",
       experienceYears: 10,
-      licenseNumber: "MCI-DL-2014-99214",
+      licenseNumber: "UPMC-2014-99214",
       verificationStatus: "VERIFIED",
-      clinicId: clinic2.clinicId,
-      consultationFee: 800,
+      clinicId: clinicSRN.clinicId,
+      consultationFee: 350,
       availability: "AVAILABLE",
       rating: 4.8,
-      servingToken: 1,
-      queueLength: 4,
-      estimatedWaitMinutes: 30,
+      servingToken: 0,
+      queueLength: 0,
+      estimatedWaitMinutes: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    const doc3Pending: DoctorProfile = {
-      doctorId: "doc-kumar-general",
-      userId: "user-dr-kumar",
-      name: "Dr. Vikram Kumar",
-      specialty: "General Medicine",
-      qualification: "MBBS",
-      experienceYears: 3,
-      licenseNumber: "MCI-DL-2021-12345",
-      verificationStatus: "PENDING",
-      clinicId: clinic1.clinicId,
-      consultationFee: 400,
-      availability: "OFFLINE",
-      rating: 4.2,
+    const doc3: DoctorProfile = {
+      doctorId: "doc-3",
+      userId: "user-dr-rajesh",
+      name: "Dr. Rajesh Sharma",
+      specialty: "Emergency Medicine",
+      qualification: "MBBS, MS (General Surgery), Fellowship in Trauma",
+      experienceYears: 12,
+      licenseNumber: "UPMC-2012-77412",
+      verificationStatus: "VERIFIED",
+      clinicId: clinicLifeline.clinicId,
+      consultationFee: 500,
+      availability: "AVAILABLE",
+      rating: 4.9,
+      servingToken: 0,
+      queueLength: 0,
+      estimatedWaitMinutes: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const doc4: DoctorProfile = {
+      doctorId: "doc-4",
+      userId: "user-dr-anjali",
+      name: "Dr. Anjali Verma",
+      specialty: "Orthopedic",
+      qualification: "MBBS, MS (Orthopedics), DNB",
+      experienceYears: 11,
+      licenseNumber: "UPMC-2013-33901",
+      verificationStatus: "VERIFIED",
+      clinicId: clinicCityCare.clinicId,
+      consultationFee: 500,
+      availability: "AVAILABLE",
+      rating: 4.8,
       servingToken: 0,
       queueLength: 0,
       estimatedWaitMinutes: 0,
@@ -140,97 +188,59 @@ class InMemoryDataStore {
 
     this.doctors.set(doc1.doctorId, doc1);
     this.doctors.set(doc2.doctorId, doc2);
-    this.doctors.set(doc3Pending.doctorId, doc3Pending);
+    this.doctors.set(doc3.doctorId, doc3);
+    this.doctors.set(doc4.doctorId, doc4);
 
-    const docBlr1: DoctorProfile = {
-      doctorId: "doc-1",
-      userId: "user-dr-rahul",
-      name: "Dr. Rahul Sharma",
-      specialty: "Cardiologist",
-      qualification: "MBBS, MD (Cardiology)",
-      experienceYears: 12,
-      licenseNumber: "KMC-BLR-2012-1142",
-      verificationStatus: "VERIFIED",
-      clinicId: clinicBlr1.clinicId,
-      consultationFee: 500,
-      availability: "AVAILABLE",
-      rating: 4.9,
-      servingToken: 14,
-      queueLength: 18,
-      estimatedWaitMinutes: 25,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const docBlr2: DoctorProfile = {
-      doctorId: "doc-2",
-      userId: "user-dr-anita",
-      name: "Dr. Anita Verma",
-      specialty: "General Physician",
-      qualification: "MBBS, MD (General Medicine)",
-      experienceYears: 9,
-      licenseNumber: "KMC-BLR-2015-8831",
-      verificationStatus: "VERIFIED",
-      clinicId: clinicBlr2.clinicId,
-      consultationFee: 300,
-      availability: "AVAILABLE",
-      rating: 4.8,
-      servingToken: 29,
-      queueLength: 32,
-      estimatedWaitMinutes: 15,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.doctors.set(docBlr1.doctorId, docBlr1);
-    this.doctors.set(docBlr2.doctorId, docBlr2);
-    this.doctors.set("doc-be-0", { ...docBlr1, doctorId: "doc-be-0" });
-
-    // Seed Queues
+    // Seed Queues: start clean with 0 tokens so real patient bookings populate the queue
     const today = new Date().toISOString().split("T")[0];
-    this.queues.set(`${doc1.doctorId}_${today}`, {
+
+    const qState: LiveQueueState = {
       doctorId: doc1.doctorId,
       date: today,
-      servingToken: 3,
-      totalTokensIssued: 7,
+      servingToken: 0,
+      totalTokensIssued: 0,
       avgConsultationMinutes: 10,
-      waitingCount: 4,
-    });
+      waitingCount: 0,
+    };
+
+    this.queues.set(`${doc1.doctorId}_${today}`, qState);
+    this.queues.set(`doc-demo-1_${today}`, { ...qState, doctorId: "doc-demo-1" });
+    this.queues.set(`doc-doc-demo-1_${today}`, { ...qState, doctorId: "doc-doc-demo-1" });
+    this.queues.set(`doc-doc-1_${today}`, { ...qState, doctorId: "doc-doc-1" });
+
+    doc1.servingToken = 0;
+    doc1.queueLength = 0;
+    doc1.estimatedWaitMinutes = 0;
+
+    this.doctors.set("doc-demo-1", { ...doc1, doctorId: "doc-demo-1" });
+    this.doctors.set("doc-doc-demo-1", { ...doc1, doctorId: "doc-doc-demo-1" });
+    this.doctors.set("doc-doc-1", { ...doc1, doctorId: "doc-doc-1" });
 
     this.queues.set(`${doc2.doctorId}_${today}`, {
       doctorId: doc2.doctorId,
       date: today,
-      servingToken: 1,
-      totalTokensIssued: 4,
-      avgConsultationMinutes: 12,
-      waitingCount: 3,
-    });
-
-    this.queues.set(`${docBlr1.doctorId}_${today}`, {
-      doctorId: docBlr1.doctorId,
-      date: today,
-      servingToken: 14,
-      totalTokensIssued: 18,
-      avgConsultationMinutes: 15,
-      waitingCount: 4,
-    });
-
-    this.queues.set(`doc-be-0_${today}`, {
-      doctorId: "doc-be-0",
-      date: today,
-      servingToken: 14,
-      totalTokensIssued: 25,
-      avgConsultationMinutes: 10,
-      waitingCount: 11,
-    });
-
-    this.queues.set(`${docBlr2.doctorId}_${today}`, {
-      doctorId: docBlr2.doctorId,
-      date: today,
-      servingToken: 29,
-      totalTokensIssued: 32,
+      servingToken: 0,
+      totalTokensIssued: 0,
       avgConsultationMinutes: 8,
-      waitingCount: 3,
+      waitingCount: 0,
+    });
+
+    this.queues.set(`${doc3.doctorId}_${today}`, {
+      doctorId: doc3.doctorId,
+      date: today,
+      servingToken: 0,
+      totalTokensIssued: 0,
+      avgConsultationMinutes: 10,
+      waitingCount: 0,
+    });
+
+    this.queues.set(`${doc4.doctorId}_${today}`, {
+      doctorId: doc4.doctorId,
+      date: today,
+      servingToken: 0,
+      totalTokensIssued: 0,
+      avgConsultationMinutes: 10,
+      waitingCount: 0,
     });
 
     // Seed Hospitals (Coordinate with Aastha's hospital network)
@@ -343,6 +353,146 @@ class InMemoryDataStore {
     this.hospitals.set(hospBlr2.hospitalId, hospBlr2);
     this.hospitals.set(hospBlr3.hospitalId, hospBlr3);
 
+    // Seed Prayagraj Regional Registered Hospitals
+    const hospPrayag1: HospitalFacility = {
+      hospitalId: "hosp-srn-prayagraj",
+      name: "Swaroop Rani Nehru Hospital (District Trauma)",
+      address: "MG Marg, Civil Lines, Prayagraj",
+      phone: "+91-532-2500011",
+      lat: 25.4484,
+      lng: 81.8460,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Level 1 Trauma", "24/7 Emergency", "Critical ICU", "Blood Bank"],
+      availableCapacity: 24,
+      totalBeds: 60,
+      availableBeds: 24,
+      icuBeds: 12,
+      availableIcuBeds: 6,
+      traumaLevel: 1,
+      icuAvailable: true,
+      specialistsAvailable: ["Trauma Surgeon", "Orthopedic Surgeon", "Anesthetist"],
+      diagnosticAvailability: ["CT 128 Slice", "Digital X-Ray", "Pathology Lab"],
+      verified: true,
+    };
+
+    const hospPrayag2: HospitalFacility = {
+      hospitalId: "hosp-a3T8en1zB3NvXvwDEKxCG0HR0hi1",
+      name: "Medanta Hospital Prayagraj",
+      address: "Civil Lines, Prayagraj",
+      phone: "+91-532-2407777",
+      lat: 25.4538,
+      lng: 81.8540,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Super Specialty", "Cardiology", "Neuro Trauma", "ICU"],
+      availableCapacity: 20,
+      totalBeds: 50,
+      availableBeds: 20,
+      icuBeds: 10,
+      availableIcuBeds: 5,
+      traumaLevel: 1,
+      icuAvailable: true,
+      specialistsAvailable: ["Cardiologist", "Critical Care Specialist", "Neurosurgeon"],
+      diagnosticAvailability: ["MRI 3T", "Cath Lab", "CT Scan", "Blood Bank"],
+      verified: true,
+    };
+
+    const hospPrayag3: HospitalFacility = {
+      hospitalId: "hosp-7KdTMePBTBdIY7s4tlVcl5dnN702",
+      name: "Saket Hospital",
+      address: "George Town, Prayagraj",
+      phone: "+91-532-2465123",
+      lat: 25.4358,
+      lng: 81.8463,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["General & Emergency Care", "Emergency OT", "ICU Bay"],
+      availableCapacity: 33,
+      totalBeds: 45,
+      availableBeds: 33,
+      icuBeds: 8,
+      availableIcuBeds: 4,
+      traumaLevel: 2,
+      icuAvailable: true,
+      specialistsAvailable: ["General Surgeon", "Emergency Physician"],
+      diagnosticAvailability: ["Digital X-Ray", "Ultrasound", "Pathology Lab"],
+      verified: true,
+    };
+
+    const hospPrayag4: HospitalFacility = {
+      hospitalId: "hosp-demo-apollo",
+      name: "Apollo Multi-Specialty Hospital",
+      address: "Katra, Prayagraj",
+      phone: "+91-532-2890123",
+      lat: 25.4410,
+      lng: 81.8380,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Tertiary Care & Trauma", "Emergency OT", "Cardiac ICU"],
+      availableCapacity: 18,
+      totalBeds: 40,
+      availableBeds: 18,
+      icuBeds: 8,
+      availableIcuBeds: 3,
+      traumaLevel: 1,
+      icuAvailable: true,
+      specialistsAvailable: ["Cardiologist", "Trauma Specialist", "Pediatrician"],
+      diagnosticAvailability: ["CT Scan", "Digital X-Ray", "Blood Bank"],
+      verified: true,
+    };
+
+    const hospPrayag5: HospitalFacility = {
+      hospitalId: "hosp-kamla-nehru",
+      name: "Kamla Nehru Memorial Hospital",
+      address: "Tagore Town, Prayagraj",
+      phone: "+91-532-2466000",
+      lat: 25.4510,
+      lng: 81.8610,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Maternal & Child Health", "Gynecology OT", "NICU/PICU"],
+      availableCapacity: 15,
+      totalBeds: 35,
+      availableBeds: 15,
+      icuBeds: 6,
+      availableIcuBeds: 2,
+      traumaLevel: 2,
+      icuAvailable: true,
+      specialistsAvailable: ["Obstetrician", "Gynecologist", "Pediatrician"],
+      diagnosticAvailability: ["Ultrasound 4D", "Digital X-Ray", "Blood Bank"],
+      verified: true,
+    };
+
+    const hospPrayag6: HospitalFacility = {
+      hospitalId: "phc-naini",
+      name: "Naini Primary Health Centre (PHC)",
+      address: "Naini Rural, Prayagraj",
+      phone: "+91-532-2691000",
+      lat: 25.3950,
+      lng: 81.8650,
+      distanceKm: 0,
+      etaMinutes: 0,
+      emergencyCapability: ["Primary Emergency Care", "Maternity Stabilization", "Minor Dressing"],
+      availableCapacity: 6,
+      totalBeds: 12,
+      availableBeds: 6,
+      icuBeds: 2,
+      availableIcuBeds: 1,
+      traumaLevel: 3,
+      icuAvailable: false,
+      specialistsAvailable: ["Medical Officer (MO)", "Staff Nurse"],
+      diagnosticAvailability: ["Rapid Blood Test", "ECG", "Basic Pathology"],
+      verified: true,
+    };
+
+    this.hospitals.set(hospPrayag1.hospitalId, hospPrayag1);
+    this.hospitals.set(hospPrayag2.hospitalId, hospPrayag2);
+    this.hospitals.set(hospPrayag3.hospitalId, hospPrayag3);
+    this.hospitals.set(hospPrayag4.hospitalId, hospPrayag4);
+    this.hospitals.set(hospPrayag5.hospitalId, hospPrayag5);
+    this.hospitals.set(hospPrayag6.hospitalId, hospPrayag6);
+
     // Seed Nearby Incidents (For Nearby Alerts testing)
     const inc1: NearbyIncidentSummary = {
       incidentId: "inc-delhi-001",
@@ -366,6 +516,136 @@ class InMemoryDataStore {
 
     this.incidents.set(inc1.incidentId, inc1);
     this.incidents.set(inc2.incidentId, inc2);
+
+    // Seed Community ASHA Patients (Prayagraj rural region)
+    const pat1: CommunityPatient = {
+      id: "pat-seed-01",
+      crisisId: "CR-PRAYAG-001",
+      workerUid: "asha-worker-prayagraj",
+      workerName: "Sunita Verma (ASHA Sangini)",
+      name: "Sunita Devi",
+      age: 26,
+      gender: "FEMALE",
+      phone: "9876543210",
+      villageOrArea: "Naini Rural Sub-Center",
+      bloodGroup: "B+",
+      knownConditions: ["Severe Anemia"],
+      isPregnant: true,
+      expectedDeliveryDate: "15/11/2026",
+      lastVisitDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+    };
+
+    const pat2: CommunityPatient = {
+      id: "pat-seed-02",
+      crisisId: "CR-PRAYAG-002",
+      workerUid: "asha-worker-prayagraj",
+      workerName: "Sunita Verma (ASHA Sangini)",
+      name: "Rameshwar Yadav",
+      age: 62,
+      gender: "MALE",
+      phone: "9812345678",
+      villageOrArea: "Shankargarh Village",
+      bloodGroup: "O+",
+      knownConditions: ["Hypertension", "Type 2 Diabetes"],
+      isPregnant: false,
+      lastVisitDate: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 15).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    };
+
+    const pat3: CommunityPatient = {
+      id: "pat-seed-03",
+      crisisId: "CR-PRAYAG-003",
+      workerUid: "asha-worker-prayagraj",
+      workerName: "Sunita Verma (ASHA Sangini)",
+      name: "Meera Devi",
+      age: 31,
+      gender: "FEMALE",
+      phone: "",
+      villageOrArea: "Phaphamau Basti",
+      bloodGroup: "A+",
+      knownConditions: ["Postpartum Hemorrhage History"],
+      isPregnant: false,
+      lastVisitDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(),
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 20).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4).toISOString(),
+    };
+
+    this.communityPatients.set(pat1.id, pat1);
+    this.communityPatients.set(pat2.id, pat2);
+    this.communityPatients.set(pat3.id, pat3);
+
+    // Seed Community Visits
+    const visit1: CommunityVisit = {
+      id: "visit-seed-01",
+      patientId: pat1.id,
+      patientName: pat1.name,
+      workerUid: "asha-worker-prayagraj",
+      vitals: {
+        bloodPressure: "110/70",
+        pulse: 78,
+        spO2: 98,
+        temperature: 36.8,
+        bloodSugar: 95,
+      },
+      symptoms: "Mild morning sickness, antenatal routine checkup",
+      aiTriageSeverity: "NORMAL",
+      aiGuidanceInHindi: "नियमित आयरन-फॉलिक एसिड सप्लीमेंट लें और पर्याप्त आराम करें।",
+      visitDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+      syncedFromOffline: false,
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+    };
+
+    const visit2: CommunityVisit = {
+      id: "visit-seed-02",
+      patientId: pat2.id,
+      patientName: pat2.name,
+      workerUid: "asha-worker-prayagraj",
+      vitals: {
+        bloodPressure: "165/105",
+        pulse: 94,
+        spO2: 94,
+        temperature: 37.1,
+        bloodSugar: 240,
+      },
+      symptoms: "Headache, dizziness, high blood sugar reading",
+      aiTriageSeverity: "MODERATE",
+      aiGuidanceInHindi: "रक्तचाप और शुगर अधिक है। तुरंत प्राथमिक स्वास्थ्य केंद्र (PHC) में डॉक्टर से परामर्श लें।",
+      visitDate: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+      syncedFromOffline: true,
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    };
+
+    this.communityVisits.set(visit1.id, visit1);
+    this.communityVisits.set(visit2.id, visit2);
+
+    // Seed Community Referral
+    const ref1: CommunityReferral = {
+      id: "ref-seed-01",
+      referralCode: "REF-ASHA-001",
+      patientId: pat2.id,
+      patientName: pat2.name,
+      patientAge: pat2.age,
+      patientGender: pat2.gender,
+      workerUid: "asha-worker-prayagraj",
+      workerName: "Sunita Verma (ASHA Sangini)",
+      destinationFacility: "Naini Primary Health Centre (PHC)",
+      priority: "HIGH",
+      reason: "Uncontrolled hypertension (165/105) with dizziness and hyperglycemia (240 mg/dL)",
+      vitalsSnapshot: {
+        bloodPressure: "165/105",
+        pulse: 94,
+        spO2: 94,
+        bloodSugar: 240,
+      },
+      status: "PENDING",
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+    };
+
+    this.communityReferrals.set(ref1.id, ref1);
   }
 
   public reset(): void {
@@ -376,6 +656,9 @@ class InMemoryDataStore {
     this.queues.clear();
     this.hospitals.clear();
     this.incidents.clear();
+    this.communityPatients.clear();
+    this.communityVisits.clear();
+    this.communityReferrals.clear();
     this.seedInitialData();
   }
 }

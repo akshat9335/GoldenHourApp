@@ -1,27 +1,25 @@
 import { Router } from "express";
-import {
-  getCommunityPatientsController,
-  saveCommunityPatientController,
-  getCommunityPatientByIdController,
-  getCommunityVisitsController,
-  recordCommunityVisitController,
-  getCommunityReferralsController,
-  createCommunityReferralController,
-} from "../controllers/worker.controller";
+import { WorkerController } from "../controllers/worker.controller";
 
 const router = Router();
 
-// Community Patients
-router.get("/patients", getCommunityPatientsController);
-router.post("/patients", saveCommunityPatientController);
-router.get("/patients/:id", getCommunityPatientByIdController);
+// Dashboard Summary Stats
+router.get("/stats", WorkerController.getStats);
 
-// Community Visits
-router.get("/visits", getCommunityVisitsController);
-router.post("/visits", recordCommunityVisitController);
+// Patients Management
+router.post("/patients", WorkerController.registerPatient);
+router.get("/patients", WorkerController.getPatients);
+router.get("/patients/:id", WorkerController.getPatientDetail);
+router.delete("/patients/:id", WorkerController.deletePatient);
 
-// Community Referrals
-router.get("/referrals", getCommunityReferralsController);
-router.post("/referrals", createCommunityReferralController);
+// Home Visits & AI Triage
+router.post("/visits", WorkerController.recordVisit);
+
+// Frontline Referrals
+router.post("/referrals", WorkerController.createReferral);
+router.get("/referrals", WorkerController.getReferrals);
+
+// Low-Connectivity Offline Batch Sync
+router.post("/sync", WorkerController.syncBatch);
 
 export default router;

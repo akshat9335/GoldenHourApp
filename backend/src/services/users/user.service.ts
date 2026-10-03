@@ -141,7 +141,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
 
   // Hydrate driver details if driver
   if (profile.role === "AMBULANCE_DRIVER" || profile.roles?.includes("AMBULANCE_DRIVER")) {
-    if (firestore && (!profile.vehiclePlateNumber || !profile.ambulanceId)) {
+    if (firestore) {
       try {
         const driverDoc = await firestore.collection("drivers").doc(uid).get();
         if (driverDoc.exists) {
@@ -153,6 +153,52 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
               vehiclePlateNumber: dData.vehiclePlateNumber || dData.ambulanceId || profile.vehiclePlateNumber || null,
               hospitalId: dData.hospitalId || profile.hospitalId || null,
               hospitalName: dData.hospitalName || profile.hospitalName || null,
+              verificationStatus: dData.verificationStatus || profile.verificationStatus || "PENDING",
+            };
+            dataStore.users.set(uid, profile);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // Hydrate hospital details if hospital
+  if (profile.role === "HOSPITAL" || profile.roles?.includes("HOSPITAL")) {
+    if (firestore) {
+      try {
+        // Query hospitals collection: prefer profile.hospitalId, then hosp-${uid}, then ownerUid
+        let hospDoc: any = null;
+        if (profile.hospitalId) {
+          hospDoc = await firestore.collection("hospitals").doc(profile.hospitalId).get();
+        }
+        if (!hospDoc || !hospDoc.exists) {
+          hospDoc = await firestore.collection("hospitals").doc(`hosp-${uid}`).get();
+        }
+        if (!hospDoc.exists) {
+          const hospQuery = await firestore.collection("hospitals").where("ownerUid", "==", uid).limit(1).get();
+          if (!hospQuery.empty) {
+            hospDoc = hospQuery.docs[0];
+          }
+        }
+        if (!hospDoc.exists) {
+          hospDoc = await firestore.collection("hospitals").doc(uid).get();
+        }
+        if (!hospDoc.exists && profile.email) {
+          const emailQuery = await firestore.collection("hospitals").where("email", "==", profile.email).limit(1).get();
+          if (!emailQuery.empty) {
+            hospDoc = emailQuery.docs[0];
+          }
+        }
+        if (hospDoc.exists) {
+          const hData = hospDoc.data() as any;
+          if (hData) {
+            const resolvedHospName = hData.hospitalName || hData.name || null;
+            profile = {
+              ...profile,
+              hospitalId: hospDoc.id,
+              hospitalName: resolvedHospName,
+              name: resolvedHospName || profile.name,
+              verificationStatus: hData.verificationStatus || profile.verificationStatus || "PENDING",
             };
             dataStore.users.set(uid, profile);
           }
@@ -250,10 +296,12 @@ export async function registerUserProfile(
     new Set([...existingRoles, requestedRole as CanonicalRole])
   );
 
-  // Enforce server-authoritative verification status
-  // Patients are auto-APPROVED; professionals are strictly PENDING until verified by admin
+  // Only regular patients are auto-approved; professional roles (DOCTOR, AMBULANCE_DRIVER, HOSPITAL)
+  // strictly require Admin verification before gaining operational access.
   const targetVerificationStatus: VerificationStatus =
-    requestedRole === "PATIENT" ? "APPROVED" : "PENDING";
+    input.verificationStatus === "APPROVED" || requestedRole === "PATIENT"
+      ? "APPROVED"
+      : "PENDING";
 
   const roleVerificationStatus: Partial<Record<CanonicalRole, VerificationStatus>> = {
     ...(existing?.roleVerificationStatus || {}),
@@ -317,6 +365,33 @@ export async function registerUserProfile(
   // Create professional domain records
   if (requestedRole === "DOCTOR") {
     const doctorId = `doc-${uid}`;
+    const clinicId = profile.clinicId || `clinic-${uid}`;
+    const rawLoc = (input as any).location;
+    const clinicLat = typeof (input as any).latitude === 'number'
+      ? (input as any).latitude
+      : (typeof rawLoc?.latitude === 'number' ? rawLoc.latitude : 25.4538);
+    const clinicLng = typeof (input as any).longitude === 'number'
+      ? (input as any).longitude
+      : (typeof rawLoc?.longitude === 'number' ? rawLoc.longitude : 81.8540);
+
+    const clinicRecord = {
+      clinicId,
+      clinicName: profile.clinicName || (profile.name ? `${profile.name}'s Clinic` : "Medical Clinic"),
+      address: profile.clinicAddress || "Civil Lines, Prayagraj",
+      lat: clinicLat,
+      lng: clinicLng,
+      phone: profile.phone || "+91-532-2400000",
+      workingHours: "09:00 - 20:00",
+      facilities: ["General OPD", "Consultation", "Emergency Dressing"],
+    };
+
+    dataStore.clinics.set(clinicId, clinicRecord);
+    if (firestore) {
+      try {
+        await firestore.collection("clinics").doc(clinicId).set(clinicRecord, { merge: true });
+      } catch {}
+    }
+
     const doctorRecord = {
       doctorId,
       userId: uid,
@@ -325,12 +400,12 @@ export async function registerUserProfile(
       qualification: profile.qualification || "MBBS",
       experienceYears: Number(input.experienceYears) || 5,
       licenseNumber: profile.licenseNumber || "",
-      clinicId: profile.clinicId || `clinic-${uid}`,
-      clinicName: profile.clinicName || null,
-      clinicAddress: profile.clinicAddress || null,
+      clinicId,
+      clinicName: clinicRecord.clinicName,
+      clinicAddress: clinicRecord.address,
       consultationFee: profile.consultationFee || 500,
-      verificationStatus: "PENDING" as const,
-      availability: "OFFLINE" as const,
+      verificationStatus: targetVerificationStatus === "APPROVED" ? ("VERIFIED" as const) : ("PENDING" as const),
+      availability: targetVerificationStatus === "APPROVED" ? ("AVAILABLE" as const) : ("OFFLINE" as const),
       rating: 5.0,
       servingToken: 0,
       queueLength: 0,
@@ -345,7 +420,26 @@ export async function registerUserProfile(
         await firestore.collection("doctors").doc(doctorId).set(doctorRecord, { merge: true });
       } catch {}
     }
+
+    // Initialize doctor's live queue for today
+    const today = now.split("T")[0];
+    const queueKey = `${doctorId}_${today}`;
+    if (!dataStore.queues.has(queueKey)) {
+      dataStore.queues.set(queueKey, {
+        doctorId,
+        date: today,
+        servingToken: 0,
+        totalTokensIssued: 0,
+        avgConsultationMinutes: 10,
+        waitingCount: 0,
+      });
+    }
   } else if (requestedRole === "HOSPITAL") {
+    const rawLoc = (input as any).location;
+    const hospLat = typeof (input as any).latitude === 'number' ? (input as any).latitude : rawLoc?.latitude;
+    const hospLng = typeof (input as any).longitude === 'number' ? (input as any).longitude : rawLoc?.longitude;
+    const finalLoc = (hospLat && hospLng) ? { latitude: hospLat, longitude: hospLng } : null;
+
     const hospitalRecord = {
       id: uid,
       ownerUid: uid,
@@ -354,11 +448,14 @@ export async function registerUserProfile(
       phone: profile.phone || null,
       registrationNumber: profile.hospitalRegNumber || null,
       address: profile.clinicAddress || profile.homeAddress || null,
-      verificationStatus: "PENDING" as const,
+      verificationStatus: targetVerificationStatus === "APPROVED" ? ("APPROVED" as const) : ("PENDING" as const),
       totalBeds: input.totalBeds || 20,
       icuBeds: input.icuBeds || 5,
       emergencyCapability: input.emergencyCapability || [],
       facilities: input.facilities || [],
+      location: finalLoc,
+      latitude: hospLat || null,
+      longitude: hospLng || null,
       createdAt: now,
       updatedAt: now,
     };
@@ -369,6 +466,11 @@ export async function registerUserProfile(
       } catch {}
     }
   } else if (requestedRole === "AMBULANCE_DRIVER") {
+    const rawDriverLoc = (input as any).location;
+    const driverLat = typeof (input as any).latitude === 'number' ? (input as any).latitude : rawDriverLoc?.latitude;
+    const driverLng = typeof (input as any).longitude === 'number' ? (input as any).longitude : rawDriverLoc?.longitude;
+    const driverFinalLoc = (driverLat && driverLng) ? { latitude: driverLat, longitude: driverLng } : null;
+
     const driverRecord = {
       id: uid,
       uid,
@@ -382,8 +484,11 @@ export async function registerUserProfile(
       ambulanceType: profile.ambulanceType || "Basic Life Support (BLS)",
       hospitalId: profile.hospitalId || null,
       hospitalName: profile.hospitalName || "Independent Fleet",
-      verificationStatus: "PENDING" as const,
+      verificationStatus: targetVerificationStatus === "APPROVED" ? ("VERIFIED" as const) : ("PENDING" as const),
       availability: "AVAILABLE" as const,
+      location: driverFinalLoc,
+      latitude: driverLat || null,
+      longitude: driverLng || null,
       createdAt: now,
       updatedAt: now,
     };
@@ -392,6 +497,30 @@ export async function registerUserProfile(
       try {
         await firestore.collection("drivers").doc(uid).set(driverRecord, { merge: true });
       } catch {}
+    }
+  } else if (requestedRole === "FRONTLINE_WORKER" || requestedRole === "ASHA") {
+    const workerRecord = {
+      id: uid,
+      uid,
+      userId: uid,
+      name: profile.name || "ASHA / ANM Worker",
+      phone: profile.phone || null,
+      email: profile.email || null,
+      workerType: input.workerType || "ASHA",
+      assignedPhc: input.assignedPhc || "Prayagraj Rural PHC",
+      village: input.village || "Soraon",
+      regNumber: input.regNumber || input.licenseNumber || null,
+      verificationStatus: targetVerificationStatus === "APPROVED" ? ("APPROVED" as const) : ("PENDING" as const),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (firestore) {
+      try {
+        await firestore.collection("workers").doc(uid).set(workerRecord, { merge: true });
+      } catch (err) {
+        console.warn("[UserService] Failed to write worker record:", err);
+      }
     }
   }
 
@@ -435,4 +564,69 @@ export async function updateUserProfile(
   }
 
   return merged;
+}
+
+/**
+ * Adjusts user trust score dynamically (+10 for genuine verified emergency, -20 for false alarm/fake report).
+ * Clamped strictly between 0 and 100.
+ */
+export async function adjustUserTrustScore(
+  uid: string,
+  delta: number,
+  reason: string,
+): Promise<number> {
+  if (!uid) return 100;
+
+  let currentScore = 100;
+  const inMemory = dataStore.users.get(uid);
+  if (inMemory && typeof inMemory.trustScore === "number") {
+    currentScore = inMemory.trustScore;
+  }
+
+  if (firestore) {
+    try {
+      const userRef = firestore.collection(USERS_COLLECTION).doc(uid);
+      const snap = await userRef.get();
+      if (snap.exists) {
+        const data = snap.data() || {};
+        if (typeof data.trustScore === "number") {
+          currentScore = data.trustScore;
+        }
+      }
+    } catch {}
+  }
+
+  const newScore = Math.max(0, Math.min(100, currentScore + delta));
+  const now = new Date().toISOString();
+
+  if (inMemory) {
+    inMemory.trustScore = newScore;
+  }
+
+  if (firestore) {
+    try {
+      const userRef = firestore.collection(USERS_COLLECTION).doc(uid);
+      const snap = await userRef.get();
+      const existingHistory = snap.exists && Array.isArray(snap.data()?.trustHistory)
+        ? snap.data()!.trustHistory
+        : [];
+
+      await userRef.set(
+        {
+          trustScore: newScore,
+          trustHistory: [
+            ...existingHistory.slice(-20),
+            { delta, reason, timestamp: now, newScore },
+          ],
+          updatedAt: now,
+        },
+        { merge: true },
+      );
+      console.log(`[TrustScore] User ${uid} adjusted by ${delta > 0 ? "+" : ""}${delta} (${reason}) -> New score: ${newScore}`);
+    } catch (err) {
+      console.warn("[UserService] Failed to adjust trustScore in Firestore:", err);
+    }
+  }
+
+  return newScore;
 }

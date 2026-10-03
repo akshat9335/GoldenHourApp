@@ -26,31 +26,46 @@ export default function NearbyIncident() {
   const confirmIncident = useAppStore((s) => s.confirmIncident);
 
   useEffect(() => {
-    if (!emergencyId) return;
-
     let mounted = true;
-    api.emergencies
-      .getById(emergencyId)
-      .then((emg) => {
-        if (mounted && emg) {
-          setIncidentData(emg);
-          if (typeof emg.confirmationCount === 'number') {
-            setConfirmationCount(emg.confirmationCount);
-          }
-        }
-      })
-      .catch(() => {
-        // Fallback for isolated demo mode
-      });
 
-    api.confirmations
-      .getMyStatus(emergencyId)
-      .then((res: any) => {
-        if (mounted && (res?.confirmed || res?.hasConfirmed)) {
-          setHasConfirmedIncident(true);
+    const loadIncident = async () => {
+      let targetId = emergencyId;
+      if (!targetId) {
+        const storeLoc = useAppStore.getState().lastKnownLocation;
+        if (storeLoc) {
+          try {
+            const list: any = await api.location.getNearbyIncidents(storeLoc.latitude, storeLoc.longitude, 15);
+            if (list && list.length > 0) {
+              targetId = list[0].incidentId;
+            }
+          } catch {}
         }
-      })
-      .catch(() => {});
+      }
+      if (!targetId) return;
+
+      api.emergencies
+        .getById(targetId)
+        .then((emg) => {
+          if (mounted && emg) {
+            setIncidentData(emg);
+            if (typeof emg.confirmationCount === 'number') {
+              setConfirmationCount(emg.confirmationCount);
+            }
+          }
+        })
+        .catch(() => {});
+
+      api.confirmations
+        .getMyStatus(targetId)
+        .then((res: any) => {
+          if (mounted && (res?.confirmed || res?.hasConfirmed)) {
+            setHasConfirmedIncident(true);
+          }
+        })
+        .catch(() => {});
+    };
+
+    loadIncident();
 
     return () => {
       mounted = false;
@@ -61,8 +76,8 @@ export default function NearbyIncident() {
     try {
       const storeLoc = useAppStore.getState().lastKnownLocation;
       await api.confirmations.confirm(activeId, {
-        latitude: incidentData?.location?.latitude || storeLoc?.latitude || 12.9352,
-        longitude: incidentData?.location?.longitude || storeLoc?.longitude || 77.6146,
+        latitude: incidentData?.location?.latitude || storeLoc?.latitude || 25.4358,
+        longitude: incidentData?.location?.longitude || storeLoc?.longitude || 81.8463,
       });
       confirmIncident();
       setConfirmationCount((c) => c + 1);
@@ -80,8 +95,8 @@ export default function NearbyIncident() {
   const incidentType = incidentData?.incidentType || 'ACCIDENT';
   const description = incidentData?.description || 'Not provided';
   const hasPhoto = !!incidentData?.imageUrl;
-  const targetLat = incidentData?.location?.latitude || 12.9352;
-  const targetLng = incidentData?.location?.longitude || 77.6146;
+  const targetLat = incidentData?.location?.latitude || 25.4358;
+  const targetLng = incidentData?.location?.longitude || 81.8463;
 
   return (
     <Screen>

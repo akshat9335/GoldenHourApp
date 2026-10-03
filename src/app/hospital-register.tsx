@@ -5,6 +5,7 @@ import { colors } from '@/constants/theme';
 import { Screen, TopBar, Button, Input, InputGroup, Banner, Icon, Chip, Card } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { authService } from '@/services/auth';
+import { acquireFreshLocation } from '@/services/deviceLocation';
 
 const HOSPITAL_TYPES = [
   'Multi-Specialty Hospital',
@@ -75,11 +76,12 @@ export default function HospitalRegister() {
   const executeRegistration = async (targetEmail: string) => {
     const parsedTotalBeds = parseInt(totalBeds, 10) || 30;
     const parsedIcuBeds = parseInt(icuBeds, 10) || 6;
+    const currentLoc = await acquireFreshLocation(2500);
 
     await authService.register({
       role: 'HOSPITAL',
       hospitalName: name.trim(),
-      name: name.trim(),
+      name: userProfile?.name || googleAccount?.name || name.trim(),
       email: targetEmail,
       phone: phone.trim() || undefined,
       hospitalRegNumber: regNo.trim(),
@@ -92,6 +94,9 @@ export default function HospitalRegister() {
       availableBeds: parsedTotalBeds,
       icuBeds: parsedIcuBeds,
       availableIcuBeds: parsedIcuBeds,
+      location: currentLoc,
+      latitude: currentLoc.latitude,
+      longitude: currentLoc.longitude,
     });
 
     Alert.alert(
@@ -212,7 +217,11 @@ export default function HospitalRegister() {
         <View style={{ height: 12 }} />
 
         {/* Facility Identity */}
-        <InputGroup label="Hospital Facility Name">
+        <InputGroup
+          label="Hospital Facility Name"
+          required
+          tooltip="Official registered name of the hospital, trauma center, or medical facility."
+        >
           <Input placeholder="e.g. Apollo Multi-Specialty Hospital" value={name} onChangeText={setName} />
         </InputGroup>
 
@@ -232,24 +241,43 @@ export default function HospitalRegister() {
         </ScrollView>
 
         {/* License & Contacts */}
-        <InputGroup label="Government Hospital Registration / License ID">
+        <InputGroup
+          label="Government Hospital Registration / License ID"
+          required
+          tooltip="Official Clinical Establishments Act registration number or state Directorate of Health Services license."
+        >
           <Input
             placeholder="e.g. HOSP-REG-2026-092"
             value={regNo}
             onChangeText={setRegNo}
+            autoCapitalize="characters"
           />
         </InputGroup>
 
-        <InputGroup label="Emergency Desk Phone Number">
+        <InputGroup
+          label="Emergency Desk Phone Number"
+          required
+          tooltip="Direct 24/7 telephone hotline for inbound trauma ambulance coordination."
+        >
           <Input
-            placeholder="+91 11 2345 6789"
+            placeholder="e.g. +91 11 2345 6789"
             keyboardType="phone-pad"
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(v) => {
+              let clean = v;
+              if (clean && !clean.startsWith('+91') && !clean.startsWith('+')) {
+                clean = '+91 ' + clean;
+              }
+              setPhone(clean);
+            }}
           />
         </InputGroup>
 
-        <InputGroup label="Hospital Administrator Email">
+        <InputGroup
+          label="Hospital Administrator Email"
+          required
+          tooltip="Official administrative email for credential validation and emergency alert summaries."
+        >
           <Input
             placeholder="emergency@hospital.com"
             keyboardType="email-address"
@@ -259,7 +287,11 @@ export default function HospitalRegister() {
           />
         </InputGroup>
 
-        <InputGroup label="Full Hospital Facility Address">
+        <InputGroup
+          label="Full Hospital Facility Address"
+          required
+          tooltip="Exact physical address and landmark where responding ambulances navigate for triage handover."
+        >
           <Input
             placeholder="Complete street address, sector/area, city, pin code"
             value={address}
@@ -272,7 +304,11 @@ export default function HospitalRegister() {
         <Text style={styles.sectionLabel}>Emergency Bed Capacity Setup</Text>
         <View style={styles.bedRow}>
           <View style={{ flex: 1, marginRight: 8 }}>
-            <InputGroup label="Total General Beds">
+            <InputGroup
+              label="Total General Beds"
+              required
+              tooltip="Total available general emergency in-patient beds at this facility."
+            >
               <Input
                 placeholder="30"
                 keyboardType="numeric"
@@ -282,7 +318,11 @@ export default function HospitalRegister() {
             </InputGroup>
           </View>
           <View style={{ flex: 1, marginLeft: 8 }}>
-            <InputGroup label="Total ICU Beds">
+            <InputGroup
+              label="Total ICU Beds"
+              required
+              tooltip="Total available Intensive Care Unit (ICU) beds equipped with ventilators."
+            >
               <Input
                 placeholder="6"
                 keyboardType="numeric"

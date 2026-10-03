@@ -1,279 +1,232 @@
 import { Request, Response, NextFunction } from "express";
-import { dataStore } from "../models/dataStore";
-import { firestore } from "../config/firebase";
-import { CommunityPatient, CommunityVisit, CommunityReferral } from "../models/worker.model";
+import {
+  registerCommunityPatient,
+  deleteCommunityPatient,
+  getWorkerPatients,
+  getPatientById,
+  recordCommunityVisit,
+  createCommunityReferral,
+  getWorkerReferrals,
+  syncOfflineBatch,
+  getWorkerStats,
+} from "../services/worker/worker.service";
 import { AppError } from "../utils/AppError";
 
-const COMMUNITY_PATIENTS_COLLECTION = "communityPatients";
-const COMMUNITY_VISITS_COLLECTION = "communityVisits";
-const COMMUNITY_REFERRALS_COLLECTION = "communityReferrals";
+export class WorkerController {
+  public static async registerPatient(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = (req as any).user?.uid || req.body.workerUid || "asha-worker-prayagraj";
+      const { id, crisisId, name, age, gender, phone, villageOrArea, bloodGroup, knownConditions, isPregnant, expectedDeliveryDate } = req.body;
 
-// ============================================================
-// COMMUNITY PATIENTS
-// ============================================================
-
-export async function getCommunityPatientsController(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const workerUid = req.user?.uid || (req.query.workerUid as string) || "asha-worker-local";
-
-    let patients: CommunityPatient[] = [];
-
-    if (firestore) {
-      const snap = await firestore
-        .collection(COMMUNITY_PATIENTS_COLLECTION)
-        .where("workerUid", "==", workerUid)
-        .get();
-      patients = snap.docs.map((doc) => doc.data() as CommunityPatient);
-    }
-
-    // Include/fallback to in-memory store
-    const localPatients = Array.from(dataStore.communityPatients.values()).filter(
-      (p) => !workerUid || p.workerUid === workerUid || p.workerUid === "asha-worker-local"
-    );
-
-    const mergedMap = new Map<string, CommunityPatient>();
-    patients.forEach((p) => mergedMap.set(p.id, p));
-    localPatients.forEach((p) => mergedMap.set(p.id, p));
-
-    res.status(200).json({
-      success: true,
-      data: Array.from(mergedMap.values()),
-      message: "Community patients retrieved successfully",
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function saveCommunityPatientController(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const patientData = req.body as CommunityPatient;
-    if (!patientData.id || !patientData.name) {
-      throw new AppError(400, "INVALID_DATA", "Patient ID and Name are required.");
-    }
-
-    const patient: CommunityPatient = {
-      ...patientData,
-      workerUid: patientData.workerUid || req.user?.uid || "asha-worker-local",
-      createdAt: patientData.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Store in-memory
-    dataStore.communityPatients.set(patient.id, patient);
-
-    // Store in Firestore if available
-    if (firestore) {
-      await firestore.collection(COMMUNITY_PATIENTS_COLLECTION).doc(patient.id).set(patient, { merge: true });
-    }
-
-    res.status(201).json({
-      success: true,
-      data: patient,
-      message: "Community patient saved successfully",
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-export async function getCommunityPatientByIdController(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const { id } = req.params;
-    let patient = dataStore.communityPatients.get(id);
-
-    if (!patient && firestore) {
-      const snap = await firestore.collection(COMMUNITY_PATIENTS_COLLECTION).doc(id).get();
-      if (snap.exists) {
-        patient = snap.data() as CommunityPatient;
+      if (!name) {
+        throw new AppError(400, "MISSING_REQUIRED_FIELD", "Patient name is required");
       }
-    }
 
-    if (!patient) {
-      throw new AppError(404, "PATIENT_NOT_FOUND", "Community patient not found");
-    }
+      const patient = await registerCommunityPatient(workerUid, {
+        id,
+        crisisId,
+        name,
+        age: Number(age) || 0,
+        gender: gender || "FEMALE",
+        phone: phone || "",
+        villageOrArea: (villageOrArea !== undefined && villageOrArea !== null) ? String(villageOrArea).trim() : "",
+        workerName: req.body.workerName || "Sunita Verma (ASHA Sangini)",
+        bloodGroup,
+        knownConditions: knownConditions || [],
+        isPregnant: !!isPregnant,
+        expectedDeliveryDate,
+      });
 
-    res.status(200).json({
-      success: true,
-      data: patient,
-      message: "Patient details retrieved successfully",
-    });
-  } catch (error) {
-    next(error);
+      res.status(201).json({
+        success: true,
+        message: "Community patient registered successfully",
+        data: patient,
+      });
+    } catch (err) {
+      next(err);
+    }
   }
-}
 
-// ============================================================
-// COMMUNITY VISITS
-// ============================================================
-
-export async function getCommunityVisitsController(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const patientId = req.query.patientId as string | undefined;
-    let visits: CommunityVisit[] = [];
-
-    if (firestore) {
-      let query: any = firestore.collection(COMMUNITY_VISITS_COLLECTION);
-      if (patientId) {
-        query = query.where("patientId", "==", patientId);
+  public static async deletePatient(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = ((req as any).user?.uid || req.query.workerUid || "asha-worker-prayagraj") as string;
+      const { id } = req.params;
+      if (!id) {
+        throw new AppError(400, "MISSING_PATIENT_ID", "Patient id is required");
       }
-      const snap = await query.get();
-      visits = snap.docs.map((doc: any) => doc.data() as CommunityVisit);
+      await deleteCommunityPatient(workerUid, id);
+      res.status(200).json({
+        success: true,
+        message: "Community patient removed successfully",
+        data: { id },
+      });
+    } catch (err) {
+      next(err);
     }
-
-    const localVisits = Array.from(dataStore.communityVisits.values()).filter(
-      (v) => !patientId || v.patientId === patientId
-    );
-
-    const merged = new Map<string, CommunityVisit>();
-    visits.forEach((v) => merged.set(v.id, v));
-    localVisits.forEach((v) => merged.set(v.id, v));
-
-    res.status(200).json({
-      success: true,
-      data: Array.from(merged.values()),
-      message: "Community visits retrieved successfully",
-    });
-  } catch (error) {
-    next(error);
   }
-}
 
-export async function recordCommunityVisitController(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const visitData = req.body as CommunityVisit;
-    if (!visitData.id || !visitData.patientId) {
-      throw new AppError(400, "INVALID_DATA", "Visit ID and Patient ID are required.");
+  public static async getPatients(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = ((req as any).user?.uid || req.query.workerUid || "asha-worker-prayagraj") as string;
+      const patients = await getWorkerPatients(workerUid);
+
+      res.status(200).json({
+        success: true,
+        data: patients,
+      });
+    } catch (err) {
+      next(err);
     }
-
-    const visit: CommunityVisit = {
-      ...visitData,
-      workerUid: visitData.workerUid || req.user?.uid || "asha-worker-local",
-      createdAt: visitData.createdAt || new Date().toISOString(),
-      visitDate: visitData.visitDate || new Date().toISOString(),
-    };
-
-    // Store in-memory
-    dataStore.communityVisits.set(visit.id, visit);
-
-    // Update patient's lastVisitDate in memory
-    const existingPatient = dataStore.communityPatients.get(visit.patientId);
-    if (existingPatient) {
-      existingPatient.lastVisitDate = visit.visitDate;
-      if (visit.followUpRequired) {
-        existingPatient.followUpRequired = true;
-        existingPatient.followUpDate = visit.followUpDate;
-      }
-      dataStore.communityPatients.set(existingPatient.id, existingPatient);
-    }
-
-    if (firestore) {
-      await firestore.collection(COMMUNITY_VISITS_COLLECTION).doc(visit.id).set(visit, { merge: true });
-      if (existingPatient) {
-        await firestore.collection(COMMUNITY_PATIENTS_COLLECTION).doc(existingPatient.id).set(existingPatient, { merge: true });
-      }
-    }
-
-    res.status(201).json({
-      success: true,
-      data: visit,
-      message: "Community visit recorded successfully",
-    });
-  } catch (error) {
-    next(error);
   }
-}
 
-// ============================================================
-// COMMUNITY REFERRALS
-// ============================================================
+  public static async getPatientDetail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const detail = await getPatientById(id);
 
-export async function getCommunityReferralsController(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const patientId = req.query.patientId as string | undefined;
-    let referrals: CommunityReferral[] = [];
-
-    if (firestore) {
-      let query: any = firestore.collection(COMMUNITY_REFERRALS_COLLECTION);
-      if (patientId) {
-        query = query.where("patientId", "==", patientId);
+      if (!detail) {
+        throw new AppError(404, "PATIENT_NOT_FOUND", "Patient not found");
       }
-      const snap = await query.get();
-      referrals = snap.docs.map((doc: any) => doc.data() as CommunityReferral);
+
+      res.status(200).json({
+        success: true,
+        data: detail,
+      });
+    } catch (err) {
+      next(err);
     }
-
-    const localReferrals = Array.from(dataStore.communityReferrals.values()).filter(
-      (r) => !patientId || r.patientId === patientId
-    );
-
-    const merged = new Map<string, CommunityReferral>();
-    referrals.forEach((r) => merged.set(r.id, r));
-    localReferrals.forEach((r) => merged.set(r.id, r));
-
-    res.status(200).json({
-      success: true,
-      data: Array.from(merged.values()),
-      message: "Community referrals retrieved successfully",
-    });
-  } catch (error) {
-    next(error);
   }
-}
 
-export async function createCommunityReferralController(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  try {
-    const referralData = req.body as CommunityReferral;
-    if (!referralData.id || !referralData.patientId || !referralData.facilityId) {
-      throw new AppError(400, "INVALID_DATA", "Referral ID, Patient ID, and Facility ID are required.");
+  public static async recordVisit(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = (req as any).user?.uid || req.body.workerUid || "asha-worker-prayagraj";
+      const {
+        patientId,
+        patientName,
+        vitals,
+        symptoms,
+        aiTriageSeverity,
+        aiGuidanceInHindi,
+        referredToHospitalId,
+        visitDate,
+        syncedFromOffline,
+      } = req.body;
+
+      if (!patientId || !patientName) {
+        throw new AppError(400, "MISSING_REQUIRED_FIELDS", "patientId and patientName are required");
+      }
+
+      const visit = await recordCommunityVisit(workerUid, {
+        patientId,
+        patientName,
+        vitals: vitals || {},
+        symptoms: symptoms || "",
+        aiTriageSeverity: aiTriageSeverity || "NORMAL",
+        aiGuidanceInHindi: aiGuidanceInHindi || "",
+        referredToHospitalId: referredToHospitalId || null,
+        visitDate: visitDate || new Date().toISOString(),
+        syncedFromOffline: !!syncedFromOffline,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Home visit recorded successfully",
+        data: visit,
+      });
+    } catch (err) {
+      next(err);
     }
+  }
 
-    const referral: CommunityReferral = {
-      ...referralData,
-      workerUid: referralData.workerUid || req.user?.uid || "asha-worker-local",
-      status: referralData.status || "PENDING",
-      createdAt: referralData.createdAt || new Date().toISOString(),
-    };
+  public static async createReferral(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = (req as any).user?.uid || req.body.workerUid || "asha-worker-prayagraj";
+      const {
+        id,
+        referralCode,
+        patientId,
+        patientName,
+        patientAge,
+        patientGender,
+        workerName,
+        destinationFacility,
+        hospitalId,
+        priority,
+        reason,
+        vitalsSnapshot,
+      } = req.body;
 
-    dataStore.communityReferrals.set(referral.id, referral);
+      if (!patientId || !destinationFacility) {
+        throw new AppError(400, "MISSING_REQUIRED_FIELDS", "patientId and destinationFacility are required");
+      }
 
-    if (firestore) {
-      await firestore.collection(COMMUNITY_REFERRALS_COLLECTION).doc(referral.id).set(referral, { merge: true });
+      const referral = await createCommunityReferral(workerUid, {
+        id,
+        referralCode,
+        patientId,
+        patientName: patientName || "Community Patient",
+        patientAge: Number(patientAge) || 0,
+        patientGender: patientGender || "FEMALE",
+        workerName: workerName || "Sunita Verma (ASHA Sangini)",
+        destinationFacility,
+        hospitalId: hospitalId || undefined,
+        priority: priority || "HIGH",
+        reason: reason || "Emergency referral from rural sub-center",
+        vitalsSnapshot,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Frontline digital referral transmitted successfully",
+        data: referral,
+      });
+    } catch (err) {
+      next(err);
     }
+  }
 
-    res.status(201).json({
-      success: true,
-      data: referral,
-      message: "Community referral created successfully",
-    });
-  } catch (error) {
-    next(error);
+  public static async getReferrals(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = ((req as any).user?.uid || req.query.workerUid || "asha-worker-prayagraj") as string;
+      const referrals = await getWorkerReferrals(workerUid);
+
+      res.status(200).json({
+        success: true,
+        data: referrals,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public static async syncBatch(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = (req as any).user?.uid || req.body.workerUid || "asha-worker-prayagraj";
+      const visits = Array.isArray(req.body.visits) ? req.body.visits : [];
+
+      const result = await syncOfflineBatch(workerUid, visits);
+
+      res.status(200).json({
+        success: true,
+        message: `Offline batch sync complete (${result.synced} synced, ${result.failed} failed)`,
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  public static async getStats(req: Request, res: Response, next: NextFunction) {
+    try {
+      const workerUid = ((req as any).user?.uid || req.query.workerUid || "asha-worker-prayagraj") as string;
+      const stats = await getWorkerStats(workerUid);
+
+      res.status(200).json({
+        success: true,
+        data: stats,
+      });
+    } catch (err) {
+      next(err);
+    }
   }
 }

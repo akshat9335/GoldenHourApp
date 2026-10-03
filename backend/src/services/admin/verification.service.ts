@@ -280,6 +280,73 @@ export class VerificationService {
       }
     }
 
+    // 4. Frontline Workers (ASHA / ANM)
+    if (!targetRole || targetRole === "FRONTLINE_WORKER") {
+      if (firestore) {
+        try {
+          const snapshot = await firestore.collection("workers").get();
+          for (const docSnap of snapshot.docs) {
+            const data = docSnap.data() as any;
+            if (!data) continue;
+
+            const rawStatus = (data.verificationStatus || "PENDING").toUpperCase();
+            const canonicalStatus: VerificationStatus =
+              rawStatus === "VERIFIED" || rawStatus === "APPROVED"
+                ? "APPROVED"
+                : rawStatus === "REJECTED"
+                ? "REJECTED"
+                : "PENDING";
+
+            if (targetStatus && canonicalStatus !== targetStatus) {
+              continue;
+            }
+
+            const ownerUid = data.uid || data.userId || docSnap.id;
+            let user = dataStore.users.get(ownerUid);
+            if (!user && ownerUid && firestore) {
+              try {
+                const userSnap = await firestore.collection("users").doc(ownerUid).get();
+                if (userSnap.exists) {
+                  user = userSnap.data() as any;
+                  if (user) dataStore.users.set(ownerUid, user);
+                }
+              } catch {}
+            }
+
+            let submittedAtIso = new Date().toISOString();
+            if (data.createdAt) {
+              if (typeof data.createdAt.toDate === "function") {
+                submittedAtIso = data.createdAt.toDate().toISOString();
+              } else if (typeof data.createdAt === "string") {
+                submittedAtIso = data.createdAt;
+              }
+            }
+
+            results.push({
+              id: docSnap.id,
+              userId: ownerUid,
+              role: "FRONTLINE_WORKER",
+              name: data.name || "ASHA / ANM Worker",
+              email: data.email || user?.email || null,
+              phone: data.phone || user?.phone || null,
+              crisisId: user?.crisisId || null,
+              verificationStatus: canonicalStatus,
+              submittedAt: submittedAtIso,
+              details: {
+                workerType: data.workerType || "ASHA",
+                assignedPhc: data.assignedPhc || "Prayagraj Rural PHC",
+                village: data.village || "Soraon",
+                regNumber: data.regNumber || null,
+                phone: data.phone || null,
+              },
+            });
+          }
+        } catch (err) {
+          console.warn("[VerificationService] Firestore workers hydration failed:", err);
+        }
+      }
+    }
+
     // Sort newest first
     results.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
     return results;
@@ -513,6 +580,83 @@ export class VerificationService {
           ambulanceType: driverData.ambulanceType || "Basic Life Support (BLS)",
           hospitalId: driverData.hospitalId || null,
           hospitalName: driverData.hospitalName || "Independent Fleet",
+          adminNotes: notes || null,
+        },
+      };
+    }
+
+    if (role === "FRONTLINE_WORKER") {
+      if (!firestore) {
+        throw new AppError(500, "FIREBASE_NOT_CONFIGURED", "Firebase is not configured.");
+      }
+
+      const workerRef = firestore.collection("workers").doc(id);
+      const workerSnap = await workerRef.get();
+      if (!workerSnap.exists) {
+        throw new AppError(404, "WORKER_NOT_FOUND", `Worker with ID ${id} not found.`);
+      }
+
+      const workerData = workerSnap.data() as any;
+      const ownerUid = workerData.uid || workerData.userId || id;
+      const now = new Date();
+
+      await workerRef.update({
+        verificationStatus: decision,
+        adminNotes: notes || null,
+        reviewedAt: now.toISOString(),
+      });
+
+      // Update user doc roleVerificationStatus
+      try {
+        const userRef = firestore.collection("users").doc(ownerUid);
+        const userSnap = await userRef.get();
+        if (userSnap.exists) {
+          const userData = userSnap.data() as any;
+          const existingRoles: string[] = userData.roles && userData.roles.length > 0
+            ? userData.roles
+            : [userData.role || "PATIENT"];
+          const combinedRoles = Array.from(new Set([...existingRoles, "FRONTLINE_WORKER"]));
+          const roleVerification = {
+            ...(userData.roleVerificationStatus || {}),
+            FRONTLINE_WORKER: decision,
+          };
+
+          const updates: any = {
+            roles: combinedRoles,
+            roleVerificationStatus: roleVerification,
+            updatedAt: now.toISOString(),
+          };
+
+          if (decision === "APPROVED" && userData.role !== "ADMIN") {
+            updates.role = "FRONTLINE_WORKER";
+            updates.verificationStatus = "APPROVED";
+          } else if (decision === "REJECTED" && userData.role === "FRONTLINE_WORKER") {
+            updates.verificationStatus = "REJECTED";
+          }
+
+          await userRef.set(updates, { merge: true });
+          const user = { ...userData, ...updates };
+          dataStore.users.set(ownerUid, user);
+        }
+      } catch (err) {
+        console.warn("[VerificationService] Failed to sync worker owner user profile:", err);
+      }
+
+      return {
+        id,
+        userId: ownerUid,
+        role: "FRONTLINE_WORKER",
+        name: workerData.name || "ASHA / ANM Worker",
+        email: workerData.email || null,
+        phone: workerData.phone || null,
+        crisisId: null,
+        verificationStatus: decision,
+        submittedAt: workerData.createdAt || now.toISOString(),
+        details: {
+          workerType: workerData.workerType || "ASHA",
+          assignedPhc: workerData.assignedPhc || null,
+          village: workerData.village || null,
+          regNumber: workerData.regNumber || null,
           adminNotes: notes || null,
         },
       };

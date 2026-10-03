@@ -40,12 +40,18 @@ interface AppState {
 
   aiSeverity: Severity;
   setAiSeverity: (s: Severity) => void;
+  userEstimatedSeverity: string;
+  setUserEstimatedSeverity: (s: string) => void;
+  aiAssessedSeverity: string | null;
+  setAiAssessedSeverity: (s: string | null) => void;
 
   ambStatus: number; // index into AMB_STEPS
   setAmbStatus: (n: number | ((prev: number) => number)) => void;
 
   selectedHospital: string;
   setSelectedHospital: (h: string) => void;
+  candidateHospitals: any[];
+  setCandidateHospitals: (h: any[]) => void;
 
   // --- Consult Doctor (patient side) ---
   selectedSpecialty: string;
@@ -53,9 +59,14 @@ interface AppState {
 
   selectedDoctorId: string;
   setSelectedDoctorId: (id: string) => void;
+  selectedDoctor: any | null;
+  setSelectedDoctor: (d: any) => void;
 
   userToken: number | null; // token the patient has taken, null if none
   setUserToken: (n: number | null) => void;
+  bookedAppointments: any[];
+  addBookedAppointment: (apt: any) => void;
+  setBookedAppointments: (apts: any[]) => void;
 
   // --- Doctor role (shared demo queue, mocked) ---
   servingToken: number; // token currently being served at the demo clinic
@@ -157,6 +168,10 @@ export const useAppStore = create<AppState>((set) => ({
 
   aiSeverity: 'medium',
   setAiSeverity: (s) => set({ aiSeverity: s }),
+  userEstimatedSeverity: 'Moderate',
+  setUserEstimatedSeverity: (s) => set({ userEstimatedSeverity: s }),
+  aiAssessedSeverity: null,
+  setAiAssessedSeverity: (s) => set({ aiAssessedSeverity: s }),
 
   ambStatus: 0,
   setAmbStatus: (n) =>
@@ -164,6 +179,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   selectedHospital: '',
   setSelectedHospital: (h) => set({ selectedHospital: h }),
+  candidateHospitals: [],
+  setCandidateHospitals: (h) => set({ candidateHospitals: h }),
 
   resetEmergencySession: () =>
     set({
@@ -176,9 +193,12 @@ export const useAppStore = create<AppState>((set) => ({
       aiTriageResult: null,
       aiImageResult: null,
       aiSeverity: 'medium',
+      userEstimatedSeverity: 'Moderate',
+      aiAssessedSeverity: null,
       ambStatus: 0,
       activeTripId: null,
       activeHospitalRequestId: null,
+      candidateHospitals: [],
     }),
 
   selectedSpecialty: 'All',
@@ -186,11 +206,25 @@ export const useAppStore = create<AppState>((set) => ({
 
   selectedDoctorId: 'doc-1',
   setSelectedDoctorId: (id) => set({ selectedDoctorId: id }),
+  selectedDoctor: null,
+  setSelectedDoctor: (d) => set({ selectedDoctor: d }),
 
   userToken: null,
   setUserToken: (n) => set({ userToken: n }),
 
-  servingToken: 14,
+  bookedAppointments: [],
+  addBookedAppointment: (apt) =>
+    set((state) => ({
+      bookedAppointments: [
+        apt,
+        ...state.bookedAppointments.filter(
+          (a) => (a.appointmentId || a.id) !== (apt.appointmentId || apt.id)
+        ),
+      ],
+    })),
+  setBookedAppointments: (apts) => set({ bookedAppointments: apts }),
+
+  servingToken: 0,
   advanceServingToken: () => set((state) => ({ servingToken: state.servingToken + 1 })),
 
   queueStatus: 'running',

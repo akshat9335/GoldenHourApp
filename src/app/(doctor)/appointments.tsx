@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Chip, DoctorNav, Button } from '@/components/ui';
-import { APPOINTMENTS } from '@/constants/doctorData';
+import { useAppStore } from '@/store/useAppStore';
+import { api } from '@/services/api';
 
-const TABS = ['Today', 'Upcoming', 'Completed', 'Cancelled'] as const;
+const TABS = ['Today Queue', 'Upcoming', 'Completed', 'Cancelled'] as const;
 
 const tabColor: Record<string, 'blue' | 'success' | 'grey'> = {
   upcoming: 'blue',
@@ -14,11 +15,64 @@ const tabColor: Record<string, 'blue' | 'success' | 'grey'> = {
 };
 
 export default function DoctorAppointments() {
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Today');
+  const [tab, setTab] = useState<(typeof TABS)[number]>('Today Queue');
+  const userProfile = useAppStore((s) => s.userProfile);
+  const [appointmentsList, setAppointmentsList] = useState<any[]>([]);
 
-  const list = APPOINTMENTS.filter((a) => {
-    if (tab === 'Today') return a.date === 'Today';
-    if (tab === 'Upcoming') return a.status === 'upcoming';
+  React.useEffect(() => {
+    let mounted = true;
+
+    const loadAppts = (resolvedDocId: string) => {
+      api.appointments
+        .getDoctorAppointments({ doctorId: resolvedDocId })
+        .then((data: any) => {
+          if (mounted && Array.isArray(data)) {
+            const todayIso = new Date().toISOString().split('T')[0];
+            const mapped = data.map((a: any) => {
+              const rawStatus = (a.status || 'CONFIRMED').toUpperCase();
+              const normalizedStatus: 'upcoming' | 'completed' | 'cancelled' =
+                rawStatus === 'COMPLETED'
+                  ? 'completed'
+                  : rawStatus === 'CANCELLED' || rawStatus === 'NO_SHOW'
+                  ? 'cancelled'
+                  : 'upcoming';
+
+              return {
+                id: a.appointmentId || a.id,
+                doctorId: a.doctorId,
+                patientName: a.patientName || 'Patient',
+                date: a.date === todayIso ? 'Today' : a.date,
+                time: a.timeSlot || '10:00 AM',
+                token: a.tokenNumber || 1,
+                status: normalizedStatus,
+              };
+            });
+            setAppointmentsList(mapped);
+          }
+        })
+        .catch(() => {});
+    };
+
+    api.doctors
+      .getMyProfile()
+      .then((res: any) => {
+        const doc = (res && typeof res === 'object' && ('doctorId' in res || 'name' in res)) ? res : (res?.data || res);
+        const resolvedId = doc?.doctorId || (userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1');
+        loadAppts(resolvedId);
+      })
+      .catch(() => {
+        const resolvedId = userProfile?.uid ? `doc-${userProfile.uid}` : 'doc-1';
+        loadAppts(resolvedId);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [userProfile?.uid]);
+
+  const list = appointmentsList.filter((a) => {
+    if (tab === 'Today Queue') return a.date === 'Today' && a.status === 'upcoming';
+    if (tab === 'Upcoming') return a.status === 'upcoming' && a.date !== 'Today';
     if (tab === 'Completed') return a.status === 'completed';
     return a.status === 'cancelled';
   });
@@ -42,13 +96,21 @@ export default function DoctorAppointments() {
                 <Pill color={tabColor[a.status]}>{a.status.toUpperCase()}</Pill>
               </View>
               <Text style={styles.sub}>Token #{a.token} · {a.date}, {a.time}</Text>
-              {a.status !== 'cancelled' && (
+              {a.status === 'upcoming' && (
                 <View style={{ marginTop: 10 }}>
                   <Button
                     title="📹 Start Video Consultation"
-                    variant="success"
-                    onPress={() => router.push(`/(doctor)/teleconsultation/tc_${a.token}` as any)}
+                    variant="blue"
+                    onPress={() => {
+                      const consultId = a.appointmentId || a.id || `appt_${a.token}`;
+                      router.push(`/(doctor)/teleconsultation/${consultId}` as any);
+                    }}
                   />
+                </View>
+              )}
+              {a.status === 'completed' && (
+                <View style={{ marginTop: 8, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: colors.successBg, borderRadius: 6 }}>
+                  <Text style={{ color: colors.success, fontWeight: '600', fontSize: 13 }}>✓ Consultation Completed</Text>
                 </View>
               )}
             </Card>

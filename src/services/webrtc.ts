@@ -118,7 +118,7 @@ async function clearSignals(roomId: string) {
   const db = await getDb();
   if (!db) return;
   const snap = await new Promise<unknown[]>((resolve) => {
-    const unsub = onSnapshot(collection(db, 'rooms', roomId, 'signals'), (qs) => {
+    const unsub = onSnapshot(collection(db, 'rooms', roomId, 'signals'), (qs: any) => {
       resolve(qs.docs);
       unsub();
     });
@@ -142,8 +142,8 @@ export function subscribeSignals(roomId: string, cb: (sigs: SignalPayload[]) => 
   let unsub = () => {};
   dbPromise.then((db) => {
     if (!db) return;
-    unsub = onSnapshot(collection(db, 'rooms', roomId, 'signals'), (qs) =>
-      cb(qs.docs.map((d) => d.data() as SignalPayload)),
+    unsub = onSnapshot(collection(db, 'rooms', roomId, 'signals'), (qs: any) =>
+      cb(qs.docs.map((d: any) => d.data() as SignalPayload)),
     );
   });
   return () => unsub();

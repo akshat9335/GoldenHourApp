@@ -6,6 +6,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeModules, TurboModuleRegistry } from 'react-native';
 import { api, setAuthToken } from './api';
 import { useAppStore, Role, CanonicalRole, VerificationStatus } from '@/store/useAppStore';
 
@@ -16,31 +17,42 @@ const FIREBASE_API_KEY =
 const GOOGLE_WEB_CLIENT_ID =
   '10031778201-uml9ug4d9mvtmvpfaqdkugcs52rdmiig.apps.googleusercontent.com';
 
+// Safely probe for native RNGoogleSignin TurboModule/Bridge without crashing in Expo Go or non-native hosts
+function isNativeGoogleSigninAvailable(): boolean {
+  try {
+    if (TurboModuleRegistry.get('RNGoogleSignin')) return true;
+    if ((NativeModules as any)?.RNGoogleSignin) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 let GoogleSignin: any = null;
-export let statusCodes: any = {
+let statusCodes: any = {
   SIGN_IN_CANCELLED: 'SIGN_IN_CANCELLED',
   IN_PROGRESS: 'IN_PROGRESS',
   PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
 };
 
-try {
-  const gAuth = require('@react-native-google-signin/google-signin');
-  GoogleSignin = gAuth.GoogleSignin;
-  statusCodes = gAuth.statusCodes || statusCodes;
-  if (GoogleSignin && typeof GoogleSignin.configure === 'function') {
+if (isNativeGoogleSigninAvailable()) {
+  try {
+    const mod = require('@react-native-google-signin/google-signin');
+    GoogleSignin = mod.GoogleSignin;
+    statusCodes = mod.statusCodes || statusCodes;
     GoogleSignin.configure({
       webClientId: GOOGLE_WEB_CLIENT_ID,
       offlineAccess: true,
     });
+  } catch (_e) {
+    GoogleSignin = null;
   }
-} catch (e) {
-  // Expo Go does not bundle custom native TurboModules; gracefully fallback
-  console.warn('[auth] RNGoogleSignin native module unavailable (running in Expo Go / Web)');
 }
 
 const STORAGE_TOKEN_KEY = 'gh_auth_token';
 const STORAGE_REFRESH_TOKEN_KEY = 'gh_refresh_token';
 const STORAGE_UID_KEY = 'gh_user_uid';
+const STORAGE_PROFILE_KEY = 'gh_user_profile';
 
 export interface AuthSessionResult {
   uid: string;
@@ -178,6 +190,9 @@ export const authService = {
         store.setProfileExists(true);
         store.setIsDemoMode(false);
 
+        // Cache valid profile locally for zero-latency cold start
+        AsyncStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile)).catch(() => {});
+
         return {
           uid: profile.uid || explicitUid || '',
           email: profile.email || fallbackEmail,
@@ -228,14 +243,18 @@ export const authService = {
    * Prompts interactive native Google Sign-In on Android/iOS via Google Play Services.
    */
   async promptGoogleSignIn(): Promise<AuthSessionResult> {
-    if (!GoogleSignin || typeof GoogleSignin.hasPlayServices !== 'function') {
-      console.warn('[auth] Native Google Sign-In not available in Expo Go. Using guest session.');
+    if (!GoogleSignin) {
+      console.warn('[auth] Native GoogleSignin module not available in current client. Establishing seamless session.');
+      const fallbackUid = (await AsyncStorage.getItem(STORAGE_UID_KEY)) || `user-${Date.now().toString(36)}`;
+      const fallbackEmail = 'user@goldenhour.org';
+      const fallbackName = 'Golden Hour User';
+      const dummyToken = `gh-dev-token-${fallbackUid}`;
       return this.establishSession(
-        'expo-go-demo-token',
-        'expo-go-refresh-token',
-        'demo-patient-uid',
-        'user@goldenhour.org',
-        'Demo User'
+        dummyToken,
+        'dummy-refresh',
+        fallbackUid,
+        fallbackEmail,
+        fallbackName
       );
     }
 
@@ -308,17 +327,97 @@ export const authService = {
    */
   async restoreSession(): Promise<AuthSessionResult | null> {
     const store = useAppStore.getState();
-    store.setAuthLoading(true);
 
     try {
       const storedToken = await AsyncStorage.getItem(STORAGE_TOKEN_KEY);
       const storedRefreshToken = await AsyncStorage.getItem(STORAGE_REFRESH_TOKEN_KEY);
       const storedUid = await AsyncStorage.getItem(STORAGE_UID_KEY);
+      const storedProfileStr = await AsyncStorage.getItem(STORAGE_PROFILE_KEY);
 
       if (!storedToken && !storedRefreshToken) {
         store.setAuthLoading(false);
         return null;
       }
+
+      // Fast-hydrate from local cache immediately (0ms network delay)
+      let cachedSession: AuthSessionResult | null = null;
+      if (storedProfileStr) {
+        try {
+          const cachedProfile = JSON.parse(storedProfileStr);
+          const canonicalRole = (cachedProfile.role || 'PATIENT') as Role;
+          const rawRoles: string[] = cachedProfile.roles && cachedProfile.roles.length > 0
+            ? cachedProfile.roles
+            : (cachedProfile.role ? [cachedProfile.role] : ['PATIENT']);
+          const canonicalRoles = rawRoles.map((r: string) => r.toUpperCase() as Role);
+
+          store.setUserProfile(cachedProfile);
+          store.setRole(canonicalRole);
+          store.setRoles(canonicalRoles);
+          if (cachedProfile.verificationStatus) {
+            store.setVerificationStatus(cachedProfile.verificationStatus);
+          }
+          if (cachedProfile.crisisId) {
+            store.setGoldenHourId(cachedProfile.crisisId);
+          }
+          const isDemoSession = !!(
+            cachedProfile.uid?.includes('demo') ||
+            storedUid?.includes('demo') ||
+            storedToken?.startsWith('demo-token')
+          );
+          store.setIsAuthenticated(true);
+          store.setProfileExists(true);
+          store.setIsDemoMode(isDemoSession);
+
+          if (storedToken) {
+            setAuthToken(storedToken);
+            store.setAuthToken(storedToken);
+          }
+
+          cachedSession = {
+            uid: cachedProfile.uid || storedUid || '',
+            email: cachedProfile.email,
+            name: cachedProfile.patientName || cachedProfile.displayName || cachedProfile.name,
+            role: canonicalRole,
+            verificationStatus: cachedProfile.verificationStatus || 'APPROVED',
+            crisisId: cachedProfile.crisisId,
+            profileExists: true,
+            profile: cachedProfile,
+          };
+        } catch {}
+      }
+
+      // If we have cached profile and token, return immediately so splash screen exits instantly!
+      // Then revalidate profile and refresh token in background (only for real accounts).
+      if (cachedSession && storedToken) {
+        store.setAuthLoading(false);
+        if (!store.isDemoMode) {
+          (async () => {
+            try {
+              let activeToken = storedToken;
+              let activeRefreshToken = storedRefreshToken;
+              if (storedRefreshToken) {
+                try {
+                  const refreshed = await this.refreshIdToken(storedRefreshToken);
+                  activeToken = refreshed.idToken;
+                  activeRefreshToken = refreshed.refreshToken;
+                } catch {}
+              }
+              if (activeToken) {
+                await this.establishSession(
+                  activeToken,
+                  activeRefreshToken || undefined,
+                  storedUid || undefined
+                );
+              }
+            } catch (e) {
+              console.warn('[auth] Background session revalidation delayed:', e);
+            }
+          })();
+        }
+        return cachedSession;
+      }
+
+      store.setAuthLoading(true);
 
       // If refresh token exists, fetch fresh token
       let activeToken = storedToken;
@@ -369,6 +468,7 @@ export const authService = {
       if (profile.crisisId) store.setGoldenHourId(profile.crisisId);
       store.setProfileExists(true);
       store.setIsAuthenticated(true);
+      AsyncStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile)).catch(() => {});
     }
 
     return profile;
@@ -379,7 +479,7 @@ export const authService = {
    */
   async syncProfile(): Promise<any> {
     const store = useAppStore.getState();
-    if (!store.authToken) return null;
+    if (!store.authToken || store.isDemoMode) return null;
 
     try {
       const res: any = await api.users.getProfile();
@@ -391,45 +491,13 @@ export const authService = {
         if (profile.crisisId) store.setGoldenHourId(profile.crisisId);
         if (profile.trustScore !== undefined) store.setTrustScore(profile.trustScore);
         store.setProfileExists(true);
+        AsyncStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(profile)).catch(() => {});
         return profile;
       }
     } catch (err) {
       console.warn('[auth] Failed to sync profile:', err);
     }
     return null;
-  },
-
-  /**
-   * Sets mock development session for Expo Go testing.
-   */
-  setMockSession(mockUser: {
-    userId: string;
-    email: string;
-    name: string;
-    role: string;
-    profileExists?: boolean;
-    verificationStatus?: string;
-  }) {
-    const store = useAppStore.getState();
-    const mockToken = `demo-${mockUser.userId}-${Date.now()}`;
-    setAuthToken(mockToken);
-    store.setAuthToken(mockToken);
-    store.setIsAuthenticated(true);
-    store.setProfileExists(mockUser.profileExists ?? true);
-    store.setRole(mockUser.role as Role);
-    store.setRoles([mockUser.role as Role]);
-    store.setVerificationStatus(mockUser.verificationStatus ?? 'VERIFIED');
-    store.setUserProfile({
-      uid: mockUser.userId,
-      email: mockUser.email,
-      name: mockUser.name,
-      role: mockUser.role,
-      roles: [mockUser.role],
-      verificationStatus: mockUser.verificationStatus ?? 'VERIFIED',
-      roleVerificationStatus: {
-        [mockUser.role]: mockUser.verificationStatus ?? 'VERIFIED',
-      },
-    } as any);
   },
 
   /**
@@ -442,20 +510,31 @@ export const authService = {
         STORAGE_TOKEN_KEY,
         STORAGE_REFRESH_TOKEN_KEY,
         STORAGE_UID_KEY,
+        STORAGE_PROFILE_KEY,
       ]);
     } catch {}
 
-    try {
-      await GoogleSignin.signOut();
-    } catch {}
+    if (GoogleSignin) {
+      try {
+        await GoogleSignin.signOut();
+      } catch {}
+    }
 
     setAuthToken(null);
     store.setAuthToken(null);
     store.setUserProfile(null);
     store.setIsAuthenticated(false);
     store.setProfileExists(false);
+    store.setIsDemoMode(false);
     store.setVerificationStatus(null);
     store.setRole('PATIENT');
     store.setRoles(['PATIENT']);
+  },
+
+  /**
+   * Alias for logout.
+   */
+  async signOut(): Promise<void> {
+    return this.logout();
   },
 };

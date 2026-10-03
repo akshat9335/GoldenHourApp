@@ -197,7 +197,7 @@ export function InteractiveMap({
     if (hasUser) return userLat!;
     if (hasAmb) return ambulanceLat!;
     if (hasDest) return destLat!;
-    return lastKnown?.latitude ?? 12.9352;
+    return lastKnown?.latitude ?? 25.4358;
   }, [hasAmb, hasUser, hasDest, ambulanceLat, userLat, destLat, lastKnown?.latitude]);
 
   const centerLng = useMemo(() => {
@@ -206,7 +206,7 @@ export function InteractiveMap({
     if (hasUser) return userLng!;
     if (hasAmb) return ambulanceLng!;
     if (hasDest) return destLng!;
-    return lastKnown?.longitude ?? 77.6146;
+    return lastKnown?.longitude ?? 81.8463;
   }, [hasAmb, hasUser, hasDest, ambulanceLng, userLng, destLng, lastKnown?.longitude]);
 
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);

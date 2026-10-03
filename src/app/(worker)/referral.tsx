@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,10 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ActivityIndicator,
+  Modal,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
@@ -16,43 +18,91 @@ import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { enqueueOfflineAction } from '@/services/offlineSync';
+import { api, getApiBaseUrl } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const REFERRALS_KEY = '@golden_hour_community_referrals';
 
 type ReferralPriority = 'NORMAL' | 'MODERATE' | 'HIGH' | 'CRITICAL';
 
-interface FacilityOption {
+interface FacilityItem {
   id: string;
   name: string;
-  type: 'PHC' | 'DISTRICT_HOSPITAL' | 'TERTIARY_HOSPITAL' | 'CLINIC';
-  address: string;
+  type: string;
+  availableBeds?: number;
 }
 
-const DEFAULT_FACILITIES: FacilityOption[] = [
-  { id: 'hosp-phc-rampur', name: 'Rampur Primary Health Centre (PHC)', type: 'PHC', address: 'Rampur Sub-Center, Block 2' },
-  { id: 'hosp-dist-civic', name: 'District Civil Hospital & Emergency', type: 'DISTRICT_HOSPITAL', address: 'Civil Lines, District HQ' },
-  { id: 'hosp-apollo-cr', name: 'Apollo Emergency & Trauma Care Clinic', type: 'CLINIC', address: 'Plot 14, Sector 18, Connaught Place' },
-  { id: 'hosp-max-south', name: 'Max Care Orthopedic & Trauma Center', type: 'TERTIARY_HOSPITAL', address: '22 Saket Institutional Area' },
+const FALLBACK_FACILITIES: FacilityItem[] = [
+  { id: 'hosp-srn-prayagraj', name: 'Swaroop Rani Nehru Hospital (District Trauma)', type: 'District Hospital', availableBeds: 24 },
+  { id: 'hosp-demo-apollo', name: 'Apollo Multi-Specialty Hospital', type: 'Tertiary Care & Trauma', availableBeds: 18 },
+  { id: 'hosp-a3T8en1zB3NvXvwDEKxCG0HR0hi1', name: 'Medanta Hospital Prayagraj', type: 'Super Specialty Hospital', availableBeds: 20 },
+  { id: 'hosp-7KdTMePBTBdIY7s4tlVcl5dnN702', name: 'Saket Hospital', type: 'General & Emergency Care', availableBeds: 33 },
+  { id: 'hosp-kamla-nehru', name: 'Kamla Nehru Memorial Hospital', type: 'Specialized Hospital', availableBeds: 15 },
+  { id: 'phc-naini', name: 'Naini Primary Health Centre (PHC)', type: 'Primary Health Centre', availableBeds: 6 },
 ];
 
-export default function ReferralScreen() {
+export default function CreateReferralScreen() {
   const { t, i18n } = useTranslation();
-  const { patientId, priority: initialPriority, reason: initialReason } = useLocalSearchParams<{
-    patientId?: string;
-    priority?: ReferralPriority;
-    reason?: string;
-  }>();
+  const lang = i18n.language;
+  const { patientId: paramPatientId } = useLocalSearchParams<{ patientId?: string }>();
 
   const [patients, setPatients] = useState<any[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState(patientId || '');
-  const [selectedFacilityId, setSelectedFacilityId] = useState(DEFAULT_FACILITIES[0].id);
-  const [priority, setPriority] = useState<ReferralPriority>(initialPriority || 'MODERATE');
-  const [reason, setReason] = useState(initialReason || '');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(paramPatientId || '');
+  const [patientPickerVisible, setPatientPickerVisible] = useState(false);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [facilities, setFacilities] = useState<FacilityItem[]>(FALLBACK_FACILITIES);
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>(FALLBACK_FACILITIES[0].id);
+  const [destinationFacility, setDestinationFacility] = useState(FALLBACK_FACILITIES[0].name);
+  const [loadingFacilities, setLoadingFacilities] = useState(false);
+  const [priority, setPriority] = useState<ReferralPriority>('HIGH');
+  const [reason, setReason] = useState('');
+  const [bp, setBp] = useState('');
+  const [pulse, setPulse] = useState('');
+  const [spo2, setSpo2] = useState('');
+  const [bloodSugar, setBloodSugar] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(PATIENTS_KEY).then((raw) => {
+    loadPatients();
+    loadRegisteredHospitals();
+  }, []);
+
+  const loadRegisteredHospitals = async () => {
+    try {
+      setLoadingFacilities(true);
+      const res: any = await api.location.getNearbyHospitals(25.4358, 81.8463, 50);
+      const list = res?.data || (Array.isArray(res) ? res : []);
+      if (Array.isArray(list) && list.length > 0) {
+        const mapped: FacilityItem[] = list.map((h: any) => ({
+          id: h.hospitalId || h.id,
+          name: h.name,
+          type: h.address || 'Registered Hospital',
+          availableBeds: h.availableBeds ?? h.availableCapacity ?? undefined,
+        }));
+        setFacilities(mapped);
+        setSelectedHospitalId(mapped[0].id);
+        setDestinationFacility(mapped[0].name);
+      }
+    } catch {
+      // Keep fallbacks
+    } finally {
+      setLoadingFacilities(false);
+    }
+  };
+
+  const loadPatients = async () => {
+    try {
+      const userProfile = useAppStore.getState().userProfile;
+      const workerUid = userProfile?.uid;
+      const key = workerUid && !workerUid.startsWith('asha-demo')
+        ? `@golden_hour_community_patients_${workerUid}`
+        : '@golden_hour_community_patients_demo';
+      let raw = await AsyncStorage.getItem(key);
+      if (!raw) {
+        raw = await AsyncStorage.getItem(PATIENTS_KEY);
+      }
       if (raw) {
         const list = JSON.parse(raw);
         setPatients(list);
@@ -60,192 +110,405 @@ export default function ReferralScreen() {
           setSelectedPatientId(list[0].id);
         }
       }
-    });
-  }, []);
+    } catch {
+      // ignore
+    }
+  };
 
   const selectedPatient = patients.find((p) => p.id === selectedPatientId);
-  const selectedFacility = DEFAULT_FACILITIES.find((f) => f.id === selectedFacilityId);
 
-  const handleSubmitReferral = async () => {
+  const handleSubmit = async () => {
+    if (isSubmittingRef.current || isSubmitting) return;
+
     if (!selectedPatientId) {
-      Alert.alert(t('common.error'), 'Please select a patient.');
+      Alert.alert(t('common.error'), lang === 'mr' ? 'कृपया रुग्ण निवडा.' : lang === 'hi' ? 'कृपया रोगी चुनें।' : 'Please select a patient.');
       return;
     }
     if (!reason.trim()) {
-      Alert.alert(t('common.error'), 'Please provide referral notes / clinical reason.');
+      Alert.alert(t('common.error'), lang === 'mr' ? 'कृपया रेफरलचे कारण लिहा.' : lang === 'hi' ? 'कृपया रेफरल का कारण दर्ज करें।' : 'Please enter referral reason / symptoms.');
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
+    const userProfile = useAppStore.getState().userProfile;
+    const workerUid = userProfile?.uid || 'asha-worker-prayagraj';
+    const workerName = userProfile?.name || 'Sunita Verma (ASHA Sangini)';
 
-    const referral = {
-      id: `ref-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    const referralCode = `REF-ASHA-${Date.now().toString(36).toUpperCase()}`;
+    const payload = {
+      id: `ref-${Date.now()}`,
+      referralCode,
       patientId: selectedPatientId,
       patientName: selectedPatient?.name || 'Community Patient',
-      patientAge: selectedPatient?.age,
-      patientGender: selectedPatient?.gender,
-      villageOrArea: selectedPatient?.villageOrArea,
-      workerUid: 'asha-worker-local',
-      workerName: 'ASHA Worker',
-      facilityId: selectedFacilityId,
-      facilityName: selectedFacility?.name,
-      reason: reason.trim(),
+      patientAge: selectedPatient?.age || 0,
+      patientGender: selectedPatient?.gender || 'FEMALE',
+      workerUid,
+      workerName,
+      hospitalId: selectedHospitalId,
+      destinationFacility,
       priority,
+      reason,
+      vitalsSnapshot: {
+        bloodPressure: bp || undefined,
+        pulse: pulse ? Number(pulse) : undefined,
+        spO2: spo2 ? Number(spo2) : undefined,
+        bloodSugar: bloodSugar ? Number(bloodSugar) : undefined,
+      },
       status: 'PENDING',
       createdAt: new Date().toISOString(),
     };
 
     try {
-      // Persist locally in referrals store
+      // 1. Save locally in AsyncStorage (deduping by id)
       const raw = await AsyncStorage.getItem(REFERRALS_KEY);
-      const existing = raw ? JSON.parse(raw) : [];
-      await AsyncStorage.setItem(REFERRALS_KEY, JSON.stringify([referral, ...existing]));
+      const list = raw ? JSON.parse(raw) : [];
+      const updatedList = [payload, ...list.filter((r: any) => r.id !== payload.id)];
+      await AsyncStorage.setItem(REFERRALS_KEY, JSON.stringify(updatedList));
 
-      // Sync live or enqueue for offline
-      const netState = await NetInfo.fetch();
-      if (netState.isConnected) {
+      // 2. Transmit to backend if online; otherwise enqueue in persistent offline queue
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
         try {
-          const res = await fetch('http://localhost:5000/api/worker/referrals', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(referral),
-          });
-          if (!res.ok) throw new Error('Server error');
+          await api.worker.createReferral(payload);
         } catch {
-          await enqueueOfflineAction('/api/worker/referrals', 'POST', referral);
+          await enqueueOfflineAction('/api/worker/referrals', 'POST', payload);
         }
       } else {
-        await enqueueOfflineAction('/api/worker/referrals', 'POST', referral);
+        await enqueueOfflineAction('/api/worker/referrals', 'POST', payload);
       }
 
-      Alert.alert(t('asha.referralSent'), t('asha.referralSaved'), [
-        { text: 'OK', onPress: () => router.replace('/(worker)/dashboard') },
-      ]);
-    } catch {
-      Alert.alert(t('common.error'), 'Could not save referral. Please try again.');
+      Alert.alert(
+        lang === 'mr' ? 'रेफरल यशस्वीरीत्या पाठवले ✓' : lang === 'hi' ? 'रेफरल सफलतापूर्वक प्रेषित ✓' : 'Referral Transmitted ✓',
+        lang === 'mr'
+          ? `रेफरल कोड: ${referralCode}\nरुग्णाला ${destinationFacility} येथे पाठवले आहे.`
+          : lang === 'hi'
+          ? `रेफरल कोड: ${referralCode}\nमरीज को ${destinationFacility} भेजा गया है।`
+          : `Referral Code: ${referralCode}\nTransmitted to ${destinationFacility} (${priority} Priority).`,
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } catch (err) {
+      Alert.alert(t('common.error'), 'Could not save referral.');
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  const PRIORITIES: ReferralPriority[] = ['NORMAL', 'MODERATE', 'HIGH', 'CRITICAL'];
-  const PRIORITY_COLORS: Record<ReferralPriority, string> = {
-    CRITICAL: '#DC2626',
-    HIGH: '#EA580C',
-    MODERATE: '#0284C7',
-    NORMAL: '#16A34A',
-  };
+  const PRIORITY_OPTIONS: Array<{ key: ReferralPriority; labelEn: string; labelHi: string; labelMr: string; color: string }> = [
+    { key: 'CRITICAL', labelEn: 'CRITICAL (Immediate SOS)', labelHi: 'गंभीर (आपातकालीन SOS)', labelMr: 'गंभीर (तातडीची मदत/SOS)', color: '#DC2626' },
+    { key: 'HIGH', labelEn: 'HIGH (Urgent PHC/Hospital)', labelHi: 'उच्च (तत्काल अस्पताल)', labelMr: 'उच्च (तातडीने रुग्णालय)', color: '#EA580C' },
+    { key: 'MODERATE', labelEn: 'MODERATE (PHC Evaluation)', labelHi: 'मध्यम (PHC जाँच)', labelMr: 'मध्यम (PHC तपासणी)', color: '#2563EB' },
+    { key: 'NORMAL', labelEn: 'NORMAL (Routine Transfer)', labelHi: 'सामान्य (नियमित जाँच)', labelMr: 'सामान्य (नियमित तपासणी)', color: '#16A34A' },
+  ];
 
   return (
     <View style={styles.root}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <Icon name="chevL" size={20} color={colors.ink} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('asha.createPHCReferral')}</Text>
+        <Text style={styles.headerTitle}>{lang === 'hi' ? 'डिजिटल रेफरल' : 'Digital Frontline Referral'}</Text>
         <LanguageSelector />
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Patient Selection */}
+
+        {/* Patient Picker Card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('asha.selectPatient')}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={styles.cardTitle}>{t('asha.selectPatient')} *</Text>
+            {patients.length > 0 && (
+              <TouchableOpacity onPress={() => setPatientPickerVisible(true)}>
+                <Text style={{ fontSize: 12, color: '#0284C7', fontWeight: '700' }}>
+                  {lang === 'hi' ? 'सूची देखें ▾' : 'View All ▾'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {patients.length === 0 ? (
-            <Text style={styles.noPatients}>{t('asha.noPatients')}</Text>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
-              <View style={styles.patientPillRow}>
-                {patients.map((p) => (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[styles.patientPill, selectedPatientId === p.id && styles.patientPillActive]}
-                    onPress={() => setSelectedPatientId(p.id)}
-                  >
-                    <Text style={[styles.patientPillText, selectedPatientId === p.id && { color: '#fff' }]}>
-                      {p.name}
-                    </Text>
-                    <Text style={[styles.patientPillSub, selectedPatientId === p.id && { color: '#fca5a5' }]}>
-                      {p.villageOrArea}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+            <Text style={{ color: colors.inkFaint }}>{t('asha.noPatients')}</Text>
+          ) : selectedPatient ? (
+            <TouchableOpacity
+              style={styles.selectedPatientBox}
+              onPress={() => setPatientPickerVisible(true)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.selectedAvatar}>
+                <Text style={styles.selectedAvatarText}>
+                  {(selectedPatient.name ? selectedPatient.name.charAt(0) : 'P').toUpperCase()}
+                </Text>
               </View>
-            </ScrollView>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.selectedName} numberOfLines={1}>{selectedPatient.name}</Text>
+                  {selectedPatient.isPregnant && (
+                    <Text style={{ fontSize: 11 }}>🤰</Text>
+                  )}
+                </View>
+                <Text style={styles.selectedMeta}>
+                  {selectedPatient.age}y / {selectedPatient.gender} • {selectedPatient.villageOrArea}
+                  {selectedPatient.bloodGroup ? ` • ${selectedPatient.bloodGroup}` : ''}
+                </Text>
+              </View>
+              <View style={styles.selectArrowBadge}>
+                <Text style={styles.selectArrowText}>{lang === 'hi' ? 'बदलें ▾' : 'Change ▾'}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.selectTriggerBtn}
+              onPress={() => setPatientPickerVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectTriggerText}>
+                {lang === 'hi' ? 'मरीज चुनें — टैप करें ▾' : 'Choose Patient — Tap here ▾'}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
 
-        {/* Receiving Facility */}
+        {/* Priority Selector */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('asha.selectFacility')}</Text>
-          {DEFAULT_FACILITIES.map((facility) => {
-            const isSelected = selectedFacilityId === facility.id;
-            return (
+          <Text style={styles.cardTitle}>
+            {lang === 'mr' ? 'रेफरल प्राधान्य' : lang === 'hi' ? 'रेफरल प्राथमिकता' : 'Referral Priority'} *
+          </Text>
+          <View style={{ gap: 8 }}>
+            {PRIORITY_OPTIONS.map((opt) => (
               <TouchableOpacity
-                key={facility.id}
-                style={[styles.facilityCard, isSelected && styles.facilityCardActive]}
-                onPress={() => setSelectedFacilityId(facility.id)}
-                activeOpacity={0.8}
+                key={opt.key}
+                style={[
+                  styles.priorityCard,
+                  priority === opt.key && { borderColor: opt.color, backgroundColor: opt.color + '15' },
+                ]}
+                onPress={() => setPriority(opt.key)}
               >
-                <View style={[styles.facilityDot, isSelected && styles.facilityDotActive]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.facilityName, isSelected && { color: colors.ink }]}>{facility.name}</Text>
-                  <Text style={styles.facilityAddress}>{facility.address}</Text>
-                </View>
+                <View style={[styles.priorityDot, { backgroundColor: opt.color }]} />
+                <Text style={[styles.priorityCardText, priority === opt.key && { color: opt.color, fontWeight: '800' }]}>
+                  {lang === 'mr' ? opt.labelMr : lang === 'hi' ? opt.labelHi : opt.labelEn}
+                </Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Priority Selection */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('asha.referralPriority')}</Text>
-          <View style={styles.segRow}>
-            {PRIORITIES.map((p) => {
-              const isSelected = priority === p;
-              const color = PRIORITY_COLORS[p];
-              return (
-                <TouchableOpacity
-                  key={p}
-                  style={[
-                    styles.priorityBtn,
-                    isSelected && { backgroundColor: color, borderColor: color },
-                  ]}
-                  onPress={() => setPriority(p)}
-                >
-                  <Text style={[styles.priorityBtnText, isSelected && { color: '#fff' }]}>
-                    {p}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+            ))}
           </View>
         </View>
 
-        {/* Referral Reason */}
+        {/* Destination Facility */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('asha.referralReason')}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <Text style={styles.cardTitle}>
+              {lang === 'mr' ? 'गंतव्य रुग्णालय / PHC' : lang === 'hi' ? 'गंतव्य अस्पताल / PHC' : 'Destination Hospital / PHC'} *
+            </Text>
+            {loadingFacilities && <ActivityIndicator size="small" color="#0284C7" />}
+          </View>
+          <Text style={{ fontSize: 11, color: colors.inkFaint, marginBottom: 10 }}>
+            {lang === 'hi' ? 'प्रयागराज नेटवर्क के पंजीकृत अस्पताल' : 'Registered Hospital Facilities in Prayagraj Network'}
+          </Text>
+          <View style={{ gap: 8 }}>
+            {facilities.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={[
+                  styles.facilityOption,
+                  selectedHospitalId === f.id && styles.facilityOptionActive,
+                ]}
+                onPress={() => {
+                  setSelectedHospitalId(f.id);
+                  setDestinationFacility(f.name);
+                }}
+              >
+                <Icon name="hospital" size={16} color={selectedHospitalId === f.id ? '#0284C7' : colors.inkFaint} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.facilityName, selectedHospitalId === f.id && { color: '#0369A1', fontWeight: '800' }]}>
+                    {f.name}
+                  </Text>
+                  <Text style={styles.facilityType}>{f.type}</Text>
+                  {f.availableBeds !== undefined && (
+                    <Text style={{ fontSize: 10.5, color: '#059669', fontWeight: '600', marginTop: 2 }}>
+                      🛏️ {f.availableBeds} beds available
+                    </Text>
+                  )}
+                </View>
+                {selectedHospitalId === f.id && (
+                  <Text style={{ color: '#0284C7', fontWeight: '800' }}>✓</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Reason / Clinical Notes */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            {lang === 'mr' ? 'रेफरलचे कारण / लक्षणे' : lang === 'hi' ? 'रेफरल का कारण / लक्षण' : 'Reason for Referral / Symptoms'} *
+          </Text>
           <TextInput
-            style={[styles.input, { height: 95, textAlignVertical: 'top' }]}
+            style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
             multiline
-            placeholder="Clinical observations, chief complaint, reasons for transfer…"
+            placeholder={
+              lang === 'mr'
+                ? 'कारण व लक्षणे सविस्तर लिहा…'
+                : lang === 'hi'
+                ? 'कारण एवं लक्षण विस्तार से लिखें…'
+                : 'Enter clinical reason, symptoms, or emergency observations…'
+            }
             value={reason}
             onChangeText={setReason}
+            placeholderTextColor={colors.inkFaint}
           />
         </View>
 
-        {/* Submit Button */}
+        {/* Attached Vitals Snapshot (Optional) */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('asha.vitalsTitle')} (Snapshot)</Text>
+          <View style={styles.row}>
+            <View style={styles.half}>
+              <Text style={styles.label}>BP (e.g. 140/90)</Text>
+              <TextInput style={styles.input} value={bp} onChangeText={setBp} placeholder="120/80" placeholderTextColor={colors.inkFaint} />
+            </View>
+            <View style={styles.half}>
+              <Text style={styles.label}>Pulse (BPM)</Text>
+              <TextInput style={styles.input} keyboardType="numeric" value={pulse} onChangeText={setPulse} placeholder="78" placeholderTextColor={colors.inkFaint} />
+            </View>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.half}>
+              <Text style={styles.label}>SpO₂ (%)</Text>
+              <TextInput style={styles.input} keyboardType="numeric" value={spo2} onChangeText={setSpo2} placeholder="98" placeholderTextColor={colors.inkFaint} />
+            </View>
+            <View style={styles.half}>
+              <Text style={styles.label}>Sugar (mg/dL)</Text>
+              <TextInput style={styles.input} keyboardType="numeric" value={bloodSugar} onChangeText={setBloodSugar} placeholder="110" placeholderTextColor={colors.inkFaint} />
+            </View>
+          </View>
+        </View>
+
+        {/* Transmit Button */}
         <TouchableOpacity
           style={[styles.submitBtn, isSubmitting && { opacity: 0.6 }]}
-          onPress={handleSubmitReferral}
+          onPress={handleSubmit}
           disabled={isSubmitting}
           activeOpacity={0.85}
         >
           <Text style={styles.submitBtnText}>
-            {isSubmitting ? 'Submitting…' : `${t('asha.sendReferral')} — Works Offline ✓`}
+            {isSubmitting
+              ? 'Transmitting…'
+              : lang === 'mr'
+              ? 'डिजिटल रेफरल पाठवा (Works Offline ✓)'
+              : lang === 'hi'
+              ? 'डिजिटल रेफरल भेजें (Works Offline ✓)'
+              : 'Transmit Digital Referral (Works Offline ✓)'}
           </Text>
         </TouchableOpacity>
+
       </ScrollView>
+
+      {/* Patient Picker Modal */}
+      <Modal
+        visible={patientPickerVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setPatientPickerVisible(false);
+          setPatientSearch('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>
+                  {lang === 'hi' ? 'मरीज का चयन करें' : 'Select Community Patient'}
+                </Text>
+                <Text style={styles.modalSub}>
+                  {patients.length} {lang === 'hi' ? 'पंजीकृत मरीज उपलब्ध' : 'registered patients'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setPatientPickerVisible(false);
+                  setPatientSearch('');
+                }}
+                style={styles.modalCloseBtn}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Box */}
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder={lang === 'hi' ? 'नाम या गाँव से खोजें...' : 'Search by name or village...'}
+              value={patientSearch}
+              onChangeText={setPatientSearch}
+              placeholderTextColor={colors.inkFaint}
+            />
+
+            {/* Patients List */}
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {patients
+                .filter(
+                  (p) =>
+                    p.name?.toLowerCase().includes(patientSearch.toLowerCase()) ||
+                    (p.villageOrArea && p.villageOrArea.toLowerCase().includes(patientSearch.toLowerCase())) ||
+                    (p.crisisId && p.crisisId.toLowerCase().includes(patientSearch.toLowerCase()))
+                )
+                .map((p) => {
+                  const isSel = p.id === selectedPatientId;
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[styles.modalItem, isSel && styles.modalItemActive]}
+                      onPress={() => {
+                        setSelectedPatientId(p.id);
+                        setPatientPickerVisible(false);
+                        setPatientSearch('');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.modalAvatar, isSel && { backgroundColor: '#0284C7' }]}>
+                        <Text style={[styles.modalAvatarText, isSel && { color: '#fff' }]}>
+                          {(p.name ? p.name.charAt(0) : 'P').toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={[styles.modalItemName, isSel && { color: '#0369A1', fontWeight: '800' }]}>
+                            {p.name}
+                          </Text>
+                          {p.isPregnant && <Text style={{ fontSize: 11 }}>🤰</Text>}
+                        </View>
+                        <Text style={styles.modalItemMeta}>
+                          {p.age}y / {p.gender} • {p.villageOrArea}
+                          {p.bloodGroup ? ` • ${p.bloodGroup}` : ''}
+                        </Text>
+                        {p.knownConditions?.length ? (
+                          <Text style={styles.modalItemCond} numberOfLines={1}>
+                            ⚠️ {p.knownConditions.join(', ')}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {isSel && <Text style={styles.modalItemCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              {patients.length > 0 &&
+                patients.filter(
+                  (p) =>
+                    p.name?.toLowerCase().includes(patientSearch.toLowerCase()) ||
+                    (p.villageOrArea && p.villageOrArea.toLowerCase().includes(patientSearch.toLowerCase())) ||
+                    (p.crisisId && p.crisisId.toLowerCase().includes(patientSearch.toLowerCase()))
+                ).length === 0 && (
+                  <View style={{ padding: 24, alignItems: 'center' }}>
+                    <Text style={{ color: colors.inkFaint }}>कोई मरीज नहीं मिला</Text>
+                  </View>
+                )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -277,58 +540,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardTitle: { fontSize: 15, fontWeight: '700', color: colors.ink, marginBottom: 12 },
-  noPatients: { color: colors.inkFaint, fontSize: 13 },
-  patientPillRow: { flexDirection: 'row', gap: 8 },
-  patientPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#F8FAFC',
-  },
-  patientPillActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
-  patientPillText: { fontSize: 13, fontWeight: '700', color: colors.ink },
-  patientPillSub: { fontSize: 10.5, color: colors.inkFaint, marginTop: 1 },
-  facilityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 8,
-    backgroundColor: '#F8FAFC',
-    gap: 12,
-  },
-  facilityCardActive: {
-    borderColor: '#DC2626',
-    backgroundColor: '#FEF2F2',
-  },
-  facilityDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#94A3B8',
-  },
-  facilityDotActive: {
-    borderColor: '#DC2626',
-    backgroundColor: '#DC2626',
-  },
-  facilityName: { fontSize: 13.5, fontWeight: '700', color: colors.ink },
-  facilityAddress: { fontSize: 11.5, color: colors.inkFaint, marginTop: 2 },
-  segRow: { flexDirection: 'row', gap: 8 },
-  priorityBtn: {
-    flex: 1,
-    paddingVertical: 9,
-    alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#F8FAFC',
-  },
-  priorityBtnText: { fontSize: 12, fontWeight: '700', color: colors.inkSoft },
+  label: { fontSize: 11.5, fontWeight: '600', color: colors.inkSoft, marginBottom: 4 },
   input: {
     borderWidth: 1,
     borderColor: '#CBD5E1',
@@ -337,9 +549,51 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     fontSize: 14,
     color: colors.ink,
+    marginBottom: 10,
   },
+  pillRow: { flexDirection: 'row', gap: 8 },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  pillActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
+  pillText: { fontSize: 13, fontWeight: '700', color: colors.ink },
+  pillSub: { fontSize: 10.5, color: colors.inkFaint, marginTop: 1 },
+  priorityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 10,
+  },
+  priorityDot: { width: 10, height: 10, borderRadius: 5 },
+  priorityCardText: { fontSize: 13, fontWeight: '600', color: colors.ink },
+  facilityOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    gap: 10,
+  },
+  facilityOptionActive: {
+    borderColor: '#0284C7',
+    backgroundColor: '#F0F9FF',
+  },
+  facilityName: { fontSize: 13.5, fontWeight: '700', color: colors.ink },
+  facilityType: { fontSize: 11, color: colors.inkFaint, marginTop: 1 },
+  row: { flexDirection: 'row', gap: 10 },
+  half: { flex: 1 },
   submitBtn: {
-    backgroundColor: '#DC2626',
+    backgroundColor: '#15803D',
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: 'center',
@@ -347,4 +601,168 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+
+  // Patient Selector Card
+  selectedPatientBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
+    backgroundColor: '#F0F9FF',
+    gap: 12,
+  },
+  selectedAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#0284C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedAvatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  selectedName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  selectedMeta: {
+    fontSize: 12,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  selectArrowBadge: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  selectArrowText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  selectTriggerBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+  },
+  selectTriggerText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: colors.inkSoft,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.inkSoft,
+  },
+  modalSearchInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    color: colors.ink,
+    marginBottom: 12,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    backgroundColor: '#fff',
+    marginBottom: 8,
+    gap: 12,
+  },
+  modalItemActive: {
+    borderColor: '#0284C7',
+    backgroundColor: '#F0F9FF',
+  },
+  modalAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.inkSoft,
+  },
+  modalItemName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  modalItemMeta: {
+    fontSize: 11.5,
+    color: colors.inkSoft,
+    marginTop: 2,
+  },
+  modalItemCond: {
+    fontSize: 11,
+    color: '#D97706',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  modalItemCheck: {
+    color: '#0284C7',
+    fontWeight: '800',
+    fontSize: 16,
+  },
 });

@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, Modal } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, Modal, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
-import { Screen, TopBar, Button, Card, Pill, Divider, Icon, LabelEyebrow } from '@/components/ui';
+import { Screen, TopBar, Button, Card, Pill, Divider, Icon, LabelEyebrow, openExternalMapPreview } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
 
@@ -125,7 +125,11 @@ export default function HospitalRequestDetail() {
   const patientCrisisId = detail?.goldenHourId || detail?.crisisId || goldenHourId || 'Pending assignment';
   const patientTrustScore = detail?.trustScore != null ? `${detail.trustScore} / 100` : (trustScore != null ? `${trustScore} / 100` : '100 / 100');
   const incidentType = detail?.incidentType || 'Medical Emergency';
-  const incidentLocation = detail?.location ? `${detail.location.latitude.toFixed(4)}, ${detail.location.longitude.toFixed(4)}` : 'Live GPS location';
+  const incidentLocation = detail?.locationAddress
+    ? `${detail.locationAddress} (${detail.location?.latitude?.toFixed(4)}, ${detail.location?.longitude?.toFixed(4)})`
+    : detail?.location
+    ? `${detail.location.latitude.toFixed(4)}, ${detail.location.longitude.toFixed(4)}`
+    : 'Live GPS location';
   const incidentTime = detail?.createdAt ? new Date(detail.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now';
   const patientDescription = detail?.description || null;
   const photoUrl = detail?.imageUrl || null;
@@ -137,7 +141,18 @@ export default function HospitalRequestDetail() {
 
   return (
     <Screen>
-      <TopBar title="Incoming Patient" />
+      <TopBar
+        title="Incoming Patient"
+        onPressBack={() => router.replace('/(hospital)/dashboard')}
+        right={
+          <TouchableOpacity
+            style={{ paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#F3F4F6', borderRadius: 8 }}
+            onPress={() => router.replace('/(hospital)/dashboard')}
+          >
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.ink }}>Dashboard</Text>
+          </TouchableOpacity>
+        }
+      />
 
       <LabelEyebrow>PATIENT INFORMATION</LabelEyebrow>
       <Card style={styles.card}>
@@ -258,29 +273,60 @@ export default function HospitalRequestDetail() {
               <Text style={styles.vitalsInboundVal}>Pulse: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.pulse} bpm</Text></Text>
               <Text style={styles.vitalsInboundVal}>SpO2: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.spO2}%</Text></Text>
               <Text style={styles.vitalsInboundVal}>BP: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.bp}</Text></Text>
+              {detail.vitals.bloodSugar ? (
+                <Text style={styles.vitalsInboundVal}>Sugar: <Text style={{ color: colors.ink, fontWeight: '800' }}>{detail.vitals.bloodSugar} mg/dL</Text></Text>
+              ) : null}
             </View>
           </View>
         ) : null}
 
-        {/* 3-Way Direct Contact Buttons */}
+        {/* 3-Way Direct Contact & Live Route Buttons */}
         <View style={styles.ambActionRow}>
-          {detail?.assignedDriverPhone ? (
+          {(detail?.assignedDriverPhone || detail?.driverPhone || detail?.assignedDriverContact) ? (
             <TouchableOpacity
               style={styles.actionBtnBlue}
-              onPress={() => Linking.openURL(`tel:${detail.assignedDriverPhone}`)}
+              onPress={() => {
+                const p = detail?.assignedDriverPhone || detail?.driverPhone || detail?.assignedDriverContact;
+                Linking.openURL(`tel:${String(p).replace(/[^0-9+]/g, '')}`);
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.actionBtnTextBlue}>📞 Call Pilot</Text>
             </TouchableOpacity>
           ) : null}
 
-          {detail?.patientPhone ? (
+          {(detail?.patientPhone || detail?.phone || detail?.contactPhone || detail?.userPhone) ? (
             <TouchableOpacity
               style={styles.actionBtnGreen}
-              onPress={() => Linking.openURL(`tel:${detail.patientPhone}`)}
+              onPress={() => {
+                const p = detail?.patientPhone || detail?.phone || detail?.contactPhone || detail?.userPhone;
+                Linking.openURL(`tel:${String(p).replace(/[^0-9+]/g, '')}`);
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.actionBtnTextGreen}>📞 Call Patient</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {detail?.ambulanceLocation?.latitude && detail?.ambulanceLocation?.longitude ? (
+            <TouchableOpacity
+              style={[styles.actionBtnBlue, { backgroundColor: '#1E293B', borderColor: '#334155' }]}
+              onPress={() => {
+                const ambLat = detail.ambulanceLocation.latitude;
+                const ambLng = detail.ambulanceLocation.longitude;
+                const destLat = detail.assignedHospitalLocation?.latitude || detail.location?.latitude;
+                const destLng = detail.assignedHospitalLocation?.longitude || detail.location?.longitude;
+                openExternalMapPreview({
+                  lat: ambLat,
+                  lng: ambLng,
+                  title: detail.assignedAmbulanceId ? `Ambulance ${detail.assignedAmbulanceId}` : 'Rescue Ambulance',
+                  originLat: destLat,
+                  originLng: destLng,
+                });
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.actionBtnTextBlue, { color: '#38BDF8' }]}>📡 Live Route</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -360,23 +406,63 @@ export default function HospitalRequestDetail() {
             <TouchableOpacity
               style={styles.dispatchOptionBtn}
               onPress={() => {
-                const firstDriver = drivers[0];
-                handleAccept('AFFILIATED', firstDriver?.driverId || firstDriver?.id);
+                handleAccept('AFFILIATED');
               }}
               activeOpacity={0.85}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Icon name="ambulance" color={colors.red} size={22} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.dispatchOptionTitle}>Dispatch Affiliated Hospital Fleet</Text>
+                  <Text style={styles.dispatchOptionTitle}>Broadcast to Hospital Fleet (Fastest)</Text>
                   <Text style={styles.dispatchOptionDesc}>
                     {drivers.length > 0
-                      ? `${drivers.length} unit(s) on-call · First available unit assigned`
+                      ? `Alerts all ${drivers.length} registered on-call pilot(s)`
                       : 'Hospital Rapid Response ALS Unit (Priority dispatch)'}
                   </Text>
                 </View>
               </View>
             </TouchableOpacity>
+
+            {/* Optional Specific Driver Selection */}
+            {drivers.length > 0 && (
+              <View style={{ marginVertical: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft, textTransform: 'uppercase', marginBottom: 6 }}>
+                  Or Assign Specific Pilot ({drivers.length})
+                </Text>
+                <ScrollView style={{ maxHeight: 160 }} showsVerticalScrollIndicator={false}>
+                  {drivers.map((drv: any) => {
+                    const drvId = drv.uid || drv.id;
+                    const drvName = drv.name || drv.driverName || 'Ambulance Pilot';
+                    const drvPhone = drv.phone || drv.contactNumber;
+                    const vehicle = drv.vehicleNumber || drv.ambulanceId || 'Emergency Unit';
+                    const isAvail = drv.availability === 'AVAILABLE' || !drv.availability;
+                    return (
+                      <TouchableOpacity
+                        key={drvId}
+                        style={[styles.driverRowCard, !isAvail && { opacity: 0.6 }]}
+                        onPress={() => handleAccept('AFFILIATED', drvId)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>{drvName}</Text>
+                            <Pill color={isAvail ? 'success' : 'amber'}>
+                              {isAvail ? 'AVAILABLE' : 'ON DUTY'}
+                            </Pill>
+                          </View>
+                          <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 2 }}>
+                            Unit: {vehicle} {drvPhone ? `· 📞 ${drvPhone}` : ''}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 11.5, fontWeight: '700', color: colors.red }}>
+                          Assign →
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.dispatchOptionBtn, { borderColor: '#3B82F640', backgroundColor: '#EFF6FF' }]}
@@ -575,5 +661,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.inkFaint,
+  },
+  driverRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
   },
 });

@@ -80,7 +80,7 @@ export default function AmbulanceRequestDetail() {
         err?.message ||
         'This emergency dispatch may have already been claimed by another ambulance unit.';
 
-      Alert.alert('Dispatch Already Claimed', errMsg, [
+      Alert.alert('Unable to Accept Dispatch', errMsg, [
         {
           text: 'Return to Dashboard',
           onPress: () => router.replace('/(ambulance)/dashboard'),
@@ -95,8 +95,10 @@ export default function AmbulanceRequestDetail() {
   const pillColor = (sev === 'CRITICAL' || sev === 'HIGH' ? 'red' : 'amber') as 'red' | 'amber';
   const incidentName = detail?.incidentType || 'Emergency Dispatch Alert';
   const loc = detail?.location;
-  const locStr = loc
-    ? `${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)}`
+  const locStr = detail?.locationAddress
+    ? `${detail.locationAddress} (${Number(loc?.latitude).toFixed(4)}, ${Number(loc?.longitude).toFixed(4)})`
+    : loc
+    ? `${Number(loc.latitude).toFixed(4)}°N, ${Number(loc.longitude).toFixed(4)}°E`
     : 'GPS Shared';
 
   return (

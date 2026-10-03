@@ -23,11 +23,16 @@ export function validateEmergencyInput(input: unknown): EmergencyInput {
     throw invalidInput("Emergency input must be a JSON object.");
   }
 
-  if (!isStringArray(input.symptoms)) {
-    throw invalidInput("symptoms must be an array of strings.");
+  let rawSymptoms: string[] = [];
+  if (typeof input.symptoms === "string") {
+    rawSymptoms = input.symptoms.trim() ? [input.symptoms.trim()] : [];
+  } else if (isStringArray(input.symptoms)) {
+    rawSymptoms = input.symptoms;
+  } else {
+    throw invalidInput("symptoms must be an array of strings or a string.");
   }
 
-  const symptoms = input.symptoms
+  const symptoms = rawSymptoms
     .map((symptom) => symptom.trim())
     .filter(Boolean);
   if (symptoms.length > 50) {
@@ -83,6 +88,14 @@ export function validateEmergencyInput(input: unknown): EmergencyInput {
     throw invalidInput("notes must be a string.");
   }
 
+  const rawImg = (input as any).imageBase64 || (input as any).image || (input as any).imageData;
+  if (rawImg && typeof rawImg === "string") {
+    (input as any).imageBase64 = rawImg;
+  }
+  if ((input as any).imageMimeType && typeof (input as any).imageMimeType === "string") {
+    (input as any).imageMimeType = (input as any).imageMimeType;
+  }
+
   return input as unknown as EmergencyInput;
 }
 
@@ -122,6 +135,11 @@ export function validateTriageResponse(value: unknown): TriageResult {
     severity: value.severity as TriageResult["severity"],
     emergencyType: value.emergencyType.trim(),
     confidence: value.confidence,
+    requiredCapabilities: Array.isArray(value.requiredCapabilities)
+      ? (value.requiredCapabilities as unknown[]).filter((c): c is string => typeof c === "string").slice(0, 10)
+      : undefined,
+    specialtyNeeded: typeof value.specialtyNeeded === "string" ? value.specialtyNeeded.trim() : undefined,
+    recommendedHospitalType: typeof value.recommendedHospitalType === "string" ? value.recommendedHospitalType.trim() : undefined,
     immediateActions: value.immediateActions.slice(0, 10),
     avoidActions: value.avoidActions.slice(0, 10),
     hospitalRequired: value.hospitalRequired,

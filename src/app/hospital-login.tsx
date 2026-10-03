@@ -6,6 +6,9 @@ import { colors } from '@/constants/theme';
 import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function HospitalLogin() {
   const insets = useSafeAreaInsets();
@@ -18,25 +21,13 @@ export default function HospitalLogin() {
     try {
       const session = await authService.promptGoogleSignIn();
 
-      if (!session.profileExists) {
-        Alert.alert(
-          'Profile Not Found',
-          'No hospital administrator profile exists for this account. Please register your hospital.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Register Now', onPress: () => router.push('/hospital-register') },
-          ]
-        );
-        return;
-      }
-
       const rawRoles = (session.profile?.roles || [session.role || 'PATIENT']).map((r: string) => String(r).toUpperCase());
       const hasHospitalRole = rawRoles.includes('HOSPITAL');
 
-      if (!hasHospitalRole) {
+      if (!session.profileExists || !hasHospitalRole) {
         Alert.alert(
-          'Hospital Registration Required',
-          'This Google account is not yet registered as a Hospital Facility. Would you like to register now?',
+          'Registration Required',
+          `The Google account (${session.email}) is not registered as an Emergency Hospital Facility.\n\nPlease submit an application to register your emergency desk.`,
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Register Hospital', onPress: () => router.push('/hospital-register') },
@@ -45,32 +36,35 @@ export default function HospitalLogin() {
         return;
       }
 
-      // Check hospital-specific verification status
-      const hospStatus = (
-        session.profile?.roleVerificationStatus?.HOSPITAL ||
-        session.profile?.verificationStatus ||
-        session.verificationStatus ||
-        'PENDING'
-      ).toUpperCase();
+      const status = (session.profile?.verificationStatus || session.profile?.roleVerificationStatus?.HOSPITAL || 'PENDING').toUpperCase();
 
-      if (hospStatus === 'APPROVED' || hospStatus === 'VERIFIED') {
-        useAppStore.getState().setRole('HOSPITAL');
-        router.replace('/(hospital)/dashboard');
+      if (status === 'PENDING') {
+        setPendingStatus('Your hospital registration is currently pending admin review. You will be activated once facility license and capacity details are verified.');
+        Alert.alert('Verification Pending', 'Your facility registration is awaiting Admin verification. You cannot access the hospital console until approved.');
         return;
       }
 
-      if (hospStatus === 'REJECTED') {
-        Alert.alert(
-          'Registration Inactive / Rejected',
-          'Your hospital facility credentials have been rejected or revoked by the system administrator. Please contact support@goldenhour.app for assistance.'
-        );
+      if (status === 'REJECTED') {
+        Alert.alert('Application Rejected', 'Your hospital application was rejected by the Medical Admin. Please contact support or re-register with valid credentials.');
         return;
       }
 
-      // hospStatus is PENDING
-      setPendingStatus(
-        'Your hospital registration and emergency facility credentials are under review by Golden Hour administrators. You will be activated upon approval.'
-      );
+      // Hydrate official hospital facility name
+      const officialName = session.profile?.hospitalName || 'Emergency Trauma Center';
+      const updatedProfile = {
+        ...session.profile,
+        hospitalName: officialName,
+        name: session.profile?.name || officialName,
+        role: 'HOSPITAL',
+      };
+      useAppStore.getState().setIsDemoMode(false);
+      useAppStore.getState().setUserProfile(updatedProfile);
+      useAppStore.getState().setRole('HOSPITAL');
+      useAppStore.getState().setRoles(Array.from(new Set([...rawRoles, 'HOSPITAL'])) as any);
+      useAppStore.getState().setVerificationStatus('APPROVED');
+      AsyncStorage.setItem('gh_user_profile', JSON.stringify(updatedProfile)).catch(() => {});
+      router.replace('/(hospital)/dashboard');
+      return;
     } catch (err: any) {
       console.warn('[HospitalLogin] Google Sign-In error:', err);
       const msg = err?.message || 'Failed to sign in. Please try again.';
@@ -82,18 +76,54 @@ export default function HospitalLogin() {
     }
   };
 
+  const handleDemoHospital = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-hospital');
+    const profile = {
+      uid: 'hosp-demo-apollo',
+      name: 'Dr. Apollo Desk Admin',
+      hospitalName: 'Apollo Multi-Specialty Hospital',
+      email: 'er.command@apollohospitals.com',
+      phone: '+91 532 246 0108',
+      role: 'HOSPITAL',
+      roles: ['HOSPITAL'],
+      verificationStatus: 'APPROVED',
+      isPhoneVerified: true,
+      hasCompletedProfile: true,
+      totalBeds: 50,
+      availableBeds: 18,
+      icuBeds: 12,
+      availableIcuBeds: 4,
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-hospital');
+      await AsyncStorage.setItem('gh_user_uid', 'hosp-demo-apollo');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setIsDemoMode(true);
+    useAppStore.getState().setRole('HOSPITAL');
+    useAppStore.getState().setRoles(['HOSPITAL']);
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile(profile as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
+    router.replace('/(hospital)/dashboard');
+  };
+
   return (
     <Screen center>
-      <View style={{ width: '100%', alignItems: 'flex-start', marginBottom: 12 }}>
-        <Pressable
-          onPress={() => router.replace('/role-selection')}
-          style={{ paddingVertical: 8, paddingHorizontal: 4 }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
-        </Pressable>
+      <Pressable
+        onPress={() => router.replace('/role-selection')}
+        style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, left: 16, zIndex: 10, padding: 8 }}
+      >
+        <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
+      </Pressable>
+
+      <View style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, right: 16, zIndex: 10 }}>
+        <LanguageSelector />
       </View>
 
-      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 10 }}>
+      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 40 }}>
         <View style={styles.iconCircle}>
           <Icon name="hospital" size={36} color={colors.red} />
         </View>
@@ -117,24 +147,10 @@ export default function HospitalLogin() {
       />
 
       <Button
-        title="🚀 Quick Hospital Demo Login"
-        variant="blue"
-        style={{ marginTop: 12 }}
-        onPress={() => {
-          const store = useAppStore.getState();
-          store.setIsAuthenticated(true);
-          store.setRole('HOSPITAL');
-          store.setRoles(['HOSPITAL']);
-          store.setVerificationStatus('APPROVED');
-          store.setUserProfile({
-            uid: 'demo-hospital-001',
-            name: 'Apollo Trauma Care Hospital',
-            role: 'HOSPITAL',
-            roles: ['HOSPITAL'],
-            verificationStatus: 'APPROVED',
-          });
-          router.replace('/(hospital)/dashboard');
-        }}
+        title="⚡ 1-Click Demo Access (Apollo ER Desk)"
+        variant="secondary"
+        style={{ marginTop: 12, borderColor: '#16A34A', borderWidth: 1 }}
+        onPress={handleDemoHospital}
       />
 
       <Button

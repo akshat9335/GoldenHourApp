@@ -9,29 +9,75 @@ import { api } from '@/services/api';
 
 export default function LiveQueue() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const selectedDoctor = useAppStore((s) => s.selectedDoctor);
   const userToken = useAppStore((s) => s.userToken);
+  const setUserToken = useAppStore((s) => s.setUserToken);
   const servingToken = useAppStore((s) => s.servingToken);
   const advanceServingToken = useAppStore((s) => s.advanceServingToken);
-  const doctor = getDoctorById(selectedDoctorId);
+  const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
 
-  const myToken = userToken ?? doctor.currentToken + 1;
-  const patientsAhead = Math.max(myToken - servingToken - 1, 0);
-  const isMyTurn = servingToken >= myToken;
+  const [isConsultCompleted, setIsConsultCompleted] = React.useState(false);
+  const [currentAppt, setCurrentAppt] = React.useState<any>(null);
+  const myToken = userToken ?? (doctor.servingToken || 0) + (doctor.queueLength || 0) + 1;
+  const isCompleted =
+    isConsultCompleted ||
+    (currentAppt ? (currentAppt.status || '').toUpperCase() === 'COMPLETED' : false);
+  const isMyTurn = !isCompleted && servingToken === myToken && servingToken > 0;
+  const patientsAhead = Math.max(myToken - servingToken, 0);
 
   useEffect(() => {
     let mounted = true;
-    api.queues
-      .getLiveQueue(selectedDoctorId, myToken)
-      .then((data: any) => {
-        if (mounted && data && typeof data.servingToken === 'number') {
-          useAppStore.setState({ servingToken: data.servingToken });
-        }
-      })
-      .catch(() => {
-        // Retain local state
-      });
+
+    const fetchQueue = () => {
+      api.queues
+        .getLiveQueue(selectedDoctorId, myToken)
+        .then((data: any) => {
+          if (mounted && data && typeof data.servingToken === 'number') {
+            useAppStore.setState({ servingToken: data.servingToken });
+          }
+        })
+        .catch(() => {});
+
+      const pid = useAppStore.getState().userProfile?.uid || 'patient-1';
+      api.appointments
+        .getMyAppointments(pid)
+        .then((res: any) => {
+          const appts = Array.isArray(res) ? res : res?.data;
+          if (mounted && Array.isArray(appts)) {
+            const activeMatch = appts.find(
+              (a: any) =>
+                (a.doctorId === selectedDoctorId ||
+                  a.doctorId === selectedDoctorId.replace(/^doc-/, '') ||
+                  `doc-${a.doctorId}` === selectedDoctorId) &&
+                (a.tokenNumber || a.token) === myToken &&
+                (a.status || '').toUpperCase() !== 'CANCELLED' &&
+                (a.status || '').toUpperCase() !== 'COMPLETED'
+            );
+            const current =
+              activeMatch ||
+              appts.find(
+                (a: any) =>
+                  (a.doctorId === selectedDoctorId ||
+                    a.doctorId === selectedDoctorId.replace(/^doc-/, '') ||
+                    `doc-${a.doctorId}` === selectedDoctorId) &&
+                  (a.tokenNumber || a.token) === myToken &&
+                  (a.status || '').toUpperCase() !== 'CANCELLED'
+              );
+            if (current) {
+              setCurrentAppt(current);
+              setIsConsultCompleted((current.status || '').toUpperCase() === 'COMPLETED');
+            }
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchQueue();
+    const timer = setInterval(fetchQueue, 4000);
+
     return () => {
       mounted = false;
+      clearInterval(timer);
     };
   }, [selectedDoctorId, myToken]);
 
@@ -48,8 +94,13 @@ export default function LiveQueue() {
     }
   };
 
+  const handleFinish = () => {
+    setUserToken(null);
+    router.replace('/(patient)/consult-doctor' as any);
+  };
+
   const steps = [
-    `Token ${servingToken - 1} → Completed`,
+    `Token ${Math.max(servingToken - 1, 0)} → Completed`,
     `Token ${servingToken} → Serving`,
     ...Array.from({ length: Math.max(myToken - servingToken - 1, 0) }, (_, i) => `Token ${servingToken + i + 1} → Waiting`),
     `Token ${myToken} → Your Token`,
@@ -61,10 +112,12 @@ export default function LiveQueue() {
         <TopBar title="Live Queue" />
 
         <Card style={styles.tokenCard}>
-          {isMyTurn ? (
+          {isCompleted ? (
+            <Pill color="success">CONSULTATION COMPLETED</Pill>
+          ) : isMyTurn ? (
             <Pill color="success">YOUR TURN — PLEASE PROCEED</Pill>
           ) : (
-            <Pill color="blue">WAITING</Pill>
+            <Pill color="blue">WAITING IN QUEUE</Pill>
           )}
           <View style={styles.tokenRow}>
             <View style={{ alignItems: 'center', flex: 1 }}>
@@ -78,8 +131,14 @@ export default function LiveQueue() {
             </View>
           </View>
           <View style={styles.rowMeta}>
-            <Text style={styles.metaText}>{patientsAhead} patients ahead</Text>
-            <Text style={styles.metaText}>~{Math.max(patientsAhead * 8, 0)} min wait</Text>
+            {isCompleted ? (
+              <Text style={[styles.metaText, { color: colors.success }]}>Your consultation has finished</Text>
+            ) : (
+              <>
+                <Text style={styles.metaText}>{patientsAhead} patients ahead</Text>
+                <Text style={styles.metaText}>~{Math.max(patientsAhead * 8, 0)} min wait</Text>
+              </>
+            )}
           </View>
         </Card>
 
@@ -88,13 +147,43 @@ export default function LiveQueue() {
           <Stepper steps={steps} currentIndex={Math.max(steps.length - 2, 0)} />
         </Card>
 
-        {isMyTurn ? (
-          <Button title="Consultation Completed" style={{ marginTop: 16 }} onPress={() => router.replace('/(patient)/consult-doctor' as any)} />
+        {!isCompleted && (
+          <Button
+            title="📹 Join Teleconsultation Room"
+            style={{ marginTop: 14, backgroundColor: colors.blue }}
+            onPress={() => {
+              const consultId = currentAppt?.appointmentId || currentAppt?.id || `appt_${selectedDoctorId}_${myToken}`;
+              router.push(`/(patient)/teleconsultation/${consultId}` as any);
+            }}
+          />
+        )}
+
+        {isCompleted ? (
+          <View style={{ gap: 10, marginTop: 12 }}>
+            <Button
+              title="📄 View Prescription & Health Record"
+              variant="blue"
+              onPress={() => router.push('/(patient)/health-records' as any)}
+            />
+            <Button
+              title="✓ Return to Doctor OPD"
+              variant="primary"
+              style={{ backgroundColor: colors.success }}
+              onPress={handleFinish}
+            />
+          </View>
+        ) : isMyTurn ? (
+          <Button
+            title="Done / Return Home"
+            variant="secondary"
+            style={{ marginTop: 10 }}
+            onPress={handleFinish}
+          />
         ) : (
           <Button
             title="Simulate Queue Moving (Demo)"
             variant="secondary"
-            style={{ marginTop: 16 }}
+            style={{ marginTop: 10 }}
             onPress={handleAdvance}
           />
         )}

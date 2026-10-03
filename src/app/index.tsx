@@ -5,6 +5,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { Icon } from '@/components/ui';
 import { authService } from '@/services/auth';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export default function Splash() {
   const [checking, setChecking] = useState(true);
 
@@ -23,12 +25,27 @@ export default function Splash() {
   useEffect(() => {
     let isMounted = true;
 
+    // Silent early backend warmup ping to wake Render from sleep immediately
+    fetch('https://goldenhourapp.onrender.com/api/health').catch(() => {});
+
     async function checkSession() {
       try {
-        await authService.restoreSession();
+        // Restore session (cached profile restores in <10ms; capped so cold start never freezes)
+        await Promise.race([
+          authService.restoreSession(),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
+        const hasSeenOnboarding = await AsyncStorage.getItem('@has_seen_onboarding');
+        if (isMounted) {
+          setChecking(false);
+          if (hasSeenOnboarding === 'true') {
+            router.replace('/role-selection');
+          } else {
+            router.replace('/onboarding');
+          }
+        }
       } catch (err) {
         console.warn('[Splash] Error restoring session:', err);
-      } finally {
         if (isMounted) {
           setChecking(false);
           router.replace('/role-selection');
@@ -36,10 +53,10 @@ export default function Splash() {
       }
     }
 
-    // Give a short splash display before auto-transitioning
+    // Snappy splash screen duration (800ms)
     const timer = setTimeout(() => {
       checkSession();
-    }, 1000);
+    }, 800);
 
     return () => {
       isMounted = false;

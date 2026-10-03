@@ -42,6 +42,8 @@ export interface EmergencyInput {
   bleeding?: BleedingInfo;
   location?: LocationInfo;
   notes?: string;
+  imageBase64?: string;
+  imageMimeType?: string;
 }
 
 export interface TriageResult {
@@ -52,6 +54,9 @@ export interface TriageResult {
   avoidActions: string[];
   hospitalRequired: boolean;
   ambulanceRecommended: boolean;
+  requiredCapabilities?: string[];
+  specialtyNeeded?: string;
+  recommendedHospitalType?: string;
   explanation: string;
   disclaimer: string;
   source: AiSource;
@@ -96,6 +101,30 @@ export interface FirstAidResult {
   doNot: string[];
   callEmergencyServices: boolean;
   explanation: string;
+  disclaimer: string;
+  source: AiSource;
+}
+
+export interface VoiceTriageInput {
+  transcript: string;
+  language?: "en" | "hi" | "mr" | string;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+  };
+}
+
+export interface VoiceTriageResult {
+  severity: Severity;
+  emergencyType: string;
+  confidence: number;
+  detectedSymptoms: string[];
+  recommendedAmbulance: "ALS" | "BLS";
+  firstAidSteps: string[];
+  avoidActions: string[];
+  transcriptProcessed: string;
+  language: string;
+  summary: string;
   disclaimer: string;
   source: AiSource;
 }

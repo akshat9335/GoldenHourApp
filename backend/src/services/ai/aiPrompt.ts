@@ -9,14 +9,28 @@ Return ONLY valid JSON, with no markdown, using the requested schema.
 
 export function buildTriagePrompt(input: EmergencyInput): string {
   return `${safetyInstruction}
-Analyze this emergency input:
+Analyze this emergency input (which may be written in English, Hindi, or conversational Hinglish such as 'seene me dard', 'bahut khoon beh raha hai', 'accident ho gaya'):
 ${JSON.stringify(input)}
+
+CLINICAL TRIAGE & CAPABILITY MATCHING GUIDELINES:
+1. Language: Comprehend clinical indications in English, Hindi, or Hinglish seamlessly.
+2. Capability Extraction: Identify the exact specialized medical facilities needed:
+   - Cardiac emergency (chest pain, shortness of breath, radiating arm pain) -> ["ICU", "CATH_LAB", "CARDIAC_TEAM"], specialty: "CARDIOLOGY"
+   - Severe trauma/accident (head injury, major hemorrhage, open fracture) -> ["TRAUMA_BAY", "ORTHOPEDIC", "BLOOD_BANK", "ICU"], specialty: "TRAUMA_ORTHO"
+   - Neurological (stroke symptoms, sudden paralysis, unconsciousness) -> ["ICU", "CT_SCAN", "NEURO_TEAM"], specialty: "NEUROLOGY"
+   - Animal / Dog bite (dog bite, animal bite, kutta kaatna, rabies risk) -> ["EMERGENCY_ROOM", "WOUND_CARE", "RABIES_VACCINE"], specialty: "GENERAL", severity: "MEDIUM" (NO ICU required unless airway compromised)
+   - Pediatric / Burn / Respiratory -> appropriately specialized capabilities.
+3. Multimodal Image Assessment: If an emergency photo is attached, visually evaluate the injury scene (active bleeding, wound depth, dog bite punctures, burns, fractures, consciousness) in conjunction with any text description. If text is brief or absent, rely directly on visual findings.
+4. Fail-Safe Principle: If input is empty, minimal, or ambiguous without visible minor indicators, FAIL-SAFE TO "CRITICAL" with requiredCapabilities: ["EMERGENCY_ROOM", "TRAUMA_BAY", "ICU_STANDBY"], specialty: "GENERAL".
 
 Return exactly:
 {
   "severity": "LOW|MEDIUM|HIGH|CRITICAL",
   "emergencyType": "short non-diagnostic description",
   "confidence": 0.0,
+  "requiredCapabilities": ["e.g. ICU", "CATH_LAB"],
+  "specialtyNeeded": "CARDIOLOGY|TRAUMA_ORTHO|NEUROLOGY|GENERAL",
+  "recommendedHospitalType": "Level-1 Multi-Specialty ER Trauma Center",
   "immediateActions": ["safe action"],
   "avoidActions": ["unsafe action to avoid"],
   "hospitalRequired": true,

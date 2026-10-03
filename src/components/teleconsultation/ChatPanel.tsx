@@ -38,7 +38,7 @@ export const ChatPanel = ({ consultationId, selfId, selfRole }: Props) => {
         style={styles.list}
         contentContainerStyle={{ padding: 8 }}
         renderItem={({ item }) => {
-          const own = item.senderId === selfId;
+          const own = item.senderId === selfId || item.senderRole === selfRole;
           return (
             <View style={[styles.bubble, own ? styles.bubbleOwn : styles.bubbleOther]}>
               <Text style={[styles.bubbleText, own && { color: '#fff' }]}>

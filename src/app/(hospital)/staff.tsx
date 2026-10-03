@@ -4,16 +4,20 @@ import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Divider, Icon, HospitalNav, HTitle } from '@/components/ui';
 import { authService } from '@/services/auth';
+import { useAppStore } from '@/store/useAppStore';
 
 export default function Staff() {
+  const userProfile = useAppStore((s) => s.userProfile);
+  const hospitalName = (userProfile as any)?.hospitalName || userProfile?.name || 'Emergency Trauma Center';
+
   return (
     <View style={{ flex: 1 }}>
       <Screen>
         <View style={styles.header}>
           <View style={styles.avatar}><Text style={styles.avatarText}>ER</Text></View>
           <View>
-            <HTitle size={16}>ER Staff — 014</HTitle>
-            <Text style={styles.sub}>St. Martha's Hospital · Emergency Desk</Text>
+            <HTitle size={16}>ER Staff Desk</HTitle>
+            <Text style={styles.sub}>{hospitalName} · Emergency Desk</Text>
           </View>
         </View>
         <Card style={{ padding: 4 }}>

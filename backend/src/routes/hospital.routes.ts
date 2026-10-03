@@ -33,6 +33,7 @@ import {
   updateHospitalProfileController,
   updateHospitalRequestStatusController,
   updateHospitalSpecialistController,
+  matchCandidateHospitalsController,
 } from "../controllers/hospital.controller";
 
 import { requireApproved, requireAuth, requireRole } from "../middleware/auth";
@@ -47,6 +48,16 @@ router.post(
   "/register",
   requireAuth,
   registerHospitalController,
+);
+
+// ============================================================
+// AI HOSPITAL MATCH CANDIDATES (TOP 3 RANKING)
+// ============================================================
+
+router.post(
+  "/match-candidates",
+  requireAuth,
+  matchCandidateHospitalsController,
 );
 
 // ============================================================

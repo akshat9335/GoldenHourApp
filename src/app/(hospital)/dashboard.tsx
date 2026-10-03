@@ -1,36 +1,62 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, RefreshControl, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, Pressable, StyleSheet, RefreshControl, TouchableOpacity, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, Icon, HospitalNav, HTitle, LabelEyebrow, openExternalNavigation } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import { authService } from '@/services/auth';
+import { acquireFreshLocation } from '@/services/deviceLocation';
+import LanguageSelector from '@/components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HospitalDashboard() {
+  const { i18n } = useTranslation();
+  const lang = i18n.language;
+
   const userProfile = useAppStore((s) => s.userProfile);
   const setActiveHospitalRequestId = useAppStore((s) => s.setActiveHospitalRequestId);
   const initialName = userProfile?.hospitalName || "Hospital ER";
   const [hospitalName, setHospitalName] = useState(initialName.endsWith('— ER') ? initialName : `${initialName} — ER`);
   const [pendingEmergency, setPendingEmergency] = useState<any | null>(null);
   const [activeInbound, setActiveInbound] = useState<any[]>([]);
+  const [admittedPatients, setAdmittedPatients] = useState<any[]>([]);
   const [criticalCount, setCriticalCount] = useState<number>(0);
+  const [completedCases, setCompletedCases] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const [capacity, setCapacity] = useState({
-    totalBeds: 20,
-    availableBeds: 14,
-    icuBeds: 5,
+    totalBeds: 50,
+    availableBeds: 18,
+    icuBeds: 12,
     availableIcuBeds: 4,
-    emergencyCapacity: 5,
+    emergencyCapacity: 6,
   });
 
-  const loadData = useCallback(async () => {
-    try {
-      const profilePromise = api.hospitals.getProfile().catch(() => null);
-      const capPromise = api.hospitals.getCapacity().catch(() => null);
-      const reqPromise = api.hospitals.getRequests().catch(() => null);
+  // Load cached capacity immediately on mount to prevent flashing
+  useEffect(() => {
+    const hospId = userProfile?.uid || 'hosp-srn-prayagraj';
+    AsyncStorage.getItem(`@golden_hour_hospital_capacity_${hospId}`).then((raw) => {
+      if (raw) {
+        try {
+          const cached = JSON.parse(raw);
+          if (cached && cached.availableBeds !== undefined) {
+            setCapacity((prev) => ({ ...prev, ...cached }));
+          }
+        } catch {}
+      }
+    }).catch(() => {});
+  }, [userProfile?.uid]);
 
-      const [profileRes, capRes, reqsRes]: any = await Promise.all([profilePromise, capPromise, reqPromise]);
+  // Load hospital profile and capacity once on mount or manual refresh
+  const loadStaticInfo = useCallback(async () => {
+    try {
+      const hospId = userProfile?.uid || 'hosp-srn-prayagraj';
+      const [profileRes, capRes]: any = await Promise.all([
+        api.hospitals.getProfile().catch(() => null),
+        api.hospitals.getCapacity().catch(() => null),
+      ]);
 
       if (profileRes) {
         const data = profileRes?.data || profileRes;
@@ -38,66 +64,195 @@ export default function HospitalDashboard() {
         if (hosp) {
           setHospitalName(hosp.endsWith('— ER') ? hosp : `${hosp} — ER`);
         }
-        const lastLoc = useAppStore.getState().lastKnownLocation;
-        if (lastLoc && (!data?.location || !data?.latitude)) {
-          api.hospitals.updateProfile({
-            location: lastLoc,
-            latitude: lastLoc.latitude,
-            longitude: lastLoc.longitude,
+        const hasValidLoc = data?.location && typeof data.location.latitude === 'number' && data.location.latitude !== 0;
+        if (!hasValidLoc) {
+          // Acquire location once asynchronously in background without blocking
+          acquireFreshLocation(2000).then((fresh) => {
+            if (fresh && fresh.latitude !== 28.6139) {
+              api.hospitals.updateProfile({
+                location: fresh,
+                latitude: fresh.latitude,
+                longitude: fresh.longitude,
+              }).catch(() => {});
+            }
           }).catch(() => {});
         }
       }
 
       if (capRes) {
         const cap = capRes?.data || capRes;
-        if (cap) {
-          setCapacity({
-            totalBeds: Number(cap.totalBeds) || 20,
-            availableBeds: Number(cap.availableBeds) || 14,
-            icuBeds: Number(cap.icuBeds) || 5,
+        if (cap && cap.availableBeds !== undefined) {
+          const newCap = {
+            totalBeds: Number(cap.totalBeds) || 50,
+            availableBeds: Number(cap.availableBeds) || 18,
+            icuBeds: Number(cap.icuBeds) || 12,
             availableIcuBeds: Number(cap.availableIcuBeds) || 4,
-            emergencyCapacity: Number(cap.emergencyCapacity) || 5,
-          });
+            emergencyCapacity: Number(cap.emergencyCapacity) || 6,
+          };
+          setCapacity(newCap);
+          AsyncStorage.setItem(`@golden_hour_hospital_capacity_${hospId}`, JSON.stringify(newCap)).catch(() => {});
+        }
+      }
+    } catch {}
+  }, [userProfile?.uid]);
+
+  // Poll incoming emergency requests, referrals, and live capacity in the recurring loop
+  const pollEmergencyRequests = useCallback(async () => {
+    try {
+      const hospId = userProfile?.uid || 'hosp-srn-prayagraj';
+      const [reqsRes, capRes, refRes]: any = await Promise.all([
+        api.hospitals.getRequests().catch(() => null),
+        api.hospitals.getCapacity().catch(() => null),
+        api.referrals.getHospitalReferrals(hospId).catch(() => null),
+      ]);
+
+      if (capRes) {
+        const cap = capRes?.data || capRes;
+        if (cap && cap.availableBeds !== undefined) {
+          const newCap = {
+            totalBeds: Number(cap.totalBeds) || 50,
+            availableBeds: Number(cap.availableBeds) || 18,
+            icuBeds: Number(cap.icuBeds) || 12,
+            availableIcuBeds: Number(cap.availableIcuBeds) || 4,
+            emergencyCapacity: Number(cap.emergencyCapacity) || 6,
+          };
+          setCapacity(newCap);
+          AsyncStorage.setItem(`@golden_hour_hospital_capacity_${hospId}`, JSON.stringify(newCap)).catch(() => {});
         }
       }
 
-      if (reqsRes) {
-        const items = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
-        const pending = items.filter((d: any) => {
-          const s = String(d.status || 'NEW').toUpperCase();
-          return s === 'NEW' || s === 'PENDING';
-        });
-        const inbound = items.filter((d: any) => {
-          const s = String(d.status || '').toUpperCase();
-          return (
-            s === 'ACCEPTED' ||
-            s === 'AMBULANCE EN ROUTE' ||
-            s === 'PATIENT ARRIVED' ||
-            s === 'IN TREATMENT'
-          );
-        });
-        pending.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        inbound.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
-        setCriticalCount(pending.length);
-        setActiveInbound(inbound);
-        if (pending.length > 0) {
-          setPendingEmergency(pending[0]);
-        } else {
-          setPendingEmergency(null);
-        }
+      const items = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
+      const refsRaw = Array.isArray(refRes) ? refRes : (refRes?.data || []);
+
+      const pending = items.filter((d: any) => {
+        const s = String(d.status || 'NEW').toUpperCase();
+        return s === 'NEW' || s === 'PENDING';
+      });
+
+      const admitted = items.filter((d: any) => {
+        const s = String(d.status || '').toUpperCase();
+        const ts = String(d.tripStatus || '').toUpperCase();
+        if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
+        return s === 'PATIENT ARRIVED' || s === 'IN TREATMENT' || s === 'AT_HOSPITAL' || ts === 'AT_HOSPITAL';
+      });
+
+      const inbound = items.filter((d: any) => {
+        const s = String(d.status || '').toUpperCase();
+        const ts = String(d.tripStatus || '').toUpperCase();
+        if (s === 'COMPLETED' || s === 'REJECTED' || s === 'CANCELLED') return false;
+        if (s === 'PATIENT ARRIVED' || s === 'IN TREATMENT' || s === 'AT_HOSPITAL' || ts === 'AT_HOSPITAL') return false;
+        return (
+          s === 'ACCEPTED' ||
+          s === 'HOSPITAL_ACCEPTED' ||
+          s === 'AMBULANCE_ASSIGNED' ||
+          s === 'AMBULANCE EN ROUTE' ||
+          s === 'EN_ROUTE_TO_PATIENT' ||
+          s === 'ARRIVING' ||
+          s === 'AT_PATIENT' ||
+          s === 'PATIENT_ONBOARD' ||
+          s === 'EN_ROUTE_TO_HOSPITAL' ||
+          ts === 'ASSIGNED' ||
+          ts === 'EN_ROUTE_TO_PATIENT' ||
+          ts === 'AT_PATIENT' ||
+          ts === 'PATIENT_ONBOARD' ||
+          ts === 'EN_ROUTE_TO_HOSPITAL'
+        );
+      });
+
+      // Integrate accepted/incoming referrals into inbound
+      const refInbound = refsRaw
+        .filter((r: any) => String(r.status || '').toUpperCase() === 'ACCEPTED')
+        .map((r: any) => ({
+          id: r.id,
+          requestId: r.id,
+          patientName: r.patientName,
+          severity: r.priority || 'HIGH',
+          incidentType: `Referral Transfer (${r.doctorName || 'Doctor/ASHA'})`,
+          status: 'ACCEPTED',
+          tripStatus: 'EN_ROUTE_TO_HOSPITAL',
+          eta: 'Bed Reserved',
+          assignedDriverName: r.doctorName || 'Referring Clinician',
+          assignedAmbulanceId: 'Transfer',
+          isReferral: true,
+          notes: r.reason,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        }));
+
+      // Integrate admitted referrals into admittedPatients
+      const refAdmitted = refsRaw
+        .filter((r: any) => {
+          const s = String(r.status || '').toUpperCase();
+          return s === 'COMPLETED' || s === 'ADMITTED';
+        })
+        .map((r: any) => ({
+          id: r.id,
+          requestId: r.id,
+          patientName: r.patientName,
+          severity: r.priority || 'HIGH',
+          incidentType: `Referral Patient (${r.doctorName || 'Doctor/ASHA'})`,
+          status: 'IN TREATMENT',
+          assignedDriverName: r.doctorName || 'Primary Caregiver',
+          assignedAmbulanceId: 'ER Inpatient',
+          isReferral: true,
+          notes: r.reason,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        }));
+
+      const completed = items.filter((d: any) => {
+        const s = String(d.status || '').toUpperCase();
+        const ts = String(d.tripStatus || '').toUpperCase();
+        return s === 'COMPLETED' || s === 'RESOLVED' || ts === 'COMPLETED';
+      });
+
+      const refCompleted = refsRaw
+        .filter((r: any) => String(r.status || '').toUpperCase() === 'DISCHARGED')
+        .map((r: any) => ({
+          id: r.id,
+          requestId: r.id,
+          patientName: r.patientName,
+          status: 'COMPLETED',
+          isReferral: true,
+          updatedAt: r.updatedAt,
+        }));
+
+      const allInbound = [...inbound, ...refInbound];
+      const allAdmitted = [...admitted, ...refAdmitted];
+      const allCompleted = [...completed, ...refCompleted];
+
+      pending.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      allInbound.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+      allAdmitted.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+      allCompleted.sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+
+      setCriticalCount(pending.length);
+      setActiveInbound(allInbound);
+      setAdmittedPatients(allAdmitted);
+      setCompletedCases(allCompleted);
+      if (pending.length > 0) {
+        setPendingEmergency(pending[0]);
+      } else {
+        setPendingEmergency(null);
       }
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [userProfile?.uid]);
+
+  const loadData = useCallback(() => {
+    loadStaticInfo();
+    pollEmergencyRequests();
+  }, [loadStaticInfo, pollEmergencyRequests]);
 
   useEffect(() => {
-    loadData();
+    loadStaticInfo();
+    pollEmergencyRequests();
     const timer = setInterval(() => {
-      loadData();
-    }, 3500);
+      pollEmergencyRequests();
+    }, 4000);
     return () => clearInterval(timer);
-  }, [loadData]);
+  }, [loadStaticInfo, pollEmergencyRequests]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -125,6 +280,78 @@ export default function HospitalDashboard() {
     } catch (_e) {}
   };
 
+  const handleDischargePatient = (patient: any) => {
+    const patientName = patient.patientName || 'Patient';
+    const reqId = patient.requestId || patient.id;
+    Alert.alert(
+      'Discharge Patient?',
+      `Confirm discharge for ${patientName}?\n\n• Frees up hospital ER bed capacity\n• Awards +10 Trust Score to the patient for verified care`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Discharge',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (patient.isReferral) {
+                await api.referrals.updateStatus(patient.id, 'DISCHARGED');
+              } else {
+                await api.hospitals.completeRequest(reqId);
+              }
+              loadData();
+              Alert.alert('Patient Discharged', `${patientName} has been discharged and bed capacity freed.`);
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Could not discharge patient');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleClearResolved = () => {
+    Alert.alert(
+      'Clear Resolved Cases?',
+      'Do you want to clean up resolved cases from this hospital view?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear All',
+          onPress: async () => {
+            try {
+              await api.hospitals.clearRequests();
+              loadData();
+            } catch {}
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAccountOptions = () => {
+    Alert.alert(
+      hospitalName,
+      'Select an action to switch role or log out of this facility console:',
+      [
+        {
+          text: 'Switch Role',
+          onPress: () => router.replace('/role-selection'),
+        },
+        {
+          text: 'Log Out Account',
+          style: 'destructive',
+          onPress: async () => {
+            await authService.logout().catch(() => {});
+            useAppStore.getState().setUserProfile(null);
+            useAppStore.getState().setAuthToken(null);
+            router.replace('/role-selection');
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <Screen
@@ -139,14 +366,31 @@ export default function HospitalDashboard() {
       >
         <View style={styles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-            <Pressable onPress={() => router.replace('/role-selection')} style={{ marginRight: 8, padding: 4 }} hitSlop={8}>
+            <Pressable onPress={handleAccountOptions} style={{ marginRight: 8, padding: 4 }} hitSlop={8}>
               <Icon name="chevL" size={20} color={colors.ink} />
             </Pressable>
-            <HTitle size={16}>{hospitalName}</HTitle>
+            <TouchableOpacity onPress={handleAccountOptions} style={{ flex: 1 }}>
+              <HTitle size={15}>{hospitalName}</HTitle>
+              <Text style={{ fontSize: 10.5, color: colors.inkFaint }}>
+                {lang === 'mr' ? 'भूमिका बदलण्यासाठी किंवा लॉगआउट करण्यासाठी टॅप करा' : lang === 'hi' ? 'रोल बदलने या लॉगआउट करने के लिए टैप करें' : 'Tap to switch role or log out'}
+              </Text>
+            </TouchableOpacity>
           </View>
-          <Pressable style={styles.bellBtn} onPress={() => router.push('/notifications')}>
-            <Icon name="bell" />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <LanguageSelector />
+            <TouchableOpacity
+              style={styles.switchBtn}
+              onPress={() => router.replace('/role-selection')}
+              hitSlop={8}
+            >
+              <Text style={styles.switchBtnText}>
+                {lang === 'mr' ? '‹ भूमिका बदला' : lang === 'hi' ? '‹ रोल बदलें' : '‹ Switch Role'}
+              </Text>
+            </TouchableOpacity>
+            <Pressable style={styles.bellBtn} onPress={() => router.push('/notifications')}>
+              <Icon name="bell" />
+            </Pressable>
+          </View>
         </View>
 
         {/* Dynamic Emergency Card: Incoming vs Standby */}
@@ -154,9 +398,11 @@ export default function HospitalDashboard() {
           {pendingEmergency ? (
             <Card style={[styles.incomingCard, styles.activeIncomingCard]}>
               <View style={styles.rowTop}>
-                <Pill color="red">INCOMING · {String(pendingEmergency.severity || 'HIGH').toUpperCase()}</Pill>
+                <Pill color="red">
+                  {lang === 'mr' ? 'येत असलेला रुग्ण' : lang === 'hi' ? 'इनकमिंग मरीज' : 'INCOMING'} · {String(pendingEmergency.severity || 'HIGH').toUpperCase()}
+                </Pill>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={styles.eta}>ETA {pendingEmergency.eta || '6 min'}</Text>
+                  <Text style={styles.eta}>{lang === 'mr' ? 'वेळ' : lang === 'hi' ? 'समय' : 'ETA'} {pendingEmergency.eta || '6 min'}</Text>
                   <Pressable
                     onPress={handleDismissPendingEmergency}
                     hitSlop={8}
@@ -167,21 +413,29 @@ export default function HospitalDashboard() {
                 </View>
               </View>
               <Text style={styles.incomingName}>
-                {pendingEmergency.patientName || 'Emergency Patient'} · {pendingEmergency.incidentType || 'Trauma Alert'}
+                {pendingEmergency.patientName || (lang === 'hi' ? 'आपातकालीन मरीज' : 'Emergency Patient')} · {pendingEmergency.incidentType || 'Trauma Alert'}
               </Text>
-              <Text style={styles.incomingSub}>
-                Tap to review patient triage and accept/reject emergency dispatch
+              <Text style={styles.incomingSub} numberOfLines={2}>
+                📍 {pendingEmergency.locationAddress || (pendingEmergency.location ? `${pendingEmergency.location.latitude?.toFixed(4)}°N, ${pendingEmergency.location.longitude?.toFixed(4)}°E` : 'Live Incident Location')} · {lang === 'mr' ? 'तपशील व डिस्पॅचसाठी टॅप करा' : lang === 'hi' ? 'समीक्षा और डिस्पैच के लिए टैप करें' : 'Tap to review & dispatch'}
               </Text>
             </Card>
           ) : (
             <Card style={styles.incomingCard}>
               <View style={styles.rowTop}>
-                <Pill color="success">DISPATCH · STANDBY</Pill>
-                <Text style={styles.eta}>All Normal</Text>
+                <Pill color="success">
+                  {lang === 'mr' ? 'डिस्पॅच · स्टँडबाय' : lang === 'hi' ? 'डिस्पैच · स्टैंडबाय' : 'DISPATCH · STANDBY'}
+                </Pill>
+                <Text style={styles.eta}>{lang === 'mr' ? 'सर्व सामान्य' : lang === 'hi' ? 'सब सामान्य' : 'All Normal'}</Text>
               </View>
-              <Text style={styles.incomingName}>Emergency Dispatch · Standby</Text>
+              <Text style={styles.incomingName}>
+                {lang === 'mr' ? 'आपत्कालीन डिस्पॅच · स्टँडबाय' : lang === 'hi' ? 'आपातकालीन डिस्पैच · स्टैंडबाय' : 'Emergency Dispatch · Standby'}
+              </Text>
               <Text style={styles.incomingSub}>
-                0 active incoming emergency requests · All trauma stations on standby
+                {lang === 'mr'
+                  ? 'कोणतीही आपत्कालीन विनंती प्रलंबित नाही · सर्व ट्रॉमा स्टेशन्स सज्ज'
+                  : lang === 'hi'
+                  ? 'कोई सक्रिय आपातकालीन अनुरोध नहीं · सभी ट्रॉमा स्टेशन तैयार'
+                  : '0 active incoming emergency requests · All trauma stations on standby'}
               </Text>
             </Card>
           )}
@@ -193,63 +447,71 @@ export default function HospitalDashboard() {
               <Text style={[styles.statNum, { color: criticalCount > 0 ? colors.red : colors.inkSoft }]}>
                 {criticalCount}
               </Text>
-              <Text style={styles.statLabel}>CRITICAL</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'गंभीर रुग्ण' : lang === 'hi' ? 'क्रिटिकल' : 'CRITICAL'}
+              </Text>
             </Card>
           </Pressable>
           <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/capacity')}>
             <Card style={styles.stat}>
               <Text style={styles.statNum}>{capacity.availableBeds}/{capacity.totalBeds}</Text>
-              <Text style={styles.statLabel}>BEDS FREE</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'रिक्त बेड्स' : lang === 'hi' ? 'खाली बेड' : 'BEDS FREE'}
+              </Text>
             </Card>
           </Pressable>
           <Pressable style={{ flex: 1 }} onPress={() => router.push('/(hospital)/capacity')}>
             <Card style={styles.stat}>
               <Text style={[styles.statNum, { color: colors.success }]}>{capacity.availableIcuBeds}</Text>
-              <Text style={styles.statLabel}>ICU FREE</Text>
+              <Text style={styles.statLabel}>
+                {lang === 'mr' ? 'रिक्त आयसीयू' : lang === 'hi' ? 'खाली ICU' : 'ICU FREE'}
+              </Text>
             </Card>
           </Pressable>
         </View>
 
         {activeInbound.length > 0 && (
           <View style={{ marginBottom: 16 }}>
-            <LabelEyebrow>INBOUND PATIENTS & DISPATCHED AMBULANCES ({activeInbound.length})</LabelEyebrow>
+            <LabelEyebrow>
+              {lang === 'mr' ? 'येणारे रुग्ण व पाठवलेल्या रुग्णवाहिका' : lang === 'hi' ? 'इनबाउंड मरीज और डिस्पैच एम्बुलेंस' : 'INBOUND PATIENTS & DISPATCHED AMBULANCES'} ({activeInbound.length})
+            </LabelEyebrow>
             {activeInbound.map((item, idx) => {
               const st = String(item.status || 'ACCEPTED').toUpperCase();
               const tripSt = String(item.tripStatus || '').toUpperCase();
-              let statusPill = 'ACCEPTED';
+              let statusPill = lang === 'mr' ? 'स्वीकारले' : lang === 'hi' ? 'स्वीकृत' : 'ACCEPTED';
               let pillColor: 'red' | 'amber' | 'success' | 'blue' = 'amber';
 
               if (tripSt === 'AT_HOSPITAL' || st === 'PATIENT ARRIVED') {
-                statusPill = 'ARRIVED AT ER';
+                statusPill = lang === 'mr' ? 'ER मध्ये दाखल' : lang === 'hi' ? 'ER पहुंचा' : 'ARRIVED AT ER';
                 pillColor = 'success';
               } else if (tripSt === 'PATIENT_ONBOARD' || tripSt === 'EN_ROUTE_TO_HOSPITAL') {
-                statusPill = 'PATIENT IN TRANSIT';
+                statusPill = lang === 'mr' ? 'रुग्ण मार्गावर' : lang === 'hi' ? 'मरीज रास्ते में' : 'PATIENT IN TRANSIT';
                 pillColor = 'red';
               } else if (tripSt === 'EN_ROUTE_TO_PATIENT' || tripSt === 'AT_PATIENT' || st === 'AMBULANCE EN ROUTE') {
-                statusPill = 'AMBULANCE EN ROUTE';
+                statusPill = lang === 'mr' ? 'रुग्णवाहिका मार्गावर' : lang === 'hi' ? 'एम्बुलेंस रास्ते में' : 'AMBULANCE EN ROUTE';
                 pillColor = 'blue';
               }
 
-              const driverName = item.assignedDriverName || 'Assigned Pilot';
+              const driverName = item.assignedDriverName || (lang === 'hi' ? 'नियुक्त चालक' : 'Assigned Pilot');
               const vehicle = item.assignedAmbulanceId || 'Ambulance';
-              const driverPhone = item.assignedDriverPhone;
-              const patientPhone = item.patientPhone;
+              const driverPhone = item.assignedDriverPhone || item.driverPhone || item.driverContact;
+              const patientPhone = item.patientPhone || item.phone || item.contactPhone || item.userPhone;
 
               return (
                 <Card key={item.requestId || item.id || idx} style={styles.inboundCard}>
                   <View style={styles.rowTop}>
                     <Pill color={pillColor}>{statusPill}</Pill>
-                    <Text style={styles.eta}>{item.eta || 'Live'}</Text>
+                    <Text style={styles.eta}>{item.eta || (lang === 'hi' ? 'लाइव' : 'Live')}</Text>
                   </View>
 
                   <Text style={styles.inboundTitle}>
-                    {item.patientName || 'Emergency Patient'} · {item.incidentType || 'Trauma'}
+                    {item.patientName || (lang === 'hi' ? 'आपातकालीन मरीज' : 'Emergency Patient')} · {item.incidentType || 'Trauma'}
                   </Text>
 
                   <View style={styles.inboundMetaRow}>
                     <Icon name="ambulance" size={16} color={colors.inkSoft} />
                     <Text style={styles.inboundMetaText}>
-                      Pilot: {driverName} (Unit {vehicle}) {item.ambulanceType ? `· ${item.ambulanceType}` : ''}
+                      {lang === 'mr' ? 'चालक' : lang === 'hi' ? 'पायलट' : 'Pilot'}: {driverName} (Unit {vehicle}) {item.ambulanceType ? `· ${item.ambulanceType}` : ''}
                     </Text>
                   </View>
 
@@ -258,8 +520,8 @@ export default function HospitalDashboard() {
                     <TouchableOpacity
                       style={styles.actionBtnNav}
                       onPress={() => {
-                        const targetLat = item.ambulanceLocation?.latitude || item.location?.latitude || 12.9352;
-                        const targetLng = item.ambulanceLocation?.longitude || item.location?.longitude || 77.6146;
+                        const targetLat = item.ambulanceLocation?.latitude || item.location?.latitude || 25.4358;
+                        const targetLng = item.ambulanceLocation?.longitude || item.location?.longitude || 81.8463;
                         openExternalNavigation({
                           destLat: targetLat,
                           destLng: targetLng,
@@ -268,7 +530,9 @@ export default function HospitalDashboard() {
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.actionBtnTextNav}>🧭 Track</Text>
+                      <Text style={styles.actionBtnTextNav}>
+                        📡 {lang === 'mr' ? 'थेट ट्रॅक' : lang === 'hi' ? 'लाइव ट्रैक' : 'Live Track'}
+                      </Text>
                     </TouchableOpacity>
 
                     {driverPhone ? (
@@ -277,7 +541,9 @@ export default function HospitalDashboard() {
                         onPress={() => Linking.openURL(`tel:${driverPhone}`)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.actionBtnTextBlue}>📞 Pilot</Text>
+                        <Text style={styles.actionBtnTextBlue}>
+                          📞 {lang === 'mr' ? 'चालक' : lang === 'hi' ? 'पायलट' : 'Pilot'}
+                        </Text>
                       </TouchableOpacity>
                     ) : null}
 
@@ -287,19 +553,101 @@ export default function HospitalDashboard() {
                         onPress={() => Linking.openURL(`tel:${patientPhone}`)}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.actionBtnTextGreen}>📞 Patient</Text>
+                        <Text style={styles.actionBtnTextGreen}>
+                          📞 {lang === 'mr' ? 'रुग्ण' : lang === 'hi' ? 'मरीज' : 'Patient'}
+                        </Text>
                       </TouchableOpacity>
                     ) : null}
 
                     <TouchableOpacity
                       style={styles.actionBtnGrey}
                       onPress={() => {
-                        setActiveHospitalRequestId(item.requestId || item.id);
-                        router.push('/(hospital)/request-detail');
+                        if (item.isReferral) {
+                          router.push('/(hospital)/requests');
+                        } else {
+                          setActiveHospitalRequestId(item.requestId || item.id);
+                          router.push('/(hospital)/request-detail');
+                        }
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.actionBtnTextGrey}>Review →</Text>
+                      <Text style={styles.actionBtnTextGrey}>
+                        {lang === 'mr' ? 'तपशील →' : lang === 'hi' ? 'समीक्षा →' : 'Review →'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Admitted Patients in ER / Treatment Section */}
+        {admittedPatients.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <LabelEyebrow>🏥 ADMITTED PATIENTS IN ER ({admittedPatients.length})</LabelEyebrow>
+              <Text style={{ fontSize: 11, color: colors.success, fontWeight: '700' }}>Active Treatment</Text>
+            </View>
+            {admittedPatients.map((item, idx) => {
+              const driverName = item.assignedDriverName || item.driverName || 'Pilot';
+              const vehicle = item.assignedAmbulanceId || item.ambulanceId || '108';
+              const patientPhone = item.patientPhone || item.contactPhone || item.phone || item.userPhone;
+              return (
+                <Card key={item.requestId || item.id || idx} style={styles.admittedCard}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 16 }}>🏥</Text>
+                      <Text style={styles.admittedTitle}>
+                        {item.patientName || 'Emergency Patient'}
+                      </Text>
+                    </View>
+                    <Pill color="success">IN ER TREATMENT</Pill>
+                  </View>
+
+                  <View style={styles.inboundMetaRow}>
+                    <Icon name="hospital" size={14} color={colors.inkSoft} />
+                    <Text style={styles.inboundMetaText}>
+                      ID: {item.requestId || item.id?.slice?.(0, 8) || 'EM-911'} · {item.incidentType || 'Critical'}
+                    </Text>
+                  </View>
+
+                  <Text style={{ fontSize: 11.5, color: colors.inkFaint, marginBottom: 10 }}>
+                    Unit {vehicle} ({driverName}) · Bed allocated
+                  </Text>
+
+                  <View style={styles.inboundBtnRow}>
+                    <TouchableOpacity
+                      style={styles.actionBtnGrey}
+                      onPress={() => {
+                        if (item.isReferral) {
+                          router.push('/(hospital)/requests');
+                        } else {
+                          setActiveHospitalRequestId(item.requestId || item.id);
+                          router.push('/(hospital)/request-detail');
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.actionBtnTextGrey}>🩺 Details</Text>
+                    </TouchableOpacity>
+
+                    {patientPhone ? (
+                      <TouchableOpacity
+                        style={styles.actionBtnGreen}
+                        onPress={() => Linking.openURL(`tel:${patientPhone}`)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.actionBtnTextGreen}>📞 Call</Text>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    <TouchableOpacity
+                      style={styles.dischargeBtn}
+                      onPress={() => handleDischargePatient(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.dischargeBtnText}>✅ Discharge</Text>
                     </TouchableOpacity>
                   </View>
                 </Card>
@@ -321,6 +669,33 @@ export default function HospitalDashboard() {
             <Pill color="success">Available</Pill>
           </View>
         </Card>
+
+        {completedCases.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <LabelEyebrow>RESOLVED / COMPLETED EMERGENCY CASES ({completedCases.length})</LabelEyebrow>
+              <TouchableOpacity
+                onPress={handleClearResolved}
+                style={{ paddingHorizontal: 8, paddingVertical: 3, backgroundColor: '#F1F5F9', borderRadius: 6, borderWidth: 1, borderColor: '#CBD5E1' }}
+              >
+                <Text style={{ fontSize: 10.5, fontWeight: '700', color: colors.inkSoft }}>🧹 Clear</Text>
+              </TouchableOpacity>
+            </View>
+            {completedCases.slice(0, 5).map((item, idx) => (
+              <Card key={item.requestId || item.id || idx} style={{ padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#86EFAC', backgroundColor: '#F0FDF4' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>
+                    {item.patientName || 'Emergency Patient'} · {item.incidentType || 'Trauma'}
+                  </Text>
+                  <Pill color="success">RESOLVED</Pill>
+                </View>
+                <Text style={{ fontSize: 11, color: colors.inkFaint, marginTop: 4 }}>
+                  Unit {item.assignedAmbulanceId || '108'} · Pilot: {item.assignedDriverName || 'Assigned Pilot'}
+                </Text>
+              </Card>
+            ))}
+          </View>
+        )}
 
         <LabelEyebrow>HOSPITAL AMBULANCE FLEET</LabelEyebrow>
         <Pressable onPress={() => router.push('/(hospital)/fleet')}>
@@ -346,6 +721,8 @@ export default function HospitalDashboard() {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   bellBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  switchBtn: { paddingHorizontal: 9, paddingVertical: 8, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center' },
+  switchBtnText: { fontSize: 11, fontWeight: '700', color: colors.inkSoft },
   incomingCard: { padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.line },
   activeIncomingCard: { borderColor: colors.red, backgroundColor: '#FEF2F2' },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -454,5 +831,30 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1,
     borderColor: '#FECACA',
+  },
+  admittedCard: {
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    backgroundColor: '#F0FDF4',
+  },
+  admittedTitle: {
+    fontWeight: '800',
+    fontSize: 14,
+    color: colors.ink,
+  },
+  dischargeBtn: {
+    flex: 1.2,
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dischargeBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

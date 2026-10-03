@@ -5,21 +5,12 @@ import Constants from 'expo-constants';
  * Single canonical entry point for all frontend-to-backend communication.
  */
 
+export function getApiBaseUrl(): string {
+  return process.env.EXPO_PUBLIC_API_URL || 'https://goldenhourapp.onrender.com';
+}
+
 function resolveApiBaseUrl(): string {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
-  }
-  const hostUri = Constants.expoConfig?.hostUri || (Constants as any).manifest2?.extra?.expoGo?.debuggerHost;
-  if (hostUri) {
-    const ip = hostUri.split(':')[0];
-    if (ip) {
-      return `http://${ip}:5000`;
-    }
-  }
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5000`;
-  }
-  return 'http://192.168.1.5:5000';
+  return getApiBaseUrl();
 }
 
 const API_BASE_URL = resolveApiBaseUrl();
@@ -52,12 +43,26 @@ async function request<T = any>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'bypass-tunnel-reminder': 'true',
+    'User-Agent': 'GoldenHourApp',
     ...(options.headers as Record<string, string>),
   };
 
   if (authToken && !headers.Authorization) {
     headers.Authorization = `Bearer ${authToken}`;
   }
+
+  try {
+    const store = require('@/store/useAppStore')?.useAppStore?.getState();
+    const activeUid = store?.userProfile?.uid;
+    const activeRole = store?.role;
+    if (activeUid && !headers['x-dev-uid']) {
+      headers['x-dev-uid'] = activeUid;
+    }
+    if (activeRole && !headers['x-dev-role']) {
+      headers['x-dev-role'] = activeRole;
+    }
+  } catch {}
 
   const res = await fetch(url, {
     ...options,
@@ -97,35 +102,60 @@ export const api = {
 
   // Canonical Emergencies
   emergencies: {
+    list: () => request<any[]>('/emergencies'),
     create: (input: {
       incidentType: string;
       description?: string | null;
       voiceTranscript?: string | null;
       imageUrl?: string | null;
+      imageBase64?: string | null;
+      imageMimeType?: string | null;
       location: { latitude: number; longitude: number };
+      locationAddress?: string | null;
       severity?: string | null;
       aiResult?: any;
     }) => request('/emergencies', { method: 'POST', body: JSON.stringify(input) }),
     getById: (id: string) => request(`/emergencies/${id}`),
     update: (id: string, updates: any) =>
       request(`/emergencies/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    cancel: (id: string, reason?: string) =>
+      request(`/emergencies/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    cancelActive: (reason?: string) =>
+      request('/emergencies/active/cancel', { method: 'POST', body: JSON.stringify({ reason }) }),
   },
 
   // Confirmations (Multi-user concurrency & verification)
   confirmations: {
-    // Backend expects POST /confirmations with body {emergencyId, location}
-    confirm: (emergencyId: string, location?: { latitude: number; longitude: number }) =>
-      request('/confirmations', {
+    confirm: (emergencyId: string, data?: { latitude?: number; longitude?: number; location?: { latitude: number; longitude: number } }) => {
+      const lat = data?.latitude ?? data?.location?.latitude;
+      const lng = data?.longitude ?? data?.location?.longitude;
+      return request('/confirmations', {
         method: 'POST',
-        body: JSON.stringify({ emergencyId, ...(location ? { location } : {}) }),
-      }),
+        body: JSON.stringify({
+          emergencyId,
+          ...(lat !== undefined && lng !== undefined ? { latitude: lat, longitude: lng, location: { latitude: lat, longitude: lng } } : {}),
+        }),
+      });
+    },
     getCount: (emergencyId: string) => request<{ count: number }>(`/confirmations/${emergencyId}/count`),
     getMyStatus: (emergencyId: string) => request(`/confirmations/${emergencyId}/me`),
     getIncidentConfirmations: (emergencyId: string) => request(`/confirmations/${emergencyId}`),
+    getSummary: (emergencyId: string) => request(`/confirmations/${emergencyId}`),
+    getMyHistory: () => request('/confirmations/my'),
   },
 
   // Hospitals & Capacity
   hospitals: {
+    matchCandidates: (data: {
+      latitude: number;
+      longitude: number;
+      requiredCapabilities?: string[];
+      specialtyNeeded?: string;
+      severity?: string;
+    }) => request<{ candidates: any[]; hasEquippedFacilityNearby: boolean }>('/hospitals/match-candidates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
     register: (data: any) => request('/hospitals/register', { method: 'POST', body: JSON.stringify(data) }),
     getProfile: () => request('/hospitals/me'),
     updateProfile: (data: any) => request('/hospitals/me', { method: 'PATCH', body: JSON.stringify(data) }),
@@ -202,6 +232,7 @@ export const api = {
       request(`/location/route?originLat=${originLat}&originLng=${originLng}&destLat=${destLat}&destLng=${destLng}`),
   },
 
+
   // Doctors & Clinics
   doctors: {
     register: (data: any) => request('/doctors/register', { method: 'POST', body: JSON.stringify(data) }),
@@ -218,6 +249,10 @@ export const api = {
     getDoctorProfile: (id: string) => request(`/doctors/${id}`),
     verifyDoctor: (id: string, status: string) =>
       request(`/doctors/${id}/verify`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    updateAvailability: (availability: 'AVAILABLE' | 'BUSY' | 'OFFLINE') =>
+      request('/doctors/me/availability', { method: 'PATCH', body: JSON.stringify({ availability }) }),
+    closeClinicAndRollover: (targetDate?: string) =>
+      request('/doctors/me/close-and-rollover', { method: 'POST', body: JSON.stringify({ targetDate }) }),
     getClinic: (id: string) => request(`/doctors/${id}/clinic`),
     getRouteToClinic: (id: string, userLat: number, userLng: number) =>
       request(`/doctors/${id}/route?userLat=${userLat}&userLng=${userLng}`),
@@ -233,7 +268,17 @@ export const api = {
       timeSlot: string;
       notes?: string;
     }) => request('/appointments', { method: 'POST', body: JSON.stringify(data) }),
-    getMyAppointments: () => request('/appointments/my'),
+    getMyAppointments: (patientId?: string) => {
+      const q = patientId ? `?patientId=${encodeURIComponent(patientId)}` : '';
+      return request(`/appointments/my${q}`);
+    },
+    getDoctorAppointments: (params?: { doctorId?: string; date?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.doctorId) q.append('doctorId', params.doctorId);
+      if (params?.date) q.append('date', params.date);
+      const qs = q.toString();
+      return request(`/appointments/doctor${qs ? `?${qs}` : ''}`);
+    },
     getById: (id: string) => request(`/appointments/${id}`),
     start: (id: string) => request(`/appointments/${id}/start`, { method: 'POST' }),
     complete: (id: string) => request(`/appointments/${id}/complete`, { method: 'POST' }),
@@ -255,6 +300,7 @@ export const api = {
       return request(`/queues/${doctorId}${qs}`);
     },
     advanceQueue: (doctorId: string) => request(`/queues/${doctorId}/next`, { method: 'POST' }),
+    resetQueue: (doctorId: string) => request(`/queues/${doctorId}/reset`, { method: 'POST' }),
   },
 
   // Notifications
@@ -270,6 +316,8 @@ export const api = {
   ai: {
     triage: (data: { symptoms: string[]; consciousness?: string; [key: string]: any }) =>
       request('/ai/triage', { method: 'POST', body: JSON.stringify(data) }),
+    voiceTriage: (data: { transcript: string; language?: string; location?: { latitude: number; longitude: number } }) =>
+      request('/ai/voice-triage', { method: 'POST', body: JSON.stringify(data) }),
     imageAnalysis: (data: { imageBase64: string; mimeType: string; context?: string }) =>
       request('/ai/image-analysis', { method: 'POST', body: JSON.stringify(data) }),
     firstAid: (data: { injuryType: string }) =>
@@ -298,6 +346,64 @@ export const api = {
         body: JSON.stringify({ status, notes }),
       }),
   },
+
+  // Health Records, Digital Prescriptions, FHIR R4
+  healthRecords: {
+    create: (data: any) => request('/health-records', { method: 'POST', body: JSON.stringify(data) }),
+    getPatientRecords: (patientId: string) => request(`/health-records/patient/${patientId}`),
+    getFHIRBundle: (patientId: string) => request(`/health-records/fhir/${patientId}`),
+    getById: (id: string) => request(`/health-records/${id}`),
+  },
+
+  // Referrals
+  referrals: {
+    create: (data: any) => request('/referrals', { method: 'POST', body: JSON.stringify(data) }),
+    getHospitalReferrals: (hospitalId?: string) => request(`/referrals/hospital${hospitalId ? `/${hospitalId}` : ''}`),
+    getPatientReferrals: (patientId: string) => request(`/referrals/patient/${patientId}`),
+    updateStatus: (id: string, status: string) => request(`/referrals/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    dismiss: (id: string) => request(`/referrals/${id}`, { method: 'DELETE' }),
+  },
+
+  // Medicines & Stock Availability
+  medicines: {
+    search: (query?: string, hospitalId?: string) => {
+      const q = new URLSearchParams();
+      if (query) q.append('query', query);
+      if (hospitalId) q.append('hospitalId', hospitalId);
+      const qs = q.toString();
+      return request(`/medicines/search${qs ? `?${qs}` : ''}`);
+    },
+    getHospitalInventory: (hospitalId: string) => request(`/medicines/hospital/${hospitalId}`),
+    updateStock: (data: { hospitalId: string; medicineName: string; stockStatus: string; quantity?: number }) =>
+      request('/medicines/update-stock', { method: 'POST', body: JSON.stringify(data) }),
+    addMedicine: (data: { hospitalId: string; medicineName: string; category?: string; dosageForm?: string; quantity?: number; stockStatus?: string }) =>
+      request('/medicines/add', { method: 'POST', body: JSON.stringify(data) }),
+    deleteMedicine: (id: string) =>
+      request(`/medicines/${id}`, { method: 'DELETE' }),
+  },
+
+  // ASHA & Frontline Health Worker
+  worker: {
+    getStats: (workerUid?: string) =>
+      request(`/worker/stats${workerUid ? `?workerUid=${encodeURIComponent(workerUid)}` : ''}`),
+    getPatients: (workerUid?: string) =>
+      request(`/worker/patients${workerUid ? `?workerUid=${encodeURIComponent(workerUid)}` : ''}`),
+    getPatientDetail: (id: string) =>
+      request(`/worker/patients/${id}`),
+    registerPatient: (data: any) =>
+      request('/worker/patients', { method: 'POST', body: JSON.stringify(data) }),
+    deletePatient: (id: string) =>
+      request(`/worker/patients/${id}`, { method: 'DELETE' }),
+    recordVisit: (data: any) =>
+      request('/worker/visits', { method: 'POST', body: JSON.stringify(data) }),
+    createReferral: (data: any) =>
+      request('/worker/referrals', { method: 'POST', body: JSON.stringify(data) }),
+    getReferrals: (workerUid?: string) =>
+      request(`/worker/referrals${workerUid ? `?workerUid=${encodeURIComponent(workerUid)}` : ''}`),
+    syncBatch: (visits: any[], workerUid?: string) =>
+      request('/worker/sync', { method: 'POST', body: JSON.stringify({ visits, workerUid }) }),
+  },
 };
 
 export default api;
+

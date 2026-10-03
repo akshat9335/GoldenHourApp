@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Switch,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +16,8 @@ import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { enqueueOfflineAction } from '@/services/offlineSync';
+import { api, getApiBaseUrl } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const VISITS_KEY = '@golden_hour_community_visits';
@@ -43,16 +44,31 @@ function evaluateSeverity(params: {
   return 'NORMAL';
 }
 
-const SEVERITY_CONFIG: Record<TriageSeverity, { color: string; hiLabel: string; enLabel: string }> = {
-  CRITICAL: { color: '#DC2626', hiLabel: 'अति गंभीर (CRITICAL) — तत्काल अस्पताल रेफरल', enLabel: 'CRITICAL — Immediate Tertiary Transfer' },
-  MODERATE: { color: '#EA580C', hiLabel: 'मध्यम (MODERATE) — जिला अस्पताल / PHC', enLabel: 'MODERATE — District Hospital / PHC' },
-  NORMAL: { color: '#16A34A', hiLabel: 'सामान्य (NORMAL) — घर पर देखभाल', enLabel: 'NORMAL — Home Care & Monitor' },
+const SEVERITY_CONFIG: Record<TriageSeverity, { color: string; hiLabel: string; mrLabel: string; enLabel: string }> = {
+  CRITICAL: {
+    color: '#DC2626',
+    hiLabel: 'गंभीर (CRITICAL) — तत्काल अस्पताल भेजें',
+    mrLabel: 'गंभीर (CRITICAL) — तातडीने रुग्णालयात पाठवा',
+    enLabel: 'CRITICAL — Immediate Hospital Transfer',
+  },
+  MODERATE: {
+    color: '#EA580C',
+    hiLabel: 'मध्यम (MODERATE) — जिला अस्पताल',
+    mrLabel: 'मध्यम (MODERATE) — जिल्हा रुग्णालय',
+    enLabel: 'MODERATE — District Hospital',
+  },
+  NORMAL: {
+    color: '#16A34A',
+    hiLabel: 'सामान्य (NORMAL) — घर पर देखभाल',
+    mrLabel: 'सामान्य (NORMAL) — घरी काळजी घ्या',
+    enLabel: 'NORMAL — Home Care & Monitor',
+  },
 };
 
 export default function VisitScreen() {
   const { t, i18n } = useTranslation();
   const { patientId } = useLocalSearchParams<{ patientId?: string }>();
-  const lang = i18n.language as 'en' | 'hi';
+  const lang = i18n.language as 'en' | 'hi' | 'mr';
 
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState(patientId || '');
@@ -67,30 +83,28 @@ export default function VisitScreen() {
   const [bleedingActive, setBleedingActive] = useState(false);
   const [fractureSuspected, setFractureSuspected] = useState(false);
   const [symptoms, setSymptoms] = useState('');
-  
-  // Follow-up
-  const [followUpRequired, setFollowUpRequired] = useState(false);
-  const [followUpDate, setFollowUpDate] = useState('');
-
   const [isSaving, setIsSaving] = useState(false);
 
   const severity = evaluateSeverity({
-    spo2: parseInt(spo2 || '96', 10),
-    pulse: parseInt(pulse || '78', 10),
+    spo2: parseInt(spo2 || '96'),
+    pulse: parseInt(pulse || '78'),
     consciousness,
     bleedingActive,
     fractureSuspected,
   });
 
   useEffect(() => {
-    AsyncStorage.getItem(PATIENTS_KEY).then((raw) => {
-      if (raw) {
-        const list = JSON.parse(raw);
-        setPatients(list);
-        if (!selectedPatientId && list.length > 0) {
-          setSelectedPatientId(list[0].id);
-        }
+    const userProfile = useAppStore.getState().userProfile;
+    const workerUid = userProfile?.uid;
+    const key = workerUid && !workerUid.startsWith('asha-demo')
+      ? `@golden_hour_community_patients_${workerUid}`
+      : '@golden_hour_community_patients_demo';
+    AsyncStorage.getItem(key).then(async (raw) => {
+      let finalRaw = raw;
+      if (!finalRaw) {
+        finalRaw = await AsyncStorage.getItem(PATIENTS_KEY);
       }
+      if (finalRaw) setPatients(JSON.parse(finalRaw));
     });
   }, []);
 
@@ -103,58 +117,57 @@ export default function VisitScreen() {
     }
     setIsSaving(true);
 
+    const userProfile = useAppStore.getState().userProfile;
+    const workerUid = userProfile?.uid || 'asha-worker-prayagraj';
+    const workerName = userProfile?.name || 'Sunita Verma (ASHA Sangini)';
+
     const visit = {
       id: `visit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       patientId: selectedPatientId,
       patientName: selectedPatient?.name || 'Unknown',
-      workerUid: 'asha-worker-local',
+      workerUid,
+      workerName,
       vitals: {
         bloodPressure: bp,
         bloodSugar: bloodSugar ? parseFloat(bloodSugar) : undefined,
-        spO2: parseInt(spo2, 10),
+        spO2: parseInt(spo2),
         temperature: parseFloat(temp),
-        pulse: parseInt(pulse, 10),
+        pulse: parseInt(pulse),
       },
       symptoms: symptoms.trim(),
       aiTriageSeverity: severity,
       aiGuidanceInHindi: SEVERITY_CONFIG[severity].hiLabel,
-      followUpRequired,
-      followUpDate: followUpRequired ? followUpDate.trim() : undefined,
       visitDate: new Date().toISOString(),
       syncedFromOffline: false,
       createdAt: new Date().toISOString(),
     };
 
     try {
-      // Persist visit locally
+      // Persist locally
       const raw = await AsyncStorage.getItem(VISITS_KEY);
       const existing = raw ? JSON.parse(raw) : [];
       await AsyncStorage.setItem(VISITS_KEY, JSON.stringify([visit, ...existing]));
 
-      // Update patient's lastVisitDate and followUpDate locally
-      const updatedPatients = patients.map((p) => {
-        if (p.id === selectedPatientId) {
-          return {
-            ...p,
-            lastVisitDate: new Date().toISOString(),
-            followUpRequired,
-            followUpDate: followUpRequired ? followUpDate.trim() : p.followUpDate,
-          };
+      // Update patient's lastVisitDate in worker storage
+      try {
+        const key = workerUid && !workerUid.startsWith('asha-demo')
+          ? `@golden_hour_community_patients_${workerUid}`
+          : '@golden_hour_community_patients_demo';
+        const rawP = await AsyncStorage.getItem(key);
+        if (rawP) {
+          const pList = JSON.parse(rawP);
+          const updated = pList.map((p: any) =>
+            p.id === selectedPatientId ? { ...p, lastVisitDate: new Date().toISOString() } : p
+          );
+          await AsyncStorage.setItem(key, JSON.stringify(updated));
         }
-        return p;
-      });
-      await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(updatedPatients));
+      } catch {}
 
-      // Try live sync, else enqueue
+      // Try live sync, else queue
       const netState = await NetInfo.fetch();
       if (netState.isConnected) {
         try {
-          const res = await fetch('http://localhost:5000/api/worker/visits', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(visit),
-          });
-          if (!res.ok) throw new Error('Server error');
+          await api.worker.recordVisit(visit);
         } catch {
           await enqueueOfflineAction('/api/worker/visits', 'POST', visit);
         }
@@ -162,25 +175,25 @@ export default function VisitScreen() {
         await enqueueOfflineAction('/api/worker/visits', 'POST', visit);
       }
 
-      Alert.alert(t('asha.visitRecorded'), t('asha.visitSaved'), [
-        {
-          text: severity === 'CRITICAL' || severity === 'MODERATE' ? t('asha.createPHCReferral') : 'OK',
-          onPress: () => {
-            if (severity === 'CRITICAL' || severity === 'MODERATE') {
-              router.replace({
-                pathname: '/(worker)/referral',
-                params: {
-                  patientId: selectedPatientId,
-                  priority: severity === 'CRITICAL' ? 'CRITICAL' : 'MODERATE',
-                  reason: symptoms.trim() || `Triage assessment: ${severity}`,
-                },
-              });
-            } else {
-              router.back();
-            }
-          },
-        },
-      ]);
+      if (severity === 'CRITICAL' || severity === 'MODERATE') {
+        Alert.alert(
+          t('asha.visitRecorded'),
+          `${t('asha.visitSaved')}\n\n⚠️ ${t('asha.triageAssessment')}: ${SEVERITY_CONFIG[severity].enLabel}`,
+          [
+            { text: lang === 'mr' ? 'डॅशबोर्डवर जा' : lang === 'hi' ? 'डैशबोर्ड जाएं' : 'Done', onPress: () => router.back() },
+            {
+              text: lang === 'mr' ? 'रेफरल पाठवा' : lang === 'hi' ? 'रेफरल भेजें' : 'Create Referral',
+              style: 'destructive',
+              onPress: () =>
+                router.replace({ pathname: '/(worker)/referral' as any, params: { patientId: selectedPatientId } }),
+            },
+          ]
+        );
+      } else {
+        Alert.alert(t('asha.visitRecorded'), t('asha.visitSaved'), [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+      }
     } catch {
       Alert.alert(t('common.error'), 'Could not save visit. Please try again.');
     } finally {
@@ -305,38 +318,22 @@ export default function VisitScreen() {
           ))}
         </View>
 
-        {/* Symptoms & Clinical Notes */}
+        {/* Symptoms */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('asha.symptoms')}</Text>
           <TextInput
-            style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+            style={[styles.input, { height: 90, textAlignVertical: 'top' }]}
             multiline
-            placeholder={lang === 'hi' ? 'लक्षण यहाँ लिखें…' : 'Describe symptoms and observations here…'}
+            placeholder={
+              lang === 'mr'
+                ? 'लक्षणे येथे लिहा…'
+                : lang === 'hi'
+                ? 'लक्षण यहाँ लिखें…'
+                : 'Describe symptoms here…'
+            }
             value={symptoms}
             onChangeText={setSymptoms}
           />
-
-          {/* Follow-up Required */}
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>{t('asha.followUpRequired')}</Text>
-            <Switch
-              value={followUpRequired}
-              onValueChange={setFollowUpRequired}
-              trackColor={{ true: colors.red }}
-              thumbColor={followUpRequired ? '#fff' : '#f4f3f4'}
-            />
-          </View>
-          {followUpRequired && (
-            <View style={{ marginTop: 10 }}>
-              <Text style={styles.label}>{t('asha.followUpDate')}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="DD/MM/YYYY"
-                value={followUpDate}
-                onChangeText={setFollowUpDate}
-              />
-            </View>
-          )}
         </View>
 
         {/* AI Triage Result */}
@@ -344,12 +341,12 @@ export default function VisitScreen() {
           <Text style={styles.cardTitle}>{t('asha.triageAssessment')}</Text>
           <View style={[styles.triageBadge, { backgroundColor: cfg.color }]}>
             <Text style={styles.triageBadgeText}>
-              {lang === 'hi' ? cfg.hiLabel : cfg.enLabel}
+              {lang === 'mr' ? cfg.mrLabel : lang === 'hi' ? cfg.hiLabel : cfg.enLabel}
             </Text>
           </View>
         </View>
 
-        {/* Action Button */}
+        {/* Submit */}
         <TouchableOpacity
           style={[styles.submitBtn, isSaving && { opacity: 0.6 }]}
           onPress={handleRecordVisit}
@@ -357,7 +354,7 @@ export default function VisitScreen() {
           activeOpacity={0.85}
         >
           <Text style={styles.submitBtnText}>
-            {isSaving ? 'Saving…' : `${t('asha.recordVisit')} — Works Offline ✓`}
+            {isSaving ? 'Saving…' : t('asha.recordVisit') + ' — Works Offline ✓'}
           </Text>
         </TouchableOpacity>
 
@@ -433,14 +430,6 @@ const styles = StyleSheet.create({
   patientPillActive: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
   patientPillText: { fontSize: 13, fontWeight: '700', color: colors.ink },
   patientPillSub: { fontSize: 10.5, color: colors.inkFaint, marginTop: 1 },
-  toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    marginTop: 4,
-  },
-  toggleLabel: { fontSize: 13.5, fontWeight: '600', color: colors.ink },
   triageBadge: {
     padding: 12,
     borderRadius: 10,

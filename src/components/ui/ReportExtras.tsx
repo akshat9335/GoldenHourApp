@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Image, StyleSheet, Platform, PermissionsAndroid } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, radii } from '@/constants/theme';
 import { Card } from './Atoms';
@@ -20,8 +20,8 @@ export function PhotoInput({
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.6, base64: true })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.6, base64: true });
+      ? await ImagePicker.launchCameraAsync({ quality: 0.3, allowsEditing: true, aspect: [4, 3], base64: true })
+      : await ImagePicker.launchImageLibraryAsync({ quality: 0.3, allowsEditing: true, aspect: [4, 3], base64: true });
     if (!result.canceled && result.assets?.[0]?.uri) {
       onChange(result.assets[0].uri, result.assets[0].base64 || null);
     }
@@ -69,14 +69,74 @@ export function VoiceInput({
 }) {
   const [state, setState] = useState<VoiceState>('idle');
   const [editing, setEditing] = useState(false);
+  const recognizerRef = React.useRef<any>(null);
 
-  const toggleRecord = () => {
+  const toggleRecord = async () => {
     if (state === 'idle') {
       setState('recording');
+
+      if (Platform.OS === 'android') {
+        try {
+          await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            {
+              title: 'Microphone Permission',
+              message: 'Golden Hour needs access to your microphone to record your voice note.',
+              buttonPositive: 'Grant Permission',
+              buttonNegative: 'Cancel',
+            }
+          );
+        } catch (e) {
+          console.warn('Microphone permission request error:', e);
+        }
+      }
+
+      if (typeof window !== 'undefined') {
+        const SpeechRecognition =
+          (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+          try {
+            const rec = new SpeechRecognition();
+            rec.continuous = true;
+            rec.interimResults = true;
+            rec.lang = 'en-IN';
+
+            rec.onresult = (event: any) => {
+              let full = '';
+              for (let i = 0; i < event.results.length; i++) {
+                full += event.results[i][0].transcript;
+              }
+              if (full.trim()) {
+                onChangeTranscript(full.trim());
+              }
+            };
+
+            rec.onerror = () => {
+              setState('idle');
+            };
+
+            rec.onend = () => {
+              setState('idle');
+            };
+
+            rec.start();
+            recognizerRef.current = rec;
+            return;
+          } catch {}
+        }
+      }
     } else {
       setState('idle');
-      // Speech-to-text backend integration is not wired up yet — placeholder transcript only.
-      if (!transcript) onChangeTranscript('Voice note recorded — transcript pending backend processing.');
+      if (recognizerRef.current) {
+        try {
+          recognizerRef.current.stop();
+        } catch {}
+        recognizerRef.current = null;
+      }
+      if (!transcript) {
+        setEditing(true);
+      }
     }
   };
 
@@ -88,16 +148,17 @@ export function VoiceInput({
       >
         <Icon name="mic" size={18} color={state === 'recording' ? '#fff' : colors.red} />
         <Text style={[styles.micBtnText, state === 'recording' && { color: '#fff' }]}>
-          {state === 'recording' ? 'Recording… Tap to stop' : transcript ? 'Re-record' : 'Tap to record'}
+          {state === 'recording' ? 'Listening… Tap when done' : transcript ? 'Re-record Voice Note' : 'Tap to speak / record'}
         </Text>
       </Pressable>
-      {transcript ? (
+      {transcript || editing ? (
         <Card style={{ padding: 12, marginTop: 10 }}>
-          <Text style={styles.transcriptLabel}>TRANSCRIPT PREVIEW</Text>
+          <Text style={styles.transcriptLabel}>VOICE TRANSCRIPT</Text>
           {editing ? (
             <Input
               multiline
-              value={transcript}
+              value={transcript || ''}
+              placeholder="Speak or type emergency details here..."
               onChangeText={onChangeTranscript}
               style={{ marginTop: 6 }}
             />
@@ -108,7 +169,7 @@ export function VoiceInput({
             <Pressable onPress={() => setEditing((e) => !e)}>
               <Text style={styles.linkText}>{editing ? 'Done' : 'Edit transcript'}</Text>
             </Pressable>
-            <Pressable onPress={() => onChangeTranscript(null)}>
+            <Pressable onPress={() => { onChangeTranscript(null); setEditing(false); }}>
               <Text style={[styles.linkText, { color: colors.red }]}>Remove</Text>
             </Pressable>
           </View>

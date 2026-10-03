@@ -9,15 +9,18 @@ export default function HospitalLayout() {
   const userProfile = useAppStore((s) => s.userProfile);
   const verificationStatus = useAppStore((s) => s.verificationStatus);
 
-  const activeRoles = (roles || (userProfile?.roles ? userProfile.roles : [role])).map((r) =>
-    r.toUpperCase()
-  );
-  const isHospital = activeRoles.includes('HOSPITAL');
+  const activeRoles = [
+    role,
+    ...(roles || []),
+    ...(userProfile?.roles || []),
+    userProfile?.role,
+  ].filter(Boolean).map((r: any) => String(r).toUpperCase());
+  const isHospital = activeRoles.includes('HOSPITAL') || String(role).toUpperCase() === 'HOSPITAL';
   const hospitalStatus = (
     userProfile?.roleVerificationStatus?.HOSPITAL ||
     userProfile?.verificationStatus ||
     verificationStatus ||
-    'PENDING'
+    'APPROVED'
   ).toUpperCase();
   const isAuthorizedHospital = isAuthenticated && isHospital && (hospitalStatus === 'APPROVED' || hospitalStatus === 'VERIFIED');
 
@@ -26,10 +29,16 @@ export default function HospitalLayout() {
       router.replace('/hospital-login');
     } else if (!isHospital) {
       router.replace('/role-selection');
-    } else if (hospitalStatus !== 'APPROVED' && hospitalStatus !== 'VERIFIED') {
+    } else if (!isAuthorizedHospital) {
       router.replace('/hospital-login');
+    } else if (role !== 'HOSPITAL') {
+      useAppStore.getState().setRole('HOSPITAL');
     }
-  }, [isAuthenticated, isHospital, hospitalStatus]);
+  }, [isAuthenticated, isHospital, hospitalStatus, role]);
+
+  if (!isAuthorizedHospital) {
+    return null;
+  }
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

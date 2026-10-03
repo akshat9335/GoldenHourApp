@@ -12,6 +12,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -22,14 +24,31 @@ export default function LoginScreen() {
       setLoading(true);
       const session = await authService.promptGoogleSignIn();
 
-      if (session.profileExists) {
-        // Normal user / patient sign-in: always activates PATIENT role
+      if (!session.profileExists) {
+        // Auto-register smoothly using Google details so user immediately lands on Home screen!
+        try {
+          const fallbackEmailName = session.email ? session.email.split('@')[0] : 'User';
+          const capitalizedName = fallbackEmailName.charAt(0).toUpperCase() + fallbackEmailName.slice(1);
+          await authService.register({
+            name: session.name || capitalizedName,
+            email: session.email || 'user@goldenhour.org',
+            role: 'PATIENT',
+          });
+        } catch {
+          useAppStore.getState().setProfileExists(true);
+        }
         useAppStore.getState().setRole('PATIENT');
+        useAppStore.getState().setRoles(['PATIENT']);
         router.replace('/(patient)/home');
-      } else {
-        // First time user -> proceed to registration sequence
-        router.push('/create-account');
+        return;
       }
+
+      useAppStore.getState().setIsDemoMode(false);
+      // When logging in via Patient Portal, always enter as PATIENT
+      // This ensures Doctors and Hospital staff can also use Golden Hour as patients without being hijacked
+      useAppStore.getState().setRole('PATIENT');
+      useAppStore.getState().setRoles(['PATIENT', ...(useAppStore.getState().roles || [])]);
+      router.replace('/(patient)/home');
     } catch (err: any) {
       console.warn('[Login] Google sign-in failed:', err);
       const msg = err?.message || 'Google sign-in could not be completed. Please try again.';
@@ -41,21 +60,32 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGuestLogin = () => {
-    const store = useAppStore.getState();
-    store.setIsAuthenticated(true);
-    store.setProfileExists(true);
-    store.setRole('PATIENT');
-    store.setRoles(['PATIENT', 'user']);
-    store.setUserProfile({
-      uid: 'guest-patient-101',
-      name: 'Guest Patient',
-      email: 'guest@goldenhour.org',
-      crisisId: 'GH-8821',
-      trustScore: 95,
+  const handleDemoPatient = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-patient');
+    const profile = {
+      uid: 'patient-demo-1',
+      name: 'Rahul Patel',
+      email: 'rahul.patel@gmail.com',
+      phone: '+91 98765 12345',
       role: 'PATIENT',
-      roles: ['PATIENT', 'user'],
-    });
+      roles: ['PATIENT'],
+      verificationStatus: 'APPROVED',
+      isPhoneVerified: true,
+      hasCompletedProfile: true,
+      crisisId: 'CRISIS-RP-911',
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-patient');
+      await AsyncStorage.setItem('gh_user_uid', 'patient-demo-1');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setIsDemoMode(true);
+    useAppStore.getState().setRole('PATIENT');
+    useAppStore.getState().setRoles(['PATIENT']);
+    useAppStore.getState().setUserProfile(profile as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
     router.replace('/(patient)/home');
   };
 
@@ -112,31 +142,25 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Guest Demo Login Button */}
-          <TouchableOpacity
-            style={[styles.googleButton, { backgroundColor: '#208AEF', borderColor: '#208AEF', marginTop: 12 }]}
-            activeOpacity={0.85}
-            onPress={handleGuestLogin}
-          >
-            <Text style={[styles.googleText, { color: '#FFFFFF', fontWeight: '700' }]}>
-              🚀 Quick Guest / Demo Login
-            </Text>
-          </TouchableOpacity>
-
-          {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.orText}>OR</Text>
-            <View style={styles.divider} />
+          {/* Modern Reassuring Info Box for New Users */}
+          <View style={styles.infoBox}>
+            <Text style={styles.infoIcon}>⚡</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoTitle}>New to Golden Hour? Instant Access</Text>
+              <Text style={styles.infoDescription}>
+                No registration forms needed. Your emergency account is created automatically on your first Google sign-in.
+              </Text>
+            </View>
           </View>
 
-          <Text style={styles.infoText}>
-            Testing & Evaluating?
-          </Text>
-
-          <Text style={styles.infoDescription}>
-            Tap "Quick Guest / Demo Login" above to instantly test all features without Firebase setup.
-          </Text>
+          {/* Quick Demo Access for Testing */}
+          <TouchableOpacity
+            style={styles.demoButton}
+            onPress={handleDemoPatient}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.demoButtonText}>Quick Demo Access (Test Patient)</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Terms */}
@@ -271,38 +295,50 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
 
-  dividerRow: {
+  infoBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 22,
+    alignItems: 'flex-start',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 18,
+    gap: 10,
   },
 
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E2E8F0',
+  infoIcon: {
+    fontSize: 16,
+    marginTop: 1,
   },
 
-  orText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#94A3B8',
-    marginHorizontal: 12,
-  },
-
-  infoText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
-    textAlign: 'center',
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#15803D',
   },
 
   infoDescription: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#94A3B8',
-    textAlign: 'center',
-    marginTop: 5,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: '#166534',
+    marginTop: 2,
+  },
+
+  demoButton: {
+    marginTop: 14,
+    paddingVertical: 11,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+
+  demoButtonText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#475569',
   },
 
   terms: {

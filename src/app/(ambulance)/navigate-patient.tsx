@@ -1,86 +1,127 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, ScrollView, Alert } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/constants/theme';
 import { Card, Button, Icon, Pill, TopBar, Banner } from '@/components/ui';
 import { openExternalMapPreview, openExternalVoiceNavigation } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
-import { initDeviceLocation } from '@/services/deviceLocation';
+import { initDeviceLocation, watchDeviceLocation } from '@/services/deviceLocation';
 
 export default function NavigatePatient() {
   const insets = useSafeAreaInsets();
-  const activeTripId = useAppStore((s) => s.activeTripId);
-  const emergencyId = useAppStore((s) => s.emergencyId);
+  const params = useLocalSearchParams<{ emergencyId?: string; tripId?: string }>();
+  const activeTripId = useAppStore((s) => s.activeTripId) || params.tripId;
+  const storeEmergencyId = useAppStore((s) => s.emergencyId);
+  const emergencyId = storeEmergencyId || params.emergencyId;
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
 
   const [emergency, setEmergency] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Sync params to store if store was unhydrated
+  useEffect(() => {
+    if (params.tripId && !useAppStore.getState().activeTripId) {
+      useAppStore.getState().setActiveTripId(params.tripId);
+    }
+    if (params.emergencyId && !useAppStore.getState().emergencyId) {
+      useAppStore.getState().setEmergencyId(params.emergencyId);
+    }
+  }, [params.tripId, params.emergencyId]);
+
+  const fetchEmergency = useCallback(async () => {
+    const id = emergencyId || useAppStore.getState().emergencyId || params.emergencyId;
+    if (!id) return;
+    try {
+      const data: any = await api.emergencies.getById(id);
+      if (data) {
+        setEmergency(data);
+        const st = String(data.status || '').toUpperCase();
+        const tripSt = String(data.tripStatus || '').toUpperCase();
+        if (st === 'COMPLETED' || tripSt === 'COMPLETED') {
+          useAppStore.getState().setActiveTripId(null);
+          useAppStore.getState().setEmergencyId(null);
+          Alert.alert('Mission Completed', 'The hospital has completed admission for this emergency.');
+          router.replace('/(ambulance)/dashboard');
+          return;
+        }
+        if (st === 'PATIENT_ARRIVED' || tripSt === 'AT_HOSPITAL') {
+          router.replace({
+            pathname: '/(ambulance)/hospital-arrival',
+            params: { emergencyId: id, tripId: activeTripId || params.tripId },
+          });
+          return;
+        }
+      }
+    } catch {}
+  }, [emergencyId, params.emergencyId, activeTripId, params.tripId]);
+
   useEffect(() => {
     initDeviceLocation();
-
-    if (emergencyId) {
-      api.emergencies
-        .getById(emergencyId)
-        .then((data) => setEmergency(data))
-        .catch(() => {});
-    }
-  }, [emergencyId]);
+    fetchEmergency();
+    const interval = setInterval(fetchEmergency, 3000);
+    return () => clearInterval(interval);
+  }, [fetchEmergency]);
 
   // Live ambulance driver GPS tracking stream
   useEffect(() => {
     let sub: any = null;
-    try {
-      const ExpoLocation = require('expo-location');
-      ExpoLocation.watchPositionAsync(
-        { accuracy: ExpoLocation.Accuracy.High, timeInterval: 2500, distanceInterval: 5 },
-        (pos: any) => {
-          if (pos?.coords) {
-            const loc = {
-              latitude: Number(pos.coords.latitude.toFixed(6)),
-              longitude: Number(pos.coords.longitude.toFixed(6)),
-            };
-            useAppStore.getState().setLastKnownLocation(loc);
-            if (emergencyId) {
-              api.emergencies.update(emergencyId, {
-                ambulanceLocation: loc,
-              }).catch(() => {});
-            }
-          }
-        }
-      ).then((s: any) => { sub = s; }).catch(() => {});
-    } catch {}
+    let isMounted = true;
+    const targetId = emergencyId || params.emergencyId;
+
+    watchDeviceLocation((loc) => {
+      if (!isMounted) return;
+      useAppStore.getState().setLastKnownLocation(loc);
+      api.location.updateLocation({
+        lat: loc.latitude,
+        lng: loc.longitude,
+        role: 'AMBULANCE_DRIVER',
+      }).catch(() => {});
+      if (targetId) {
+        api.emergencies.update(targetId, {
+          ambulanceLocation: loc,
+        }).catch(() => {});
+      }
+    }).then((s) => {
+      sub = s;
+    }).catch(() => {});
 
     return () => {
-      if (sub && sub.remove) sub.remove();
+      isMounted = false;
+      if (sub?.remove) sub.remove();
     };
-  }, [emergencyId]);
+  }, [emergencyId, params.emergencyId]);
 
   const handleMarkArrived = async () => {
-    if (activeTripId) {
+    const effectiveTripId = activeTripId || params.tripId;
+    if (effectiveTripId) {
       setSubmitting(true);
       try {
-        await api.ambulances.arrivedPatient(activeTripId);
+        await api.ambulances.arrivedPatient(effectiveTripId);
       } catch (_err) {
         // Handled
       } finally {
         setSubmitting(false);
       }
     }
-    router.push('/(ambulance)/arrived-patient');
+    router.push({
+      pathname: '/(ambulance)/arrived-patient',
+      params: { emergencyId: emergencyId || params.emergencyId, tripId: effectiveTripId },
+    });
   };
 
-  const pLat = emergency?.location?.latitude ?? (lastKnownLocation?.latitude ?? 28.6139);
-  const pLng = emergency?.location?.longitude ?? (lastKnownLocation?.longitude ?? 77.2090);
-  const ambLat = lastKnownLocation?.latitude ?? pLat;
-  const ambLng = lastKnownLocation?.longitude ?? pLng;
+  const parsedPLat = Number(emergency?.location?.latitude) || Number(lastKnownLocation?.latitude) || 28.6139;
+  const parsedPLng = Number(emergency?.location?.longitude) || Number(lastKnownLocation?.longitude) || 77.2090;
+  const pLat = parsedPLat;
+  const pLng = parsedPLng;
+  const ambLat = Number(lastKnownLocation?.latitude) || Number((pLat - 0.007).toFixed(6));
+  const ambLng = Number(lastKnownLocation?.longitude) || Number((pLng - 0.005).toFixed(6));
 
   const patientName = emergency?.patientName || 'Emergency Patient';
-  const patientPhone = emergency?.patientPhone;
-  const hospitalName = emergency?.assignedHospitalName || 'Assigned Hospital ER';
-  const hospitalPhone = emergency?.assignedHospitalPhone;
+  const patientPhone = emergency?.patientPhone || (emergency as any)?.contactPhone || (emergency as any)?.userPhone || (emergency as any)?.phone;
+  const hospitalName = emergency?.assignedHospitalName || (emergency as any)?.hospitalName || 'Assigned Hospital ER';
+  const hospitalPhone = emergency?.assignedHospitalPhone || (emergency as any)?.hospitalPhone || '108';
 
   // Real-time distance and ETA calculation
   const dLat = (pLat - ambLat) * (Math.PI / 180);
@@ -114,7 +155,7 @@ export default function NavigatePatient() {
   return (
     <View style={[styles.screen, { paddingTop: Math.max(insets.top, 16) }]}>
       <View style={styles.header}>
-        <TopBar title="En Route to Patient" back={true} onPressBack={() => router.replace('/(ambulance)/dashboard')} />
+        <TopBar title="📡 En Route to Patient" back={true} onPressBack={() => router.replace('/(ambulance)/dashboard')} />
       </View>
 
       <ScrollView
@@ -189,7 +230,9 @@ export default function NavigatePatient() {
             <View style={styles.dotDest} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.teleLabel}>Patient Pickup Destination</Text>
-              <Text style={styles.teleVal}>{pLat.toFixed(4)}° N, {pLng.toFixed(4)}° E</Text>
+              <Text style={styles.teleVal}>
+                {emergency?.locationAddress ? `${emergency.locationAddress} · ` : ''}{pLat.toFixed(4)}° N, {pLng.toFixed(4)}° E
+              </Text>
             </View>
           </View>
         </Card>

@@ -6,6 +6,9 @@ import { colors } from '@/constants/theme';
 import { Screen, Button, Icon, HTitle, Banner } from '@/components/ui';
 import { authService } from '@/services/auth';
 import { useAppStore } from '@/store/useAppStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '@/services/api';
+import LanguageSelector from '@/components/LanguageSelector';
 
 export default function DriverLogin() {
   const insets = useSafeAreaInsets();
@@ -18,10 +21,13 @@ export default function DriverLogin() {
     try {
       const session = await authService.promptGoogleSignIn();
 
-      if (!session.profileExists) {
+      const userRoles = (session.profile?.roles || [session.role || 'PATIENT']).map((r: string) => r.toUpperCase());
+      const isDriver = userRoles.includes('AMBULANCE_DRIVER') || userRoles.includes('AMBULANCE');
+
+      if (!session.profileExists || !isDriver) {
         Alert.alert(
-          'Profile Not Found',
-          'No ambulance driver profile exists for this account. Please register your details.',
+          'Registration Required',
+          `The Google account (${session.email}) is not registered as an Ambulance Driver.\n\nPlease submit an application to join the Golden Hour Emergency Fleet.`,
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Register Now', onPress: () => router.push('/driver-register') },
@@ -30,41 +36,25 @@ export default function DriverLogin() {
         return;
       }
 
-      const userRoles = (session.profile?.roles || [session.role || 'PATIENT']).map((r: string) => r.toUpperCase());
-      const isDriver = userRoles.includes('AMBULANCE_DRIVER') || userRoles.includes('AMBULANCE');
-      if (!isDriver) {
-        Alert.alert(
-          'Driver Registration Required',
-          'This Google account does not have a registered Ambulance Driver profile. Please register your details to proceed.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Register as Driver', onPress: () => router.push('/driver-register') },
-          ]
-        );
+      const status = (session.profile?.verificationStatus || session.profile?.roleVerificationStatus?.AMBULANCE_DRIVER || 'PENDING').toUpperCase();
+
+      if (status === 'PENDING') {
+        setPendingStatus('Your driver application is currently pending admin review. You will receive emergency alerts once your license and vehicle details are approved.');
+        Alert.alert('Verification Pending', 'Your application is awaiting Admin verification. You cannot access the dispatch dashboard until approved.');
         return;
       }
 
-      // Activate AMBULANCE_DRIVER role in app store for this session
+      if (status === 'REJECTED') {
+        Alert.alert('Application Rejected', 'Your driver registration was rejected by the Medical Admin. Please contact support or register again.');
+        return;
+      }
+
+      useAppStore.getState().setIsDemoMode(false);
       useAppStore.getState().setRole('AMBULANCE_DRIVER');
-
-      const driverStatus = session.profile?.roleVerificationStatus?.AMBULANCE_DRIVER || session.verificationStatus;
-      if (driverStatus === 'APPROVED' || driverStatus === 'VERIFIED') {
-        router.replace('/(ambulance)/dashboard');
-        return;
-      }
-
-      if (driverStatus === 'REJECTED') {
-        Alert.alert(
-          'Application Rejected',
-          'Your ambulance driver application was not approved. Please contact support@goldenhour.app.'
-        );
-        return;
-      }
-
-      // verificationStatus is PENDING
-      setPendingStatus(
-        'Your driver credentials and vehicle assignment are under review by Golden Hour dispatch administrators. You will be activated upon approval.'
-      );
+      useAppStore.getState().setRoles(Array.from(new Set([...userRoles, 'AMBULANCE_DRIVER'])) as any);
+      useAppStore.getState().setVerificationStatus('APPROVED');
+      router.replace('/(ambulance)/dashboard');
+      return;
     } catch (err: any) {
       console.warn('[DriverLogin] Google Sign-In error:', err);
       const msg = err?.message || 'Failed to sign in. Please try again.';
@@ -76,18 +66,55 @@ export default function DriverLogin() {
     }
   };
 
+  const handleDemoDriver = async () => {
+    try { await authService.signOut(); } catch {}
+    setAuthToken('demo-token-driver');
+    const profile = {
+      uid: 'driver-demo-ramesh',
+      name: 'Pilot Ramesh Kumar',
+      driverName: 'Pilot Ramesh Kumar',
+      email: 'ramesh.als108@goldenhour.org',
+      phone: '+91 98765 43210',
+      role: 'AMBULANCE_DRIVER',
+      roles: ['AMBULANCE_DRIVER'],
+      ambulanceId: 'Unit UP-70-AMB-108',
+      vehiclePlateNumber: 'UP-70-EMG-108',
+      ambulanceType: 'Advanced Life Support (ALS)',
+      hospitalId: 'hosp-demo-apollo',
+      hospitalName: 'Apollo Multi-Specialty Hospital',
+      verificationStatus: 'APPROVED',
+      isPhoneVerified: true,
+      hasCompletedProfile: true,
+    };
+    try {
+      await AsyncStorage.setItem('gh_auth_token', 'demo-token-driver');
+      await AsyncStorage.setItem('gh_user_uid', 'driver-demo-ramesh');
+      await AsyncStorage.setItem('gh_user_profile', JSON.stringify(profile));
+    } catch {}
+    useAppStore.getState().setIsDemoMode(true);
+    useAppStore.getState().setRole('AMBULANCE_DRIVER');
+    useAppStore.getState().setRoles(['AMBULANCE_DRIVER']);
+    useAppStore.getState().setVerificationStatus('APPROVED');
+    useAppStore.getState().setUserProfile(profile as any);
+    useAppStore.getState().setIsAuthenticated(true);
+    useAppStore.getState().setProfileExists(true);
+    router.replace('/(ambulance)/dashboard');
+  };
+
   return (
     <Screen center>
-      <View style={{ width: '100%', alignItems: 'flex-start', marginBottom: 12 }}>
-        <Pressable
-          onPress={() => router.replace('/role-selection')}
-          style={{ paddingVertical: 8, paddingHorizontal: 4 }}
-        >
-          <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
-        </Pressable>
+      <Pressable
+        onPress={() => router.replace('/role-selection')}
+        style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, left: 16, zIndex: 10, padding: 8 }}
+      >
+        <Text style={{ fontSize: 16, fontWeight: '600', color: colors.inkSoft }}>‹ Back</Text>
+      </Pressable>
+
+      <View style={{ position: 'absolute', top: Math.max(insets.top, 16) + 6, right: 16, zIndex: 10 }}>
+        <LanguageSelector />
       </View>
 
-      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 10 }}>
+      <View style={{ alignItems: 'center', marginBottom: 26, marginTop: 40 }}>
         <View style={styles.iconCircle}>
           <Icon name="ambulance" size={36} color={colors.red} />
         </View>
@@ -111,24 +138,10 @@ export default function DriverLogin() {
       />
 
       <Button
-        title="🚀 Quick Ambulance Demo Login"
-        variant="blue"
-        style={{ marginTop: 12 }}
-        onPress={() => {
-          const store = useAppStore.getState();
-          store.setIsAuthenticated(true);
-          store.setRole('AMBULANCE_DRIVER');
-          store.setRoles(['AMBULANCE_DRIVER']);
-          store.setVerificationStatus('APPROVED');
-          store.setUserProfile({
-            uid: 'demo-driver-001',
-            name: 'Ramesh Driver',
-            role: 'AMBULANCE_DRIVER',
-            roles: ['AMBULANCE_DRIVER'],
-            verificationStatus: 'APPROVED',
-          });
-          router.replace('/(ambulance)/dashboard');
-        }}
+        title="⚡ 1-Click Demo Access (Pilot Ramesh - ALS)"
+        variant="secondary"
+        style={{ marginTop: 12, borderColor: '#16A34A', borderWidth: 1 }}
+        onPress={handleDemoDriver}
       />
 
       <Button

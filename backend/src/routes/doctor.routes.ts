@@ -14,6 +14,9 @@ router.patch("/me", requireAuth, requireRole("DOCTOR"), (req, res, next) => doct
 router.patch("/me/availability", requireAuth, requireRole("DOCTOR"), requireApproved, (req, res, next) =>
   doctorController.updateMyAvailability(req, res, next)
 );
+router.post("/me/close-and-rollover", requireAuth, requireRole("DOCTOR"), (req, res, next) =>
+  doctorController.closeClinicAndRollover(req, res, next)
+);
 
 // Individual doctor inspection, clinic and navigation
 router.get("/:id", (req, res, next) => doctorController.getDoctorProfile(req, res, next));

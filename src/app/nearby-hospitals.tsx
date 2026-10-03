@@ -6,6 +6,7 @@ import { Screen, TopBar, Card, Pill, Button, Icon, PatientNav } from '@/componen
 import { api } from '@/services/api';
 
 import { useAppStore } from '@/store/useAppStore';
+import { acquireFreshLocation } from '@/services/deviceLocation';
 
 const FILTERS = ['All', 'Open Now', 'Trauma Center', 'ICU Available'];
 
@@ -31,6 +32,7 @@ interface HospitalItem {
 
 export default function NearbyHospitals() {
   const lastKnownLocation = useAppStore((s) => s.lastKnownLocation);
+  const locationAddress = useAppStore((s) => s.locationAddress);
   const [hospitals, setHospitals] = useState<HospitalItem[]>([]);
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [loading, setLoading] = useState(true);
@@ -39,8 +41,14 @@ export default function NearbyHospitals() {
   const fetchHospitals = useCallback(async () => {
     try {
       setLoading(true);
-      const lat = lastKnownLocation?.latitude;
-      const lng = lastKnownLocation?.longitude;
+      let lat = lastKnownLocation?.latitude;
+      let lng = lastKnownLocation?.longitude;
+
+      if (!lat || !lng) {
+        const fresh = await acquireFreshLocation(2000);
+        lat = fresh.latitude;
+        lng = fresh.longitude;
+      }
 
       if (!lat || !lng) {
         setLoading(false);
@@ -149,6 +157,14 @@ export default function NearbyHospitals() {
           </Pressable>
         </View>
 
+        {/* User Search Location Indicator */}
+        <View style={styles.locBanner}>
+          <Icon name="pin" size={13} color={colors.red} />
+          <Text style={styles.locBannerText} numberOfLines={1}>
+            Near: {locationAddress || (lastKnownLocation ? `${lastKnownLocation.latitude.toFixed(4)}°N, ${lastKnownLocation.longitude.toFixed(4)}°E` : 'Current Location')}
+          </Text>
+        </View>
+
         <View style={styles.filters}>
           {FILTERS.map((f) => {
             const isSelected = selectedFilter === f;
@@ -238,6 +254,8 @@ export default function NearbyHospitals() {
 const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   mapBtn: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.blueBg, alignItems: 'center', justifyContent: 'center' },
+  locBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.line, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12 },
+  locBannerText: { fontSize: 11.5, fontWeight: '600', color: colors.ink },
   filters: { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   loadingBox: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, justifyContent: 'center' },
   loadingText: { fontSize: 12, color: colors.inkFaint },

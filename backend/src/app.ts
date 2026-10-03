@@ -31,6 +31,16 @@ export function createApp(): Application {
     next();
   });
 
+  app.get("/", (_req, res) => {
+    res.json({
+      service: "Golden Hour Emergency API",
+      status: "online",
+      version: "1.0.0",
+      documentation: "Golden Hour Emergency Response & Critical Care Network",
+      healthCheck: "/api/health",
+    });
+  });
+
   app.use("/api", routes);
 
   // Order matters: notFound catches anything unmatched above,

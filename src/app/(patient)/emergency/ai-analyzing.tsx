@@ -12,14 +12,22 @@ export default function AiAnalyzing() {
   const accidentPhotoUri = useAppStore((s) => s.accidentPhotoUri);
   const accidentPhotoBase64 = useAppStore((s) => s.accidentPhotoBase64);
   const setAiSeverity = useAppStore((s) => s.setAiSeverity);
+  const setAiAssessedSeverity = useAppStore((s) => s.setAiAssessedSeverity);
   const setAiTriageResult = useAppStore((s) => s.setAiTriageResult);
   const setAiImageResult = useAppStore((s) => s.setAiImageResult);
+  const setCandidateHospitals = useAppStore((s) => s.setCandidateHospitals);
 
   useEffect(() => {
     let mounted = true;
 
     const performAnalysis = async () => {
       try {
+        const store = useAppStore.getState();
+        const userEstimatedSeverity = store.userEstimatedSeverity || 'Moderate';
+        const lastKnownLocation = store.lastKnownLocation;
+        const lat = lastKnownLocation?.latitude || 25.4538;
+        const lng = lastKnownLocation?.longitude || 81.854;
+
         const symptoms = description
           ? description.split(/[,.]+/).map((s) => s.trim()).filter(Boolean)
           : [selectedType || 'Trauma Emergency', 'Acute emergency assistance needed'];
@@ -27,7 +35,9 @@ export default function AiAnalyzing() {
         const triagePromise = api.ai.triage({
           symptoms: symptoms.length > 0 ? symptoms : ['Severe trauma injury'],
           consciousness: 'Conscious',
-        }).catch((err) => {
+          imageBase64: accidentPhotoBase64 || undefined,
+          imageMimeType: 'image/jpeg',
+        } as any).catch((err) => {
           console.warn('[AI triage] fallback:', err);
           return null;
         });
@@ -43,34 +53,54 @@ export default function AiAnalyzing() {
             })
           : Promise.resolve(null);
 
-        const [triageRes, imgRes]: any = await Promise.all([triagePromise, imagePromise]);
+        const hospPromise = api.hospitals.matchCandidates({
+          latitude: lat,
+          longitude: lng,
+          requiredCapabilities: ['EMERGENCY_ROOM', 'TRAUMA_BAY'],
+          specialtyNeeded: selectedType || 'GENERAL',
+          severity: userEstimatedSeverity === 'Severe' ? 'HIGH' : 'MEDIUM',
+        }).catch((err) => {
+          console.warn('[AI hospital matching] fallback:', err);
+          return null;
+        });
+
+        const [triageRes, imgRes, hospRes]: any = await Promise.all([
+          triagePromise,
+          imagePromise,
+          hospPromise,
+        ]);
 
         if (mounted) {
           if (imgRes) {
             setAiImageResult(imgRes);
           }
 
+          if (hospRes?.candidates && Array.isArray(hospRes.candidates)) {
+            setCandidateHospitals(hospRes.candidates);
+          }
+
+          let aiAssessed = 'HIGH';
+          if (imgRes && triageRes) {
+            aiAssessed =
+              imgRes.severity === 'CRITICAL' || triageRes.severity === 'CRITICAL'
+                ? 'CRITICAL'
+                : imgRes.severity === 'HIGH' || triageRes.severity === 'HIGH'
+                ? 'HIGH'
+                : triageRes.severity || 'MEDIUM';
+          } else if (imgRes) {
+            aiAssessed = String(imgRes.severity || 'HIGH').toUpperCase();
+          } else if (triageRes) {
+            aiAssessed = String(triageRes.severity || 'HIGH').toUpperCase();
+          }
+
+          setAiAssessedSeverity(aiAssessed);
+
           if (triageRes) {
-            const combined = {
+            setAiTriageResult({
               ...triageRes,
               imageAnalysis: imgRes || null,
-            };
-            setAiTriageResult(combined);
-
-            // Prioritize higher severity if image analysis detected critical findings
-            let resolvedSev = triageRes.severity ? String(triageRes.severity).toLowerCase() : 'medium';
-            if (imgRes?.severity) {
-              const imgSev = String(imgRes.severity).toLowerCase();
-              if (imgSev === 'critical' || (imgSev === 'high' && resolvedSev === 'low')) {
-                resolvedSev = imgSev;
-              }
-            }
-
-            if (['low', 'medium', 'high', 'critical'].includes(resolvedSev)) {
-              setAiSeverity(resolvedSev as any);
-            }
+            });
           } else if (imgRes) {
-            // If text triage failed but image succeeded
             setAiTriageResult({
               severity: imgRes.severity || 'HIGH',
               emergencyType: selectedType || 'Trauma Emergency',
@@ -79,11 +109,28 @@ export default function AiAnalyzing() {
               explanation: imgRes.explanation || 'Visual analysis completed from uploaded incident image.',
               imageAnalysis: imgRes,
             });
-            const imgSev = String(imgRes.severity || 'high').toLowerCase();
-            if (['low', 'medium', 'high', 'critical'].includes(imgSev)) {
-              setAiSeverity(imgSev as any);
-            }
           }
+
+          // Clinical synthesis: Respect user estimation & AI findings (take safer higher severity)
+          const sevRank: Record<string, number> = {
+            mild: 1,
+            low: 1,
+            moderate: 2,
+            medium: 2,
+            high: 3,
+            severe: 3,
+            critical: 4,
+          };
+          const uRank = sevRank[userEstimatedSeverity.toLowerCase()] || 2;
+          const aRank = sevRank[aiAssessed.toLowerCase()] || 2;
+          const maxRank = Math.max(uRank, aRank);
+          const rankMap: Record<number, 'low' | 'medium' | 'high' | 'critical'> = {
+            1: 'low',
+            2: 'medium',
+            3: 'high',
+            4: 'critical',
+          };
+          setAiSeverity(rankMap[maxRank] || 'high');
         }
       } catch (_err) {
         if (mounted) {

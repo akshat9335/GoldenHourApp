@@ -24,6 +24,16 @@ export class QueueController {
       next(err);
     }
   }
+
+  public async resetQueue(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const doctorId = req.params.doctorId;
+      const resetState = await queueService.resetQueue(doctorId);
+      sendSuccess(res, resetState, "Doctor queue reset to 0");
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 export const queueController = new QueueController();

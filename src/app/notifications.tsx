@@ -36,7 +36,7 @@ export default function Notifications() {
             : 'Recently',
           icon: (d.type === 'EMERGENCY' ? 'ambulance' : d.type === 'HOSPITAL' ? 'hospital' : 'bell') as IconName,
           bg: d.type === 'EMERGENCY' ? colors.redGlow : colors.blueBg,
-          href: d.data?.emergencyId ? `/nearby-incident?emergencyId=${d.data.emergencyId}` : undefined,
+          href: d.data?.destination || (d.data?.emergencyId ? `/nearby-incident?emergencyId=${d.data.emergencyId}` : undefined),
           read: Boolean(d.read),
         }));
         setItems(mapped);

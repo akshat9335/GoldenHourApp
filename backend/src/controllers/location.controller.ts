@@ -61,7 +61,8 @@ export class LocationController {
         throw new AppError(400, "INVALID_COORDINATES", "Query parameters 'lat' and 'lng' must be valid coordinates.");
       }
 
-      const incidents = await locationService.getNearbyIncidents(lat, lng, radius);
+      const callerUid = (req as any).user?.uid || (req as any).user?.id;
+      const incidents = await locationService.getNearbyIncidents(lat, lng, radius, callerUid);
       sendSuccess(res, incidents, `Found ${incidents.length} nearby incidents within ${radius} km`);
     } catch (err) {
       next(err);

@@ -1,122 +1,124 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app";
 import { dataStore } from "../src/models/dataStore";
 
 const app = createApp();
 
-describe("ASHA / Frontline Worker Routes", () => {
-  beforeEach(() => {
-    dataStore.communityPatients.clear();
-    dataStore.communityVisits.clear();
-    dataStore.communityReferrals.clear();
+describe("ASHA / ANM Frontline Worker Module (/api/worker)", () => {
+  it("GET /api/worker/stats - returns summary metrics for ASHA dashboard", async () => {
+    const res = await request(app).get("/api/worker/stats");
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty("totalPatients");
+    expect(res.body.data).toHaveProperty("scheduledVisitsToday");
+    expect(res.body.data).toHaveProperty("pendingReferrals");
+    expect(res.body.data.totalPatients).toBeGreaterThanOrEqual(1);
   });
 
-  it("should register and retrieve a community patient without phone", async () => {
-    const patientData = {
-      id: "pat-test-001",
-      crisisId: "CR-TEST01",
-      workerUid: "asha-worker-local",
-      name: "Sunita Devi",
-      age: 28,
+  it("POST /api/worker/patients - registers a rural community patient with Crisis ID", async () => {
+    const payload = {
+      name: "Radhika Devi",
+      age: 24,
       gender: "FEMALE",
-      villageOrArea: "Rampur Sub-Center",
+      phone: "9918273645",
+      villageOrArea: "Naini Sub-Center Sector 4",
+      bloodGroup: "O+",
+      knownConditions: ["High Risk Pregnancy"],
       isPregnant: true,
-      expectedDeliveryDate: "15/11/2026",
-      knownConditions: ["Chronic BP"],
+      expectedDeliveryDate: "20/12/2026",
     };
 
-    const resPost = await request(app)
-      .post("/api/worker/patients")
-      .send(patientData);
-
-    expect(resPost.status).toBe(201);
-    expect(resPost.body.success).toBe(true);
-    expect(resPost.body.data.name).toBe("Sunita Devi");
-
-    // Retrieve single patient
-    const resGet = await request(app).get("/api/worker/patients/pat-test-001");
-    expect(resGet.status).toBe(200);
-    expect(resGet.body.data.villageOrArea).toBe("Rampur Sub-Center");
-    expect(resGet.body.data.isPregnant).toBe(true);
+    const res = await request(app).post("/api/worker/patients").send(payload);
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.name).toBe("Radhika Devi");
+    expect(res.body.data.crisisId).toMatch(/^CR-/);
+    expect(res.body.data.isPregnant).toBe(true);
   });
 
-  it("should record a home visit with vitals, triage and follow-up", async () => {
-    // Seed patient
-    dataStore.communityPatients.set("pat-test-002", {
-      id: "pat-test-002",
-      crisisId: "CR-TEST02",
-      workerUid: "asha-worker-local",
-      name: "Ram Lal",
-      age: 62,
-      gender: "MALE",
-      villageOrArea: "Kisan Nagar",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+  it("GET /api/worker/patients - retrieves registered community patients", async () => {
+    const res = await request(app).get("/api/worker/patients");
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(1);
+  });
 
-    const visitData = {
-      id: "visit-test-001",
-      patientId: "pat-test-002",
-      patientName: "Ram Lal",
-      workerUid: "asha-worker-local",
+  it("POST /api/worker/visits - records home visit with vital signs and AI triage", async () => {
+    const payload = {
+      patientId: "pat-seed-01",
+      patientName: "Sunita Devi",
       vitals: {
-        bloodPressure: "140/90",
-        pulse: 82,
-        spO2: 95,
-        temperature: 98.6,
+        bloodPressure: "120/80",
+        pulse: 76,
+        spO2: 99,
+        temperature: 36.6,
+        bloodSugar: 90,
       },
-      symptoms: "Mild fever and joint pain",
-      aiTriageSeverity: "MODERATE",
-      followUpRequired: true,
-      followUpDate: "28/09/2026",
+      symptoms: "Normal follow up, taking prescribed iron tablets",
+      aiTriageSeverity: "NORMAL",
+      aiGuidanceInHindi: "स्वास्थ्य सामान्य है। नियमित जांच जारी रखें।",
+      syncedFromOffline: true,
     };
 
-    const resPost = await request(app)
-      .post("/api/worker/visits")
-      .send(visitData);
-
-    expect(resPost.status).toBe(201);
-    expect(resPost.body.success).toBe(true);
-    expect(resPost.body.data.aiTriageSeverity).toBe("MODERATE");
-
-    // Verify patient's followUpDate got updated
-    const updatedPatient = dataStore.communityPatients.get("pat-test-002");
-    expect(updatedPatient?.followUpRequired).toBe(true);
-    expect(updatedPatient?.followUpDate).toBe("28/09/2026");
-
-    // List visits for patient
-    const resList = await request(app)
-      .get("/api/worker/visits?patientId=pat-test-002");
-    expect(resList.status).toBe(200);
-    expect(resList.body.data.length).toBe(1);
-    expect(resList.body.data[0].vitals.pulse).toBe(82);
+    const res = await request(app).post("/api/worker/visits").send(payload);
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.patientId).toBe("pat-seed-01");
+    expect(res.body.data.aiTriageSeverity).toBe("NORMAL");
+    expect(res.body.data.syncedFromOffline).toBe(true);
   });
 
-  it("should create a referral for a patient to a PHC/Hospital", async () => {
-    const referralData = {
-      id: "ref-test-001",
-      patientId: "pat-test-003",
-      patientName: "Geeta Bai",
-      workerUid: "asha-worker-local",
-      facilityId: "hosp-phc-rampur",
-      facilityName: "Rampur Primary Health Centre (PHC)",
-      reason: "High blood pressure during third trimester",
-      priority: "HIGH",
+  it("GET /api/worker/patients/:id - gets patient detail with visits and referrals", async () => {
+    const res = await request(app).get("/api/worker/patients/pat-seed-01");
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.patient.id).toBe("pat-seed-01");
+    expect(Array.isArray(res.body.data.visits)).toBe(true);
+  });
+
+  it("POST /api/worker/referrals - transmits digital frontline referral to PHC/Hospital", async () => {
+    const payload = {
+      patientId: "pat-seed-01",
+      patientName: "Sunita Devi",
+      patientAge: 26,
+      patientGender: "FEMALE",
+      destinationFacility: "Naini Primary Health Centre (PHC)",
+      priority: "MODERATE",
+      reason: "Antenatal screening and ultrasound evaluation",
+      vitalsSnapshot: {
+        bloodPressure: "120/80",
+        pulse: 76,
+        spO2: 99,
+      },
     };
 
-    const resPost = await request(app)
-      .post("/api/worker/referrals")
-      .send(referralData);
+    const res = await request(app).post("/api/worker/referrals").send(payload);
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.referralCode).toMatch(/^REF-ASHA-/);
+    expect(res.body.data.status).toBe("PENDING");
+  });
 
-    expect(resPost.status).toBe(201);
-    expect(resPost.body.success).toBe(true);
-    expect(resPost.body.data.facilityName).toBe("Rampur Primary Health Centre (PHC)");
+  it("POST /api/worker/sync - batch syncs multiple offline visits", async () => {
+    const batchPayload = {
+      visits: [
+        {
+          patientId: "pat-seed-03",
+          patientName: "Meera Devi",
+          vitals: { bloodPressure: "118/76", pulse: 74, spO2: 98 },
+          symptoms: "Routine post-partum check",
+          aiTriageSeverity: "NORMAL",
+          visitDate: new Date().toISOString(),
+        },
+      ],
+    };
 
-    // List referrals
-    const resList = await request(app).get("/api/worker/referrals?patientId=pat-test-003");
-    expect(resList.status).toBe(200);
-    expect(resList.body.data.length).toBe(1);
-    expect(resList.body.data[0].priority).toBe("HIGH");
+    const res = await request(app).post("/api/worker/sync").send(batchPayload);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.synced).toBe(1);
+    expect(res.body.data.failed).toBe(0);
   });
 });

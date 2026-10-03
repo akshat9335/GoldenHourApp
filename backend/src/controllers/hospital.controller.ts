@@ -43,6 +43,7 @@ import {
 } from "../services/hospital/hospital.service";
 
 import { AppError } from "../utils/AppError";
+import { rankCandidateHospitalsForLocation } from "../services/emergencies/emergency.service";
 
 // ============================================================
 // HOSPITAL REGISTRATION
@@ -922,3 +923,40 @@ export async function unlinkHospitalDriverController(
     next(error);
   }
 }
+
+export async function matchCandidateHospitalsController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const lat = Number(req.body.latitude || req.body.lat || 25.4538);
+    const lng = Number(req.body.longitude || req.body.lng || 81.854);
+    const reqCaps = Array.isArray(req.body.requiredCapabilities)
+      ? req.body.requiredCapabilities
+      : ["EMERGENCY_ROOM", "TRAUMA_BAY"];
+    const specialtyNeeded = String(req.body.specialtyNeeded || "GENERAL");
+    const severity = String(req.body.severity || "MEDIUM").toUpperCase();
+
+    const { candidates, hasEquippedFacilityNearby } =
+      await rankCandidateHospitalsForLocation(
+        lat,
+        lng,
+        reqCaps,
+        specialtyNeeded,
+        severity,
+      );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        candidates: candidates.slice(0, 3),
+        hasEquippedFacilityNearby,
+      },
+      message: "Candidate hospitals ranked successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+

@@ -43,6 +43,7 @@ export default function DoctorRegister() {
   };
 
   const executeRegistration = async (targetEmail: string) => {
+    const coords = useAppStore.getState().lastKnownLocation;
     await authService.register({
       role: 'DOCTOR',
       name: name.trim(),
@@ -56,6 +57,8 @@ export default function DoctorRegister() {
       clinicName: clinicName.trim() || undefined,
       clinicAddress: clinicAddress.trim() || undefined,
       consultationFee: parseInt(fee, 10) || 500,
+      latitude: coords?.latitude || 25.4538,
+      longitude: coords?.longitude || 81.8540,
     });
 
     Alert.alert(
@@ -185,7 +188,13 @@ export default function DoctorRegister() {
           placeholder="+91 98765 43210"
           keyboardType="phone-pad"
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(v) => {
+            let clean = v;
+            if (clean && !clean.startsWith('+91') && !clean.startsWith('+')) {
+              clean = '+91 ' + clean;
+            }
+            setPhone(clean);
+          }}
         />
       </InputGroup>
       <InputGroup label="Specialization">
@@ -204,9 +213,10 @@ export default function DoctorRegister() {
       </InputGroup>
       <InputGroup label="Medical Registration Number">
         <Input
-          placeholder="State Medical Council Reg. No."
+          placeholder="e.g. MCI-2024-54321"
           value={medicalRegNo}
           onChangeText={setMedicalRegNo}
+          autoCapitalize="characters"
         />
       </InputGroup>
       <InputGroup label="Clinic Name">

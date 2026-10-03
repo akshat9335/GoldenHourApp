@@ -43,3 +43,28 @@ export interface CommunityVisit {
   syncedFromOffline: boolean;
   createdAt: string;
 }
+
+export interface CommunityReferral {
+  id: string;
+  referralCode: string;
+  patientId: string;
+  patientName: string;
+  patientAge?: number;
+  patientGender?: string;
+  workerUid: string;
+  workerName: string;
+  destinationFacility: string;
+  hospitalId?: string;
+  priority: 'NORMAL' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  reason: string;
+  vitalsSnapshot?: {
+    bloodPressure?: string;
+    bloodSugar?: number;
+    spO2?: number;
+    pulse?: number;
+    temperature?: number;
+  };
+  status: 'PENDING' | 'ACCEPTED' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+  updatedAt: string;
+}

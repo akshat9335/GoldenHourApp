@@ -6,11 +6,80 @@ import { Screen, TopBar, Card, Pill, Button, Divider, LabelEyebrow } from '@/com
 import { useAppStore } from '@/store/useAppStore';
 import { getDoctorById } from '@/constants/doctorData';
 
+import { api } from '@/services/api';
+
 export default function AppointmentDetail() {
   const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const selectedDoctor = useAppStore((s) => s.selectedDoctor);
   const userToken = useAppStore((s) => s.userToken);
-  const doctor = getDoctorById(selectedDoctorId);
+  const doctor = selectedDoctor || getDoctorById(selectedDoctorId);
+  const [activeAppt, setActiveAppt] = useState<any>(null);
   const [cancelled, setCancelled] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchStatus = () => {
+      const pid = useAppStore.getState().userProfile?.uid;
+      api.appointments
+        .getMyAppointments(pid)
+        .then((res: any) => {
+          const appts = Array.isArray(res) ? res : res?.data;
+          if (mounted && Array.isArray(appts) && appts.length > 0) {
+            const matchesDoc = (a: any) =>
+              a.doctorId === selectedDoctorId ||
+              a.doctorId === selectedDoctorId.replace(/^doc-/, '') ||
+              `doc-${a.doctorId}` === selectedDoctorId;
+            const active = appts.find(
+              (a: any) =>
+                matchesDoc(a) &&
+                a.status !== 'CANCELLED' &&
+                a.status !== 'COMPLETED'
+            );
+            const completed = appts.find(
+              (a: any) => matchesDoc(a) && a.status === 'COMPLETED'
+            );
+            const matched =
+              active ||
+              completed ||
+              appts.find((a: any) => matchesDoc(a)) ||
+              appts[0];
+            if (matched) {
+              setActiveAppt(matched);
+              if (matched.status === 'CANCELLED') {
+                setCancelled(true);
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedDoctorId]);
+
+  const handleCancel = async () => {
+    if (activeAppt?.appointmentId) {
+      setCancelling(true);
+      try {
+        await api.appointments.cancel(activeAppt.appointmentId);
+      } catch {}
+      setCancelling(false);
+    }
+    setCancelled(true);
+  };
+
+  const isCompleted = (activeAppt?.status || '').toUpperCase() === 'COMPLETED';
+  const displayDate = activeAppt?.date || 'Today';
+  const displayTime = activeAppt?.timeSlot || '10:30 AM';
+  const displayToken = String(activeAppt?.tokenNumber ?? userToken ?? (doctor.servingToken || 0) + 1);
+  const displayStatus = cancelled ? 'Cancelled' : isCompleted ? 'Completed' : (activeAppt?.status || 'Confirmed');
 
   return (
     <Screen>
@@ -19,37 +88,66 @@ export default function AppointmentDetail() {
       <Card style={styles.card}>
         <View style={styles.rowTop}>
           <Text style={styles.name}>{doctor.name}</Text>
-          <Pill color={cancelled ? 'grey' : 'success'}>{cancelled ? 'CANCELLED' : 'UPCOMING'}</Pill>
+          <Pill color={cancelled ? 'grey' : isCompleted ? 'success' : 'blue'}>
+            {cancelled ? 'CANCELLED' : isCompleted ? 'COMPLETED' : 'UPCOMING'}
+          </Pill>
         </View>
         <Text style={styles.sub}>{doctor.specialization}</Text>
         <View style={{ marginVertical: 12 }}><Divider /></View>
         <View style={styles.grid}>
           <Stat label="CLINIC" value={doctor.clinic} />
-          <Stat label="DATE" value="Today" />
-          <Stat label="TIME" value="4:30 PM" />
-          <Stat label="TOKEN" value={String(userToken ?? doctor.currentToken)} />
-          <Stat label="ESTIMATED WAIT" value={`~${doctor.estimatedWaitMin} min`} />
-          <Stat label="STATUS" value={cancelled ? 'Cancelled' : 'Confirmed'} />
+          <Stat label="DATE" value={displayDate} />
+          <Stat label="TIME" value={displayTime} />
+          <Stat label="TOKEN" value={displayToken} />
+          <Stat label="ESTIMATED WAIT" value={isCompleted ? 'Finished' : `~${doctor.estimatedWaitMin || 15} min`} />
+          <Stat label="STATUS" value={displayStatus} />
         </View>
         <View style={{ marginVertical: 12 }}><Divider /></View>
         <LabelEyebrow>CLINIC ADDRESS</LabelEyebrow>
         <Text style={styles.address}>{doctor.address}</Text>
       </Card>
 
-      {!cancelled && (
+      {isCompleted ? (
+        <View style={{ gap: 10 }}>
+          <Card style={styles.completedBanner}>
+            <Text style={styles.completedBannerTitle}>✓ Consultation Completed</Text>
+            <Text style={styles.completedBannerSub}>
+              Your teleconsultation with {doctor.name} has concluded. Your digital prescription and clinical notes are now available.
+            </Text>
+          </Card>
+          <Button
+            title="📄 View Prescription & Records"
+            variant="primary"
+            onPress={() => router.push('/(patient)/health-records')}
+          />
+          <Button
+            title="Book Follow-up Appointment"
+            variant="secondary"
+            onPress={() => router.push('/(patient)/consult-doctor')}
+          />
+        </View>
+      ) : !cancelled ? (
         <View style={{ gap: 8 }}>
           <Button
             title="📹 Start Video Consultation"
-            variant="success"
-            onPress={() => router.push(`/(patient)/teleconsultation/tc_${userToken ?? doctor.currentToken}` as any)}
+            variant="primary"
+            onPress={() => {
+              const consultId = activeAppt?.appointmentId || activeAppt?.id || `appt_${selectedDoctorId}_${displayToken}`;
+              router.push(`/(patient)/teleconsultation/${consultId}` as any);
+            }}
           />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button title="Get Directions" variant="blue" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/clinic-location')} />
             <Button title="View Queue" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/live-queue')} />
           </View>
-          <Button title="Cancel Appointment" variant="ghost" onPress={() => setCancelled(true)} />
+          <Button
+            title={cancelling ? 'Cancelling...' : 'Cancel Appointment'}
+            variant="ghost"
+            disabled={cancelling}
+            onPress={handleCancel}
+          />
         </View>
-      )}
+      ) : null}
     </Screen>
   );
 }
@@ -71,4 +169,22 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   statValue: { fontSize: 12.5, fontWeight: '700', color: colors.ink, marginTop: 2 },
   address: { fontSize: 11.5, color: colors.ink, marginTop: 3, lineHeight: 17 },
+  completedBanner: {
+    padding: 16,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.5,
+    borderColor: '#86EFAC',
+    borderRadius: 12,
+  },
+  completedBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#15803D',
+  },
+  completedBannerSub: {
+    fontSize: 12,
+    color: '#166534',
+    marginTop: 4,
+    lineHeight: 18,
+  },
 });

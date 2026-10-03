@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,8 +17,13 @@ import { colors } from '@/constants/theme';
 import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { enqueueOfflineAction } from '@/services/offlineSync';
+import { api, getApiBaseUrl } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 
-const PATIENTS_KEY = '@golden_hour_community_patients';
+const getPatientsKey = (uid?: string) =>
+  uid && !uid.startsWith('asha-demo')
+    ? `@golden_hour_community_patients_${uid}`
+    : '@golden_hour_community_patients_demo';
 
 type Gender = 'MALE' | 'FEMALE' | 'OTHER';
 
@@ -36,25 +41,55 @@ export default function RegisterPatient() {
   const [chronicBP, setChronicBP] = useState(false);
   const [diabetes, setDiabetes] = useState(false);
   const [heartDisease, setHeartDisease] = useState(false);
+  const [customCondition, setCustomCondition] = useState('');
+  const [selectedQuickConditions, setSelectedQuickConditions] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
+
+  const QUICK_CONDITIONS = [
+    'Severe Anemia',
+    'Asthma',
+    'Tuberculosis (TB)',
+    'Thyroid',
+    'High-Risk Pregnancy',
+    'Malnutrition',
+    'Epilepsy / Fits',
+  ];
 
   const handleSave = async () => {
+    if (isSavingRef.current || isSaving) return;
+
     if (!name.trim()) {
       Alert.alert(t('common.error'), t('asha.enterPatientName'));
       return;
     }
+    isSavingRef.current = true;
     setIsSaving(true);
 
     const knownConditions: string[] = [];
     if (chronicBP) knownConditions.push('Chronic BP');
     if (diabetes) knownConditions.push('Diabetes');
     if (heartDisease) knownConditions.push('Heart Disease');
+    selectedQuickConditions.forEach((c) => {
+      if (!knownConditions.includes(c)) knownConditions.push(c);
+    });
+    if (customCondition.trim()) {
+      const extra = customCondition.split(',').map((s) => s.trim()).filter(Boolean);
+      extra.forEach((c) => {
+        if (!knownConditions.includes(c)) knownConditions.push(c);
+      });
+    }
+
+    const userProfile = useAppStore.getState().userProfile;
+    const workerUid = userProfile?.uid || 'asha-worker-prayagraj';
+    const workerName = userProfile?.name || 'Sunita Verma (ASHA Sangini)';
+    const storageKey = getPatientsKey(workerUid);
 
     const patient = {
       id: `pat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       crisisId: `CR-${Date.now().toString(36).toUpperCase()}`,
-      workerUid: 'asha-worker-local',
-      workerName: 'ASHA Worker',
+      workerUid,
+      workerName,
       name: name.trim(),
       age: parseInt(age || '0', 10),
       gender,
@@ -69,21 +104,25 @@ export default function RegisterPatient() {
     };
 
     try {
-      // Save locally first (offline-first)
-      const raw = await AsyncStorage.getItem(PATIENTS_KEY);
-      const existing = raw ? JSON.parse(raw) : [];
-      await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify([patient, ...existing]));
+      // Save locally first (offline-first, deduplicate against existing)
+      const raw = await AsyncStorage.getItem(storageKey);
+      const existing: any[] = raw ? JSON.parse(raw) : [];
+      const isSamePatient = (a: any, b: any) =>
+        a.id === b.id ||
+        (a.phone && b.phone && a.phone.trim().length >= 4 && a.phone.trim() === b.phone.trim()) ||
+        (a.name?.trim().toLowerCase() === b.name?.trim().toLowerCase());
+
+      const deduped = existing.filter((p) => !isSamePatient(p, patient));
+      let finalPatient = patient;
 
       // Try to sync to backend, else queue it
       const netState = await NetInfo.fetch();
       if (netState.isConnected) {
         try {
-          const res = await fetch('http://localhost:5000/api/worker/patients', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(patient),
-          });
-          if (!res.ok) throw new Error('Server error');
+          const res: any = await api.worker.registerPatient(patient);
+          if (res?.data?.id) {
+            finalPatient = res.data;
+          }
         } catch {
           await enqueueOfflineAction('/api/worker/patients', 'POST', patient);
         }
@@ -91,12 +130,17 @@ export default function RegisterPatient() {
         await enqueueOfflineAction('/api/worker/patients', 'POST', patient);
       }
 
+      const updatedList = [finalPatient, ...deduped.filter((p) => p.id !== finalPatient.id)];
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedList));
+      await AsyncStorage.setItem('@golden_hour_community_patients', JSON.stringify(updatedList));
+
       Alert.alert(t('asha.patientRegistered'), t('asha.patientSaved'), [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (err) {
       Alert.alert(t('common.error'), 'Could not save patient. Please try again.');
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
   };
@@ -240,6 +284,44 @@ export default function RegisterPatient() {
               />
             </View>
           ))}
+
+          {/* Quick Common Condition Chips */}
+          <Text style={[styles.label, { marginTop: 14, marginBottom: 8 }]}>
+            अन्य सामान्य स्थितियाँ (Quick Select):
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {QUICK_CONDITIONS.map((cond) => {
+              const active = selectedQuickConditions.includes(cond);
+              return (
+                <TouchableOpacity
+                  key={cond}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => {
+                    setSelectedQuickConditions((prev) =>
+                      active ? prev.filter((c) => c !== cond) : [...prev, cond]
+                    );
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {active ? '✓ ' : '+ '}{cond}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Manual Input for Any Other Condition */}
+          <Text style={[styles.label, { marginTop: 4, marginBottom: 5 }]}>
+            अन्य स्वास्थ्य स्थिति / बीमारी (Manual Type):
+          </Text>
+          <TextInput
+            style={[styles.input, { marginBottom: 4 }]}
+            placeholder="उदा. Severe Anemia, Allergy, Surgery history..."
+            value={customCondition}
+            onChangeText={setCustomCondition}
+            placeholderTextColor={colors.inkFaint}
+          />
         </View>
 
         {/* Save Button */}
@@ -329,6 +411,27 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   toggleLabel: { fontSize: 13.5, fontWeight: '600', color: colors.ink },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  chipActive: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#DC2626',
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.inkSoft,
+  },
+  chipTextActive: {
+    color: '#DC2626',
+    fontWeight: '700',
+  },
   saveBtn: {
     backgroundColor: colors.red,
     borderRadius: 12,
