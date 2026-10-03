@@ -27,11 +27,11 @@ export default function HospitalDashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [capacity, setCapacity] = useState({
-    totalBeds: 20,
-    availableBeds: 14,
-    icuBeds: 5,
+    totalBeds: 50,
+    availableBeds: 18,
+    icuBeds: 12,
     availableIcuBeds: 4,
-    emergencyCapacity: 5,
+    emergencyCapacity: 6,
   });
 
   // Load cached capacity immediately on mount to prevent flashing
@@ -83,11 +83,11 @@ export default function HospitalDashboard() {
         const cap = capRes?.data || capRes;
         if (cap && cap.availableBeds !== undefined) {
           const newCap = {
-            totalBeds: Number(cap.totalBeds) || 20,
-            availableBeds: Number(cap.availableBeds) || 14,
-            icuBeds: Number(cap.icuBeds) || 5,
+            totalBeds: Number(cap.totalBeds) || 50,
+            availableBeds: Number(cap.availableBeds) || 18,
+            icuBeds: Number(cap.icuBeds) || 12,
             availableIcuBeds: Number(cap.availableIcuBeds) || 4,
-            emergencyCapacity: Number(cap.emergencyCapacity) || 5,
+            emergencyCapacity: Number(cap.emergencyCapacity) || 6,
           };
           setCapacity(newCap);
           AsyncStorage.setItem(`@golden_hour_hospital_capacity_${hospId}`, JSON.stringify(newCap)).catch(() => {});
@@ -110,11 +110,11 @@ export default function HospitalDashboard() {
         const cap = capRes?.data || capRes;
         if (cap && cap.availableBeds !== undefined) {
           const newCap = {
-            totalBeds: Number(cap.totalBeds) || 20,
-            availableBeds: Number(cap.availableBeds) || 14,
-            icuBeds: Number(cap.icuBeds) || 5,
+            totalBeds: Number(cap.totalBeds) || 50,
+            availableBeds: Number(cap.availableBeds) || 18,
+            icuBeds: Number(cap.icuBeds) || 12,
             availableIcuBeds: Number(cap.availableIcuBeds) || 4,
-            emergencyCapacity: Number(cap.emergencyCapacity) || 5,
+            emergencyCapacity: Number(cap.emergencyCapacity) || 6,
           };
           setCapacity(newCap);
           AsyncStorage.setItem(`@golden_hour_hospital_capacity_${hospId}`, JSON.stringify(newCap)).catch(() => {});

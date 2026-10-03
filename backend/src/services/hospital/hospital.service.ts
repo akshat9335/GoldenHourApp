@@ -102,16 +102,17 @@ async function getHospitalByOwnerUid(uid: string) {
     );
   }
 
-  // 0. Fast-path check: direct lookup by hospital document ID or clean ID
-  try {
-    const directDoc = await firestore.collection("hospitals").doc(uid).get();
-    if (directDoc.exists && directDoc.data()) {
-      return {
-        docId: directDoc.id,
-        data: directDoc.data(),
-      };
-    }
-  } catch {}
+  let hospitalDoc: any = null;
+
+  // 0. If uid already has 'hosp-' prefix, it's a direct hospital facility ID
+  if (uid.startsWith("hosp-")) {
+    try {
+      const directDoc = await firestore.collection("hospitals").doc(uid).get();
+      if (directDoc.exists && directDoc.data()) {
+        hospitalDoc = directDoc;
+      }
+    } catch {}
+  }
 
   // 1. Check user profile for linked hospitalId or hospitalName
   let userHospId: string | null = null;
@@ -124,9 +125,7 @@ async function getHospitalByOwnerUid(uid: string) {
     }
   } catch {}
 
-  let hospitalDoc: any = null;
-
-  if (userHospId) {
+  if (!hospitalDoc && userHospId) {
     try {
       const linkedDoc = await firestore.collection("hospitals").doc(userHospId).get();
       if (linkedDoc.exists) {
@@ -732,25 +731,17 @@ export async function getHospitalCapacity(uid: string) {
     .get();
 
   if (!capacitySnapshot.exists) {
-    if (hospital.data.totalBeds !== undefined) {
-      const initialCapacity = {
-        hospitalId: hospital.docId,
-        totalBeds: Number(hospital.data.totalBeds) || 20,
-        availableBeds: Number(hospital.data.availableBeds) || 14,
-        icuBeds: Number(hospital.data.icuBeds) || 5,
-        availableIcuBeds: Number(hospital.data.availableIcuBeds) || 4,
-        emergencyCapacity: 5,
-        updatedAt: new Date(),
-      };
-      await firestore.collection("hospitalCapacity").doc(hospital.docId).set(initialCapacity, { merge: true });
-      return initialCapacity;
-    }
-
-    throw new AppError(
-      404,
-      "CAPACITY_NOT_FOUND",
-      "Hospital capacity information not found.",
-    );
+    const initialCapacity = {
+      hospitalId: hospital.docId,
+      totalBeds: Number(hospital.data.totalBeds) || 50,
+      availableBeds: Number(hospital.data.availableBeds) || 18,
+      icuBeds: Number(hospital.data.icuBeds) || 12,
+      availableIcuBeds: Number(hospital.data.availableIcuBeds) || 4,
+      emergencyCapacity: Number(hospital.data.emergencyCapacity) || 6,
+      updatedAt: new Date(),
+    };
+    await firestore.collection("hospitalCapacity").doc(hospital.docId).set(initialCapacity, { merge: true });
+    return initialCapacity;
   }
 
   return {
@@ -860,21 +851,21 @@ export async function reserveHospitalBed(
     const capRef = firestore.collection("hospitalCapacity").doc(hosp.docId);
     const capSnap = await capRef.get();
 
-    let totalBeds = 25;
-    let availableBeds = 14;
-    let icuBeds = 6;
+    let totalBeds = 50;
+    let availableBeds = 18;
+    let icuBeds = 12;
     let availableIcuBeds = 4;
 
     if (capSnap.exists) {
       const data = capSnap.data() || {};
-      totalBeds = Number(data.totalBeds) || 25;
-      availableBeds = Number(data.availableBeds) || 14;
-      icuBeds = Number(data.icuBeds) || 6;
+      totalBeds = Number(data.totalBeds) || 50;
+      availableBeds = Number(data.availableBeds) || 18;
+      icuBeds = Number(data.icuBeds) || 12;
       availableIcuBeds = Number(data.availableIcuBeds) || 4;
     } else if (hosp.data) {
-      totalBeds = Number(hosp.data.totalBeds) || 25;
-      availableBeds = Number(hosp.data.availableBeds) || 14;
-      icuBeds = Number(hosp.data.icuBeds) || 6;
+      totalBeds = Number(hosp.data.totalBeds) || 50;
+      availableBeds = Number(hosp.data.availableBeds) || 18;
+      icuBeds = Number(hosp.data.icuBeds) || 12;
       availableIcuBeds = Number(hosp.data.availableIcuBeds) || 4;
     }
 
@@ -924,21 +915,21 @@ export async function freeHospitalBed(
     const capRef = firestore.collection("hospitalCapacity").doc(hosp.docId);
     const capSnap = await capRef.get();
 
-    let totalBeds = 25;
-    let availableBeds = 14;
-    let icuBeds = 6;
+    let totalBeds = 50;
+    let availableBeds = 18;
+    let icuBeds = 12;
     let availableIcuBeds = 4;
 
     if (capSnap.exists) {
       const data = capSnap.data() || {};
-      totalBeds = Number(data.totalBeds) || 25;
-      availableBeds = Number(data.availableBeds) || 14;
-      icuBeds = Number(data.icuBeds) || 6;
+      totalBeds = Number(data.totalBeds) || 50;
+      availableBeds = Number(data.availableBeds) || 18;
+      icuBeds = Number(data.icuBeds) || 12;
       availableIcuBeds = Number(data.availableIcuBeds) || 4;
     } else if (hosp.data) {
-      totalBeds = Number(hosp.data.totalBeds) || 25;
-      availableBeds = Number(hosp.data.availableBeds) || 14;
-      icuBeds = Number(hosp.data.icuBeds) || 6;
+      totalBeds = Number(hosp.data.totalBeds) || 50;
+      availableBeds = Number(hosp.data.availableBeds) || 18;
+      icuBeds = Number(hosp.data.icuBeds) || 12;
       availableIcuBeds = Number(hosp.data.availableIcuBeds) || 4;
     }
 
