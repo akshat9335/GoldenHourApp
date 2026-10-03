@@ -15,51 +15,6 @@ import { Screen, TopBar, Card, Pill, PatientNav, Icon, Button, Divider } from '@
 import { api } from '@/services/api';
 import { useAppStore } from '@/store/useAppStore';
 
-const DEMO_RAHUL_RECORDS = [
-  {
-    id: 'rec-rahul-cardio-01',
-    patientId: 'patient-demo-1',
-    patientName: 'Rahul Patel',
-    doctorId: 'doc-1',
-    doctorName: 'Dr. Alok Tripathi',
-    doctorSpecialty: 'Cardiologist',
-    clinicName: 'Medanta OPD & Diagnostic Center, Prayagraj',
-    tokenNumber: 1,
-    diagnosis: 'Mild Angina & Stage-1 Essential Hypertension',
-    notes: 'Patient reported episodic retrosternal discomfort during physical exertion. Resting ECG within normal limits. Advised lifestyle modifications, low sodium diet, and regular BP monitoring.',
-    vitals: {
-      bloodPressure: '130/85',
-      heartRate: 78,
-      temperature: '98.4 F',
-      spO2: 99,
-    },
-    prescriptions: [
-      {
-        name: 'Amlodipine 5mg',
-        dosage: '1 tablet',
-        frequency: '1-0-0',
-        duration: '30 days',
-        instructions: 'Morning after breakfast',
-      },
-      {
-        name: 'Aspirin 75mg (Ecosprin)',
-        dosage: '1 tablet',
-        frequency: '0-1-0',
-        duration: '30 days',
-        instructions: 'After lunch with water',
-      },
-      {
-        name: 'Sorbitrate 5mg',
-        dosage: '1 tablet',
-        frequency: 'SOS (as needed)',
-        duration: '10 days',
-        instructions: 'Sublingual if acute chest pain occurs',
-      },
-    ],
-    createdAt: new Date().toISOString(),
-  },
-];
-
 export default function PatientHealthRecords() {
   const userProfile = useAppStore((s) => s.userProfile);
   const patientId = userProfile?.uid || (userProfile as any)?.id || 'patient-1';
@@ -84,24 +39,18 @@ export default function PatientHealthRecords() {
     try {
       const recsRes: any = await api.healthRecords.getPatientRecords(patientId);
       const recs = Array.isArray(recsRes) ? recsRes : (recsRes?.data || []);
-      if (recs.length === 0 && (patientId === 'patient-demo-1' || userProfile?.name?.includes('Rahul'))) {
-        setRecords(DEMO_RAHUL_RECORDS);
-      } else {
-        setRecords(recs);
-      }
+      setRecords(recs);
 
       const refsRes: any = await api.referrals.getPatientReferrals(patientId);
       const refs = Array.isArray(refsRes) ? refsRes : (refsRes?.data || []);
       setReferrals(refs);
     } catch (_err) {
-      if (patientId === 'patient-demo-1' || userProfile?.name?.includes('Rahul')) {
-        setRecords(DEMO_RAHUL_RECORDS);
-      }
+      setRecords([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [patientId, userProfile?.name]);
+  }, [patientId]);
 
   useEffect(() => {
     fetchHealthData();
