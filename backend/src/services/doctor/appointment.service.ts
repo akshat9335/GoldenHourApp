@@ -56,8 +56,10 @@ export class AppointmentService {
     }
 
     // Check slot duplicate for the same patient & doctor on the same date
+    const isWalkIn = (data.timeSlot || "").toLowerCase().includes("walk-in");
     for (const appt of dataStore.appointments.values()) {
       if (
+        !isWalkIn &&
         appt.doctorId === data.doctorId &&
         appt.date === data.date &&
         appt.timeSlot === data.timeSlot &&
@@ -70,7 +72,8 @@ export class AppointmentService {
         appt.doctorId === data.doctorId &&
         appt.patientId === data.patientId &&
         appt.date === data.date &&
-        appt.status !== "CANCELLED"
+        appt.status !== "CANCELLED" &&
+        appt.status !== "COMPLETED"
       ) {
         return {
           ...appt,

@@ -13,11 +13,17 @@ export class QueueService {
 
     let queue = dataStore.queues.get(key);
     if (!queue) {
+      let maxToken = 0;
+      for (const a of dataStore.appointments.values()) {
+        if (a.doctorId === doctorId && a.date === queueDate && (a.tokenNumber || 0) > maxToken) {
+          maxToken = a.tokenNumber;
+        }
+      }
       queue = {
         doctorId,
         date: queueDate,
         servingToken: 0,
-        totalTokensIssued: 0,
+        totalTokensIssued: maxToken,
         avgConsultationMinutes: 10,
         waitingCount: 0,
       };

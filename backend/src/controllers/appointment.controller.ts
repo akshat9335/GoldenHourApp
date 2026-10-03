@@ -72,7 +72,9 @@ export class AppointmentController {
         doctorId = "doc-1";
       }
 
-      const date = req.query.date as string | undefined;
+      const rawDate = req.query.date as string | undefined;
+      const todayIso = new Date().toISOString().split("T")[0];
+      const date = rawDate === "all" ? undefined : (rawDate || todayIso);
       const appointments = await appointmentService.getDoctorAppointments(doctorId, date);
       sendSuccess(res, appointments, `Retrieved ${appointments.length} appointments for doctor`);
     } catch (err) {

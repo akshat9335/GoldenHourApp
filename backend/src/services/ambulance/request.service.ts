@@ -90,7 +90,7 @@ export async function getAmbulanceRequests(
 
       // Only show emergencies strictly awaiting an ambulance dispatch
       const isAwaitingDispatch =
-        (st === "HOSPITAL_ACCEPTED" || st === "AMBULANCE_SEARCH" || st === "PENDING" || st === "SEARCHING") &&
+        (st === "HOSPITAL_ACCEPTED" || st === "AMBULANCE_SEARCH" || st === "PENDING" || st === "SEARCHING" || st === "REPORTED" || st === "HOSPITAL_SEARCH") &&
         !req.assignedDriverId &&
         !req.assignedAmbulanceId;
 
