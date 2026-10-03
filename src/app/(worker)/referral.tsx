@@ -17,18 +17,27 @@ import { Icon } from '@/components/ui';
 import LanguageSelector from '@/components/LanguageSelector';
 import { enqueueOfflineAction } from '@/services/offlineSync';
 import { api, getApiBaseUrl } from '@/services/api';
+import { useAppStore } from '@/store/useAppStore';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const REFERRALS_KEY = '@golden_hour_community_referrals';
 
 type ReferralPriority = 'NORMAL' | 'MODERATE' | 'HIGH' | 'CRITICAL';
 
-const FACILITIES = [
-  { name: 'Swaroop Rani Nehru Hospital (District Trauma)', type: 'District Hospital' },
-  { name: 'Naini Primary Health Centre (PHC)', type: 'Primary Health Centre' },
-  { name: 'Shankargarh Community Health Centre (CHC)', type: 'Community Health Centre' },
-  { name: 'Kamla Nehru Memorial Hospital', type: 'Specialized Hospital' },
-  { name: 'Tej Bahadur Sapru (Beli) Hospital', type: 'District Hospital' },
+interface FacilityItem {
+  id: string;
+  name: string;
+  type: string;
+  availableBeds?: number;
+}
+
+const FALLBACK_FACILITIES: FacilityItem[] = [
+  { id: 'hosp-srn-prayagraj', name: 'Swaroop Rani Nehru Hospital (District Trauma)', type: 'District Hospital', availableBeds: 24 },
+  { id: 'hosp-demo-apollo', name: 'Apollo Multi-Specialty Hospital', type: 'Tertiary Care & Trauma', availableBeds: 18 },
+  { id: 'hosp-a3T8en1zB3NvXvwDEKxCG0HR0hi1', name: 'Medanta Hospital Prayagraj', type: 'Super Specialty Hospital', availableBeds: 20 },
+  { id: 'hosp-7KdTMePBTBdIY7s4tlVcl5dnN702', name: 'Saket Hospital', type: 'General & Emergency Care', availableBeds: 33 },
+  { id: 'hosp-kamla-nehru', name: 'Kamla Nehru Memorial Hospital', type: 'Specialized Hospital', availableBeds: 15 },
+  { id: 'phc-naini', name: 'Naini Primary Health Centre (PHC)', type: 'Primary Health Centre', availableBeds: 6 },
 ];
 
 export default function CreateReferralScreen() {
@@ -38,7 +47,10 @@ export default function CreateReferralScreen() {
 
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(paramPatientId || '');
-  const [destinationFacility, setDestinationFacility] = useState(FACILITIES[0].name);
+  const [facilities, setFacilities] = useState<FacilityItem[]>(FALLBACK_FACILITIES);
+  const [selectedHospitalId, setSelectedHospitalId] = useState<string>(FALLBACK_FACILITIES[0].id);
+  const [destinationFacility, setDestinationFacility] = useState(FALLBACK_FACILITIES[0].name);
+  const [loadingFacilities, setLoadingFacilities] = useState(false);
   const [priority, setPriority] = useState<ReferralPriority>('HIGH');
   const [reason, setReason] = useState('');
   const [bp, setBp] = useState('');
@@ -49,7 +61,31 @@ export default function CreateReferralScreen() {
 
   useEffect(() => {
     loadPatients();
+    loadRegisteredHospitals();
   }, []);
+
+  const loadRegisteredHospitals = async () => {
+    try {
+      setLoadingFacilities(true);
+      const res: any = await api.location.getNearbyHospitals(25.4358, 81.8463, 50);
+      const list = res?.data || (Array.isArray(res) ? res : []);
+      if (Array.isArray(list) && list.length > 0) {
+        const mapped: FacilityItem[] = list.map((h: any) => ({
+          id: h.hospitalId || h.id,
+          name: h.name,
+          type: h.address || 'Registered Hospital',
+          availableBeds: h.availableBeds ?? h.availableCapacity ?? undefined,
+        }));
+        setFacilities(mapped);
+        setSelectedHospitalId(mapped[0].id);
+        setDestinationFacility(mapped[0].name);
+      }
+    } catch {
+      // Keep fallbacks
+    } finally {
+      setLoadingFacilities(false);
+    }
+  };
 
   const loadPatients = async () => {
     try {
@@ -79,6 +115,10 @@ export default function CreateReferralScreen() {
     }
 
     setIsSubmitting(true);
+    const userProfile = useAppStore.getState().userProfile;
+    const workerUid = userProfile?.uid || 'asha-worker-prayagraj';
+    const workerName = userProfile?.name || 'Sunita Verma (ASHA Sangini)';
+
     const referralCode = `REF-ASHA-${Date.now().toString(36).toUpperCase()}`;
     const payload = {
       id: `ref-${Date.now()}`,
@@ -87,8 +127,9 @@ export default function CreateReferralScreen() {
       patientName: selectedPatient?.name || 'Community Patient',
       patientAge: selectedPatient?.age || 0,
       patientGender: selectedPatient?.gender || 'FEMALE',
-      workerUid: 'asha-worker-prayagraj',
-      workerName: 'Sunita Verma (ASHA Sangini)',
+      workerUid,
+      workerName,
+      hospitalId: selectedHospitalId,
       destinationFacility,
       priority,
       reason,
@@ -208,27 +249,41 @@ export default function CreateReferralScreen() {
 
         {/* Destination Facility */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            {lang === 'mr' ? 'गंतव्य रुग्णालय / PHC' : lang === 'hi' ? 'गंतव्य अस्पताल / PHC' : 'Destination Hospital / PHC'} *
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <Text style={styles.cardTitle}>
+              {lang === 'mr' ? 'गंतव्य रुग्णालय / PHC' : lang === 'hi' ? 'गंतव्य अस्पताल / PHC' : 'Destination Hospital / PHC'} *
+            </Text>
+            {loadingFacilities && <ActivityIndicator size="small" color="#0284C7" />}
+          </View>
+          <Text style={{ fontSize: 11, color: colors.inkFaint, marginBottom: 10 }}>
+            {lang === 'hi' ? 'प्रयागराज नेटवर्क के पंजीकृत अस्पताल' : 'Registered Hospital Facilities in Prayagraj Network'}
           </Text>
           <View style={{ gap: 8 }}>
-            {FACILITIES.map((f) => (
+            {facilities.map((f) => (
               <TouchableOpacity
-                key={f.name}
+                key={f.id}
                 style={[
                   styles.facilityOption,
-                  destinationFacility === f.name && styles.facilityOptionActive,
+                  selectedHospitalId === f.id && styles.facilityOptionActive,
                 ]}
-                onPress={() => setDestinationFacility(f.name)}
+                onPress={() => {
+                  setSelectedHospitalId(f.id);
+                  setDestinationFacility(f.name);
+                }}
               >
-                <Icon name="hospital" size={16} color={destinationFacility === f.name ? '#0284C7' : colors.inkFaint} />
+                <Icon name="hospital" size={16} color={selectedHospitalId === f.id ? '#0284C7' : colors.inkFaint} />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.facilityName, destinationFacility === f.name && { color: '#0369A1', fontWeight: '800' }]}>
+                  <Text style={[styles.facilityName, selectedHospitalId === f.id && { color: '#0369A1', fontWeight: '800' }]}>
                     {f.name}
                   </Text>
                   <Text style={styles.facilityType}>{f.type}</Text>
+                  {f.availableBeds !== undefined && (
+                    <Text style={{ fontSize: 10.5, color: '#059669', fontWeight: '600', marginTop: 2 }}>
+                      🛏️ {f.availableBeds} beds available
+                    </Text>
+                  )}
                 </View>
-                {destinationFacility === f.name && (
+                {selectedHospitalId === f.id && (
                   <Text style={{ color: '#0284C7', fontWeight: '800' }}>✓</Text>
                 )}
               </TouchableOpacity>

@@ -54,6 +54,7 @@ export interface CommunityReferral {
   workerUid: string;
   workerName: string;
   destinationFacility: string;
+  hospitalId?: string;
   priority: 'NORMAL' | 'MODERATE' | 'HIGH' | 'CRITICAL';
   reason: string;
   vitalsSnapshot?: {

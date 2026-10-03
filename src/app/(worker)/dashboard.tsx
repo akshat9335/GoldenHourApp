@@ -20,6 +20,7 @@ import { api, getApiBaseUrl } from '@/services/api';
 
 const PATIENTS_KEY = '@golden_hour_community_patients';
 const REFERRALS_KEY = '@golden_hour_community_referrals';
+const VISITS_KEY = '@golden_hour_community_visits';
 
 interface CommunityPatient {
   id: string;
@@ -43,7 +44,8 @@ export default function WorkerDashboard() {
   const [patients, setPatients] = useState<CommunityPatient[]>([]);
   const [search, setSearch] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
-  const [pendingReferralsCount, setPendingReferralsCount] = useState(1);
+  const [pendingReferralsCount, setPendingReferralsCount] = useState(0);
+  const [todayVisitsCount, setTodayVisitsCount] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -51,6 +53,8 @@ export default function WorkerDashboard() {
     loadPatients();
     loadPendingCount();
     loadReferralsCount();
+    loadVisitsCount();
+    loadBackendStats();
 
     const unsub = NetInfo.addEventListener((state) => {
       setIsOnline(!!state.isConnected);
@@ -143,6 +147,33 @@ export default function WorkerDashboard() {
     } catch {
       // ignore
     }
+  };
+
+  const loadVisitsCount = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(VISITS_KEY);
+      if (raw) {
+        const list = JSON.parse(raw);
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const count = list.filter((v: any) => (v.visitDate || v.createdAt || '').slice(0, 10) === todayStr).length;
+        setTodayVisitsCount(count);
+      }
+    } catch {}
+  };
+
+  const loadBackendStats = async () => {
+    try {
+      const res: any = await api.worker.getStats();
+      const stats = res?.data || res;
+      if (stats) {
+        if (typeof stats.scheduledVisitsToday === 'number' && stats.scheduledVisitsToday > 0) {
+          setTodayVisitsCount(stats.scheduledVisitsToday);
+        }
+        if (typeof stats.pendingReferrals === 'number') {
+          setPendingReferralsCount(stats.pendingReferrals);
+        }
+      }
+    } catch {}
   };
 
   const handleSync = async () => {
@@ -258,7 +289,7 @@ export default function WorkerDashboard() {
             </Text>
           </View>
           <View style={[styles.metricCard, { borderLeftColor: '#F59E0B' }]}>
-            <Text style={styles.metricVal}>2</Text>
+            <Text style={styles.metricVal}>{todayVisitsCount}</Text>
             <Text style={styles.metricLabel}>
               {lang === 'mr' ? 'आजच्या तपासण्या' : lang === 'hi' ? 'आज की जाँच' : "Today's Visits"}
             </Text>
