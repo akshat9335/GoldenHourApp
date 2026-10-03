@@ -252,7 +252,7 @@ export async function rankCandidateHospitalsForLocation(
         String(hData.name || "").toLowerCase().includes("apollo") ||
         String(hData.hospitalName || "").toLowerCase().includes("apollo");
 
-      const finalScore = isApollo ? 100 : match.score;
+      const finalScore = match.score;
 
       candidateList.push({
         hospitalId: normalizedHospId,
@@ -262,9 +262,9 @@ export async function rankCandidateHospitalsForLocation(
         distanceKm: Number(dist.toFixed(1)),
         etaMinutes: eta,
         score: finalScore,
-        matchReason: isApollo ? "Level-1 Multi-Specialty Trauma Center & Cath Lab Ready" : match.matchReason,
-        isStabilizationOnly: isApollo ? false : match.isStabilizationOnly,
-        availableBeds: Number(hData.availableBeds ?? 18),
+        matchReason: match.matchReason,
+        isStabilizationOnly: match.isStabilizationOnly,
+        availableBeds: Number(hData.availableBeds ?? 14),
         availableIcuBeds: Number(hData.availableIcuBeds ?? 5),
       });
     }
