@@ -45,7 +45,7 @@ class ReferralService {
   }
 
   public async getReferralsByHospital(hospitalId: string): Promise<DoctorReferral[]> {
-    const results: DoctorReferral[] = [];
+    const resultMap = new Map<string, DoctorReferral>();
 
     // 1. Fetch Doctor-to-Hospital referrals
     if (firestore && process.env.NODE_ENV !== "test") {
@@ -68,7 +68,9 @@ class ReferralService {
 
     for (const ref of this.inMemoryReferrals.values()) {
       if (ref.hospitalId === hospitalId || hospitalId === "all" || ref.hospitalId.includes(hospitalId) || hospitalId.includes(ref.hospitalId)) {
-        results.push(ref);
+        if (ref.patientName && ref.patientName !== "undefined") {
+          resultMap.set(ref.id, ref);
+        }
       }
     }
 
@@ -106,7 +108,8 @@ class ReferralService {
                 createdAt: item.createdAt || new Date().toISOString(),
                 updatedAt: item.updatedAt || new Date().toISOString(),
               };
-              results.push(mapped);
+              // Overwrite or add: communityReferral has richer information for ASHA patients
+              resultMap.set(item.id, mapped);
             }
           }
         }
@@ -118,7 +121,7 @@ class ReferralService {
     // Check in-memory communityReferrals
     if (dataStore && dataStore.communityReferrals) {
       for (const item of dataStore.communityReferrals.values() as any) {
-        if (!results.some((r) => r.id === item.id)) {
+        if (!resultMap.has(item.id)) {
           const isMatch =
             hospitalId === "all" ||
             item.hospitalId === hospitalId ||
@@ -129,7 +132,7 @@ class ReferralService {
             ));
 
           if (isMatch) {
-            results.push({
+            resultMap.set(item.id, {
               id: item.id,
               patientId: item.patientId,
               patientName: item.patientName || "Community Patient",
@@ -151,13 +154,13 @@ class ReferralService {
       }
     }
 
-    return results.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return Array.from(resultMap.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
     );
   }
 
   public async getReferralsByPatient(patientId: string): Promise<DoctorReferral[]> {
-    const results: DoctorReferral[] = [];
+    const resultMap = new Map<string, DoctorReferral>();
 
     if (firestore && process.env.NODE_ENV !== "test") {
       try {
@@ -179,12 +182,12 @@ class ReferralService {
 
     for (const ref of this.inMemoryReferrals.values()) {
       if (ref.patientId === patientId) {
-        results.push(ref);
+        resultMap.set(ref.id, ref);
       }
     }
 
-    return results.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    return Array.from(resultMap.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
     );
   }
 
@@ -285,18 +288,24 @@ class ReferralService {
 
     if (firestore && process.env.NODE_ENV !== "test") {
       try {
-        await firestore.collection("referrals").doc(referralId).set({
-          status,
-          bedReserved: referral.bedReserved || false,
-          updatedAt: referral.updatedAt,
-        }, { merge: true });
+        const refDoc = await firestore.collection("referrals").doc(referralId).get();
+        if (refDoc.exists) {
+          await firestore.collection("referrals").doc(referralId).set({
+            status,
+            bedReserved: referral.bedReserved || false,
+            updatedAt: referral.updatedAt,
+          }, { merge: true });
+        }
       } catch (err) {}
       try {
-        await firestore.collection("communityReferrals").doc(referralId).set({
-          status,
-          bedReserved: referral.bedReserved || false,
-          updatedAt: referral.updatedAt,
-        }, { merge: true });
+        const commDoc = await firestore.collection("communityReferrals").doc(referralId).get();
+        if (commDoc.exists) {
+          await firestore.collection("communityReferrals").doc(referralId).set({
+            status,
+            bedReserved: referral.bedReserved || false,
+            updatedAt: referral.updatedAt,
+          }, { merge: true });
+        }
       } catch (err) {}
     }
 

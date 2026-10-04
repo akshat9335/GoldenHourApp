@@ -122,7 +122,15 @@ export default function HospitalDashboard() {
       }
 
       const items = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.data || []);
-      const refsRaw = Array.isArray(refRes) ? refRes : (refRes?.data || []);
+      const rawRefsList = Array.isArray(refRes) ? refRes : (refRes?.data || []);
+      const seenRefIds = new Set<string>();
+      const refsRaw: any[] = [];
+      for (const r of rawRefsList) {
+        if (!r || !r.id || seenRefIds.has(r.id)) continue;
+        if (!r.patientName || r.patientName === 'undefined') continue;
+        seenRefIds.add(r.id);
+        refsRaw.push(r);
+      }
 
       const pending = items.filter((d: any) => {
         const s = String(d.status || 'NEW').toUpperCase();

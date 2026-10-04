@@ -328,14 +328,35 @@ export async function createCommunityReferral(
     }
   }
 
-  // Also check Firestore if client passed an explicit ID
-  if (data.id && isFirebaseConfigured() && firestore) {
+  // Also check Firestore if client passed an explicit ID or duplicate recent submission exists
+  if (isFirebaseConfigured() && firestore) {
     try {
-      const docSnap = await firestore.collection(REFERRALS_COL).doc(data.id).get();
-      if (docSnap.exists) {
-        const existingData = docSnap.data() as CommunityReferral;
-        dataStore.communityReferrals.set(data.id, existingData);
-        return existingData;
+      if (data.id) {
+        const docSnap = await firestore.collection(REFERRALS_COL).doc(data.id).get();
+        if (docSnap.exists) {
+          const existingData = docSnap.data() as CommunityReferral;
+          dataStore.communityReferrals.set(data.id, existingData);
+          return existingData;
+        }
+      }
+
+      const snap = await firestore
+        .collection(REFERRALS_COL)
+        .where("patientId", "==", data.patientId)
+        .get();
+      for (const d of snap.docs) {
+        const existing = d.data() as CommunityReferral;
+        if (
+          existing &&
+          existing.status === "PENDING" &&
+          (existing.destinationFacility || "").toLowerCase().trim() === (data.destinationFacility || "").toLowerCase().trim()
+        ) {
+          const timeDiff = Math.abs(Date.now() - new Date(existing.createdAt || 0).getTime());
+          if (timeDiff < 60000) {
+            dataStore.communityReferrals.set(d.id, existing);
+            return existing;
+          }
+        }
       }
     } catch {}
   }

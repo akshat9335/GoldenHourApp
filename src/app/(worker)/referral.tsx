@@ -75,15 +75,31 @@ export default function CreateReferralScreen() {
       const res: any = await api.location.getNearbyHospitals(25.4358, 81.8463, 50);
       const list = res?.data || (Array.isArray(res) ? res : []);
       if (Array.isArray(list) && list.length > 0) {
-        const mapped: FacilityItem[] = list.map((h: any) => ({
-          id: h.hospitalId || h.id,
-          name: h.name,
-          type: h.address || 'Registered Hospital',
-          availableBeds: h.availableBeds ?? h.availableCapacity ?? undefined,
-        }));
-        setFacilities(mapped);
-        setSelectedHospitalId(mapped[0].id);
-        setDestinationFacility(mapped[0].name);
+        const seenNames = new Set<string>();
+        const seenIds = new Set<string>();
+        const unique: FacilityItem[] = [];
+
+        for (const h of list) {
+          const id = h.hospitalId || h.id;
+          const name = (h.name || '').trim();
+          const normName = name.toLowerCase();
+          if (!id || !name || normName === 'undefined' || normName.includes('archit')) continue;
+          if (seenIds.has(id) || seenNames.has(normName)) continue;
+          seenIds.add(id);
+          seenNames.add(normName);
+          unique.push({
+            id,
+            name,
+            type: h.address || 'Registered Hospital',
+            availableBeds: h.availableBeds ?? h.availableCapacity ?? undefined,
+          });
+        }
+
+        if (unique.length > 0) {
+          setFacilities(unique);
+          setSelectedHospitalId(unique[0].id);
+          setDestinationFacility(unique[0].name);
+        }
       }
     } catch {
       // Keep fallbacks

@@ -166,13 +166,21 @@ export class LocationService {
             // Non-fatal if hospitalCapacity read fails
           }
 
+          const seenNames = new Set<string>();
+          const seenIds = new Set<string>();
           let index = 0;
           for (const doc of snap.docs) {
             const d = doc.data();
             if (!d) continue;
 
+            const hospName = (d.name || d.hospitalName || "").trim();
+            const normName = hospName.toLowerCase();
+            if (!hospName || normName === "undefined" || normName.includes("archit")) {
+              continue;
+            }
+
             // Skip test artifacts
-            if (doc.id.startsWith("test-") || (typeof d.name === "string" && d.name.toLowerCase().includes("test hospital"))) {
+            if (doc.id.startsWith("test-") || normName.includes("test hospital")) {
               continue;
             }
 
@@ -180,6 +188,12 @@ export class LocationService {
             if (status === "REJECTED") {
               continue;
             }
+
+            if (seenIds.has(doc.id) || seenNames.has(normName)) {
+              continue;
+            }
+            seenIds.add(doc.id);
+            seenNames.add(normName);
 
             let hospitalLat: number;
             let hospitalLng: number;
