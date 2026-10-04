@@ -18,7 +18,7 @@ describe("Doctor & Clinic Services Endpoints", () => {
           qualification: "MBBS, MD, DM (Cardiology)",
           experienceYears: 12,
           licenseNumber: `MCI-DL-2012-${Date.now().toString().slice(-5)}`,
-          clinicId: "clinic-apollo-cr",
+          clinicId: "clinic-medanta-prayagraj",
           consultationFee: 1000,
         });
 
