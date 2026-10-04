@@ -194,8 +194,8 @@ class ReferralService {
       if (!existing) {
         patientMap.set(patientKey, ref);
       } else {
-        const isRefActive = ref.status === 'PENDING' || ref.status === 'ACCEPTED' || ref.status === 'ADMITTED';
-        const isExistActive = existing.status === 'PENDING' || existing.status === 'ACCEPTED' || existing.status === 'ADMITTED';
+        const isRefActive = ref.status === 'PENDING' || ref.status === 'ACCEPTED' || ref.status === 'ADMITTED' || ref.status === 'COMPLETED';
+        const isExistActive = existing.status === 'PENDING' || existing.status === 'ACCEPTED' || existing.status === 'ADMITTED' || existing.status === 'COMPLETED';
         if (isRefActive && !isExistActive) {
           patientMap.set(patientKey, ref);
         } else if (isRefActive === isExistActive) {

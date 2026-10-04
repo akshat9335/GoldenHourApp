@@ -598,6 +598,26 @@ export default function HospitalDashboard() {
                       </TouchableOpacity>
                     ) : null}
 
+                    {item.isReferral ? (
+                      <TouchableOpacity
+                        style={[styles.actionBtnGreen, { backgroundColor: colors.blue }]}
+                        onPress={async () => {
+                          try {
+                            await api.referrals.updateStatus(item.id, 'COMPLETED');
+                            loadData();
+                            Alert.alert('Patient Arrived', `${item.patientName || 'Referred Patient'} admitted to ER treatment. Bed reserved.`);
+                          } catch (_e) {
+                            Alert.alert('Update Failed', 'Could not admit referral patient.');
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.actionBtnTextGreen, { color: '#fff' }]}>
+                          🏥 {lang === 'hi' ? 'आ गए (भर्ती)' : 'Arrived (Admit)'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+
                     <TouchableOpacity
                       style={styles.actionBtnGrey}
                       onPress={() => {
