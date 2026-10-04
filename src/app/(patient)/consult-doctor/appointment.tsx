@@ -39,11 +39,7 @@ export default function AppointmentDetail() {
             const completed = appts.find(
               (a: any) => matchesDoc(a) && a.status === 'COMPLETED'
             );
-            const matched =
-              active ||
-              completed ||
-              appts.find((a: any) => matchesDoc(a)) ||
-              appts[0];
+            const matched = active || completed;
             if (matched) {
               setActiveAppt(matched);
               if (matched.status === 'CANCELLED') {
@@ -76,6 +72,10 @@ export default function AppointmentDetail() {
   };
 
   const isCompleted = (activeAppt?.status || '').toUpperCase() === 'COMPLETED';
+  const isDoctorReady =
+    activeAppt &&
+    ((activeAppt.status || '').toUpperCase() === 'IN_PROGRESS' ||
+      (activeAppt.status || '').toUpperCase() === 'CALLED');
   const displayDate = activeAppt?.date || 'Today';
   const displayTime = activeAppt?.timeSlot || '10:30 AM';
   const displayToken = String(activeAppt?.tokenNumber ?? userToken ?? (doctor.servingToken || 0) + 1);
@@ -128,14 +128,23 @@ export default function AppointmentDetail() {
         </View>
       ) : !cancelled ? (
         <View style={{ gap: 8 }}>
-          <Button
-            title="📹 Start Video Consultation"
-            variant="primary"
-            onPress={() => {
-              const consultId = activeAppt?.appointmentId || activeAppt?.id || `appt_${selectedDoctorId}_${displayToken}`;
-              router.push(`/(patient)/teleconsultation/${consultId}` as any);
-            }}
-          />
+          {isDoctorReady ? (
+            <Button
+              title="📹 Doctor is Ready — Join Consultation Now ›"
+              variant="primary"
+              style={{ backgroundColor: colors.blue }}
+              onPress={() => {
+                const consultId = activeAppt?.appointmentId || activeAppt?.id || `appt_${selectedDoctorId}_${displayToken}`;
+                router.push(`/(patient)/teleconsultation/${consultId}` as any);
+              }}
+            />
+          ) : (
+            <Button
+              title="⏳ View Live Queue & Token Progress"
+              variant="primary"
+              onPress={() => router.push('/(patient)/consult-doctor/live-queue')}
+            />
+          )}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button title="Get Directions" variant="blue" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/clinic-location')} />
             <Button title="View Queue" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/(patient)/consult-doctor/live-queue')} />
