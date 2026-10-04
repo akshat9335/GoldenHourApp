@@ -21,6 +21,7 @@ import {
   arrivedHospitalController,
   completeTripController,
   getTripHistoryController,
+  cancelTripController,
 } from "../controllers/trip.controller";
 
 const router = Router();
@@ -157,6 +158,14 @@ router.post(
   requireRole("AMBULANCE_DRIVER"),
   requireApproved,
   completeTripController,
+);
+
+router.post(
+  "/trips/:id/cancel",
+  requireAuth,
+  requireRole("AMBULANCE_DRIVER"),
+  requireApproved,
+  cancelTripController,
 );
 
 export default router;

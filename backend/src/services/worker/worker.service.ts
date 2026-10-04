@@ -153,11 +153,22 @@ export async function getWorkerPatients(workerUid: string): Promise<CommunityPat
         .get();
 
       if (!snap.empty) {
-        const docs = snap.docs
+        const rawDocs = snap.docs
           .map((d) => ({ id: d.id, ...(d.data() as any) } as CommunityPatient))
           .filter((p) => p && p.name);
-        docs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        return docs;
+        rawDocs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+        const seen = new Set<string>();
+        const deduped: CommunityPatient[] = [];
+        for (const p of rawDocs) {
+          const normName = (p.name || '').trim().toLowerCase();
+          const normPhone = (p.phone || '').replace(/[^0-9]/g, '');
+          const key = normPhone.length >= 4 ? `phone_${normPhone}` : `name_${normName}_${p.age || 0}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          deduped.push(p);
+        }
+        return deduped;
       }
     } catch (err) {
       console.warn("[WorkerService] Firestore get patients failed, falling back to memory:", err);

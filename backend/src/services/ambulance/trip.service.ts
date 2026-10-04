@@ -696,9 +696,118 @@ export async function getTripHistory(
     }
   }
 
-  return Array.from(tripMap.values()).sort((a, b) =>
+    return Array.from(tripMap.values()).sort((a, b) =>
     (b.completedAt || b.updatedAt || "").localeCompare(
       a.completedAt || a.updatedAt || "",
     ),
   );
+}
+
+/**
+ * Report Patient Not Found / False Alarm by the ambulance pilot.
+ * Cancels trip, marks emergency as CANCELLED with false alarm flag,
+ * penalizes caller trust score (-20 points), and frees the ambulance to AVAILABLE.
+ */
+export async function cancelTripAsFalseAlarm(
+  tripId: string,
+  driverUid: string,
+  reason: string = "Patient not found / false alarm at pickup location",
+): Promise<{ tripId: string; emergencyId?: string; success: boolean; trustPenaltyApplied: boolean }> {
+  assertFirebaseReady();
+  const now = new Date().toISOString();
+
+  let emergencyId: string | undefined;
+
+  try {
+    let tripDoc = await firestore!.collection(TRIP_COLLECTION).doc(tripId).get();
+
+    if (tripDoc.exists) {
+      const data = tripDoc.data() as AmbulanceTrip;
+      emergencyId = data.emergencyId;
+      await tripDoc.ref.set({
+        status: "COMPLETED",
+        cancellationReason: reason,
+        tripCancelled: true,
+        cancelledBy: driverUid,
+        completedAt: now,
+        updatedAt: now,
+      }, { merge: true });
+    } else {
+      const emTripSnap = await firestore!
+        .collection(TRIP_COLLECTION)
+        .where("emergencyId", "==", tripId)
+        .limit(1)
+        .get();
+      if (!emTripSnap.empty) {
+        tripDoc = emTripSnap.docs[0];
+        const data = tripDoc.data() as AmbulanceTrip;
+        emergencyId = data.emergencyId;
+        await tripDoc.ref.set({
+          status: "COMPLETED",
+          cancellationReason: reason,
+          tripCancelled: true,
+          cancelledBy: driverUid,
+          completedAt: now,
+          updatedAt: now,
+        }, { merge: true });
+      } else {
+        emergencyId = tripId;
+      }
+    }
+  } catch (err) {
+    console.warn("[trip.service] Error locating trip document:", err);
+  }
+
+  // 1. Reset driver availability to AVAILABLE
+  try {
+    await firestore!.collection("drivers").doc(driverUid).set({
+      availability: "AVAILABLE",
+      updatedAt: now,
+    }, { merge: true });
+  } catch {}
+
+  // 2. Mark emergency as CANCELLED with false alarm flag, and penalize trust score of reporter (-20)
+  let trustPenaltyApplied = false;
+  if (emergencyId) {
+    try {
+      const emRef = firestore!.collection("emergencies").doc(emergencyId);
+      const emSnap = await emRef.get();
+      if (emSnap.exists) {
+        const emData = emSnap.data() || {};
+        await emRef.set({
+          status: "CANCELLED",
+          tripStatus: "COMPLETED",
+          cancellationReason: reason,
+          isFalseAlarm: true,
+          updatedAt: now,
+        }, { merge: true });
+
+        if (emData.reporterId) {
+          await adjustUserTrustScore(
+            emData.reporterId,
+            -20,
+            `False emergency alarm / patient no-show reported by ambulance pilot (${reason})`,
+          );
+          trustPenaltyApplied = true;
+        }
+      }
+
+      // Also clean up hospitalEmergencyRequests
+      const hospReqSnap = await firestore!
+        .collection("hospitalEmergencyRequests")
+        .where("emergencyId", "==", emergencyId)
+        .get();
+      for (const hDoc of hospReqSnap.docs) {
+        await hDoc.ref.set({
+          status: "CANCELLED",
+          cancellationReason: reason,
+          updatedAt: now,
+        }, { merge: true });
+      }
+    } catch (e) {
+      console.warn("[trip.service] Error updating emergency on false alarm:", e);
+    }
+  }
+
+  return { tripId, emergencyId, success: true, trustPenaltyApplied };
 }

@@ -204,6 +204,11 @@ export const api = {
       request(`/ambulances/trips/${tripId}/arrived-hospital`, { method: 'POST' }),
     completeTrip: (tripId: string) =>
       request(`/ambulances/trips/${tripId}/complete`, { method: 'POST' }),
+    cancelTrip: (tripId: string, reason?: string) =>
+      request(`/ambulances/trips/${tripId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
     // Driver dispatch requests
     getRequests: () => request('/ambulances/requests'),
     getRequest: (id: string) => request(`/ambulances/requests/${id}`),

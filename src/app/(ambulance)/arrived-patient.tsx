@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Alert, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Button, IconPrompt, Icon } from '@/components/ui';
@@ -39,21 +40,81 @@ export default function ArrivedPatient() {
     });
   };
 
+  const handleFalseAlarm = () => {
+    Alert.alert(
+      'Report Patient Not Found / False Request?',
+      'Are you sure the patient is not at this location?\n\n• Trip will be cancelled\n• Trust score penalty (-20 points) will be applied to the caller for false report\n• You will return to AVAILABLE status for genuine emergencies',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Patient Not Found',
+          style: 'destructive',
+          onPress: async () => {
+            const effectiveTripId = activeTripId || params.tripId;
+            setLoading(true);
+            try {
+              if (effectiveTripId) {
+                await api.ambulances.cancelTrip(effectiveTripId, 'Patient not found / false request at pickup point');
+              } else if (emergencyId) {
+                await api.emergencies.cancel(emergencyId, 'Patient not found / false request at pickup point');
+              }
+            } catch (_e) {}
+            useAppStore.getState().setActiveTripId(null);
+            useAppStore.getState().setEmergencyId(null);
+            setLoading(false);
+            Alert.alert(
+              'Mission Cancelled ✓',
+              'Reported as False Alarm / Patient Not Found.\nTrust score penalty (-20) applied to the caller. You are now AVAILABLE for new dispatches.'
+            );
+            router.replace('/(ambulance)/dashboard');
+          },
+        },
+      ]
+    );
+  };
+
   return (
-    <Screen center style={{ alignItems: 'center' }}>
+    <Screen center style={{ alignItems: 'center', paddingHorizontal: 20 }}>
       <IconPrompt
         icon={<Icon name="check" size={30} color={colors.success} />}
         bg={colors.successBg}
         title="Arrived at Patient"
-        desc="Confirm once the patient is loaded and stabilized in the ambulance."
+        desc="Confirm once the patient is loaded and stabilized in the ambulance, or report if the patient is not found."
       />
       <Button
-        title={loading ? 'Confirming Onboard...' : 'Patient Onboard · Start Transit'}
+        title={loading ? 'Confirming Onboard...' : 'Patient Onboard · Start Transit →'}
         disabled={loading}
         loading={loading}
         onPress={handlePickedUp}
         style={{ marginTop: 24, width: '100%' }}
       />
+      <TouchableOpacity
+        disabled={loading}
+        onPress={handleFalseAlarm}
+        style={styles.falseAlarmBtn}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.falseAlarmText}>⚠️ Patient Not Found / False Request</Text>
+      </TouchableOpacity>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  falseAlarmBtn: {
+    marginTop: 14,
+    width: '100%',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  falseAlarmText: {
+    color: '#DC2626',
+    fontSize: 13.5,
+    fontWeight: '800',
+  },
+});
