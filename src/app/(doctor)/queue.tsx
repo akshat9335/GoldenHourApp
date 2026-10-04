@@ -496,8 +496,16 @@ export default function DoctorQueue() {
                 <Button
                   title="📹 Join Teleconsultation Room"
                   style={{ marginTop: 8, backgroundColor: colors.blue }}
-                  onPress={() => {
+                  onPress={async () => {
                     const consultId = currentAppt.appointmentId || currentAppt.id;
+                    if (currentAppt.status !== 'IN_PROGRESS') {
+                      api.appointments.start(consultId).catch(() => {});
+                      setAppointments((prev) =>
+                        prev.map((a) =>
+                          (a.appointmentId || a.id) === consultId ? { ...a, status: 'IN_PROGRESS' } : a
+                        )
+                      );
+                    }
                     router.push(`/(doctor)/teleconsultation/${consultId}` as any);
                   }}
                 />
