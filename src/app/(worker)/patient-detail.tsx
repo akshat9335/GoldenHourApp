@@ -125,7 +125,19 @@ export default function PatientDetailScreen() {
             return merged;
           });
           if (data.visits?.length) setVisits(data.visits);
-          if (data.referrals?.length) setReferrals(data.referrals);
+          if (Array.isArray(data.referrals)) {
+            setReferrals(data.referrals);
+            try {
+              const raw = await AsyncStorage.getItem(REFERRALS_KEY);
+              const localList: any[] = raw ? JSON.parse(raw) : [];
+              const map = new Map<string, any>();
+              localList.forEach((r) => map.set(r.id, r));
+              data.referrals.forEach((r: any) => {
+                map.set(r.id, { ...(map.get(r.id) || {}), ...r });
+              });
+              await AsyncStorage.setItem(REFERRALS_KEY, JSON.stringify(Array.from(map.values())));
+            } catch {}
+          }
         }
       } catch {
         // Offline - use cached
