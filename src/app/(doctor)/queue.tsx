@@ -111,7 +111,8 @@ export default function DoctorQueue() {
       .getDoctorAppointments({ doctorId, date: todayStr })
       .then((data: any) => {
         if (Array.isArray(data)) {
-          setAppointments(data);
+          const clean = data.filter((a: any) => !a.isArchived);
+          setAppointments(clean);
         }
       })
       .catch(() => {});
@@ -142,41 +143,67 @@ export default function DoctorQueue() {
     return () => clearInterval(timer);
   }, [doctorId]);
 
-  // Prioritize active (non-completed, non-cancelled) appointment matching servingToken
+  const isCompletedOrEnded = (status: string) => {
+    const s = (status || '').toUpperCase();
+    return s === 'COMPLETED' || s === 'CANCELLED' || s === 'NO_SHOW';
+  };
+
+  const waitingAppointments = appointments.filter(
+    (a) =>
+      !isCompletedOrEnded(a.status) &&
+      (a.tokenNumber || a.token) > servingToken
+  );
+
+  // Active appointment strictly matching servingToken
   const activeAtToken = appointments.find(
     (a) =>
       (a.tokenNumber || a.token) === servingToken &&
-      (a.status || '').toUpperCase() !== 'CANCELLED' &&
-      (a.status || '').toUpperCase() !== 'COMPLETED'
+      !isCompletedOrEnded(a.status)
   );
 
-  // If servingToken is 0 or no active appointment matches, check latest non-cancelled
-  const currentAppt =
+  // Check if an appointment at servingToken was already completed
+  const completedAtToken =
     servingToken > 0
-      ? (activeAtToken ||
-         appointments.slice().reverse().find(
-           (a) =>
-             (a.tokenNumber || a.token) === servingToken &&
-             (a.status || '').toUpperCase() !== 'CANCELLED'
-         ))
+      ? appointments.slice().reverse().find(
+          (a) =>
+            (a.tokenNumber || a.token) === servingToken &&
+            (a.status || '').toUpperCase() === 'COMPLETED'
+        )
       : undefined;
+
+  const currentAppt = servingToken > 0 ? activeAtToken : undefined;
 
   const currentPatientName =
     currentAppt?.patientName ||
-    (servingToken > 0 ? (appointments.length > 0 ? `Token #${servingToken} (Unassigned)` : 'No Active Patient') : 'No Active Patient');
+    (completedAtToken
+      ? `${completedAtToken.patientName} (Completed)`
+      : servingToken > 0
+      ? (waitingAppointments.length > 0 ? `Token #${servingToken} (Completed)` : 'No Active Patient')
+      : 'No Active Patient');
+
   const currentStatus =
-    (currentAppt?.status || (servingToken > 0 ? 'WAITING' : 'IDLE')).toUpperCase();
+    currentAppt
+      ? (currentAppt.status || 'WAITING').toUpperCase()
+      : completedAtToken
+      ? 'COMPLETED'
+      : servingToken > 0
+      ? (waitingAppointments.length > 0 ? 'COMPLETED' : 'IDLE')
+      : 'IDLE';
 
   const handleNext = async () => {
+    const nextTargetToken = waitingAppointments.length > 0
+      ? (waitingAppointments[0].tokenNumber || waitingAppointments[0].token)
+      : servingToken + 1;
+
     try {
-      const res: any = await api.queues.advanceQueue(doctorId);
+      const res: any = await api.queues.advanceQueue(doctorId, nextTargetToken);
       if (res && typeof res.servingToken === 'number') {
         useAppStore.setState({ servingToken: res.servingToken });
       } else {
-        advanceServingToken();
+        useAppStore.setState({ servingToken: nextTargetToken });
       }
     } catch (_err) {
-      advanceServingToken();
+      useAppStore.setState({ servingToken: nextTargetToken });
     }
     fetchQueueData();
   };
@@ -315,17 +342,6 @@ export default function DoctorQueue() {
     }
     await handleNext();
   };
-
-  const isCompletedOrEnded = (status: string) => {
-    const s = (status || '').toUpperCase();
-    return s === 'COMPLETED' || s === 'CANCELLED' || s === 'NO_SHOW';
-  };
-
-  const waitingAppointments = appointments.filter(
-    (a) =>
-      !isCompletedOrEnded(a.status) &&
-      (a.tokenNumber || a.token) > servingToken
-  );
 
   const handleResetQueue = async () => {
     const unservedCount = waitingAppointments.length;
@@ -468,12 +484,12 @@ export default function DoctorQueue() {
                 onPress={handleOpenConsultModal}
               />
 
-              {servingToken > 0 && (
+              {servingToken > 0 && currentAppt && (
                 <Button
                   title="📹 Join Teleconsultation Room"
                   style={{ marginTop: 8, backgroundColor: colors.blue }}
                   onPress={() => {
-                    const consultId = currentAppt?.appointmentId || currentAppt?.id || `appt_${doctorId}_${servingToken}`;
+                    const consultId = currentAppt.appointmentId || currentAppt.id;
                     router.push(`/(doctor)/teleconsultation/${consultId}` as any);
                   }}
                 />

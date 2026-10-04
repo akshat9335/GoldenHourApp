@@ -299,7 +299,11 @@ export const api = {
       const qs = token !== undefined ? `?token=${token}` : '';
       return request(`/queues/${doctorId}${qs}`);
     },
-    advanceQueue: (doctorId: string) => request(`/queues/${doctorId}/next`, { method: 'POST' }),
+    advanceQueue: (doctorId: string, targetToken?: number) =>
+      request(`/queues/${doctorId}/next`, {
+        method: 'POST',
+        body: targetToken ? JSON.stringify({ targetToken }) : undefined,
+      }),
     resetQueue: (doctorId: string) => request(`/queues/${doctorId}/reset`, { method: 'POST' }),
   },
 
