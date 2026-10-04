@@ -501,6 +501,38 @@ export async function transitionTrip(
           availability: "AVAILABLE",
           updatedAt: now,
         }, { merge: true });
+
+        // Clean up any other lingering active trips for this driver
+        const lingeringSnap = await firestore!
+          .collection(TRIP_COLLECTION)
+          .where("driverId", "==", effectiveDriver)
+          .where("status", "in", [
+            "ASSIGNED",
+            "EN_ROUTE_TO_PATIENT",
+            "AT_PATIENT",
+            "PATIENT_ONBOARD",
+            "EN_ROUTE_TO_HOSPITAL",
+            "AT_HOSPITAL",
+          ])
+          .get();
+
+        for (const lDoc of lingeringSnap.docs) {
+          if (lDoc.id !== tripRef.id) {
+            await lDoc.ref.update({
+              status: "COMPLETED",
+              completedAt: now,
+              updatedAt: now,
+            }).catch(() => {});
+          }
+        }
+      } catch {}
+    }
+    if (current.emergencyId) {
+      try {
+        await firestore!.collection("emergencies").doc(current.emergencyId).set({
+          tripStatus: "COMPLETED",
+          updatedAt: now,
+        }, { merge: true }).catch(() => {});
       } catch {}
     }
   }
@@ -693,6 +725,11 @@ export async function getTripHistory(
           }
         }
       } catch {}
+    } else if (trip.status !== "COMPLETED") {
+      const tripAgeHours = (Date.now() - new Date(trip.createdAt || trip.updatedAt || 0).getTime()) / (1000 * 60 * 60);
+      if (tripAgeHours > 6) {
+        trip.status = "COMPLETED";
+      }
     }
   }
 

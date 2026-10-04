@@ -27,7 +27,10 @@ export default function HospitalArrival() {
       setEmergencyId(null);
       await api.ambulances.updateAvailability('AVAILABLE').catch(() => {});
       setLoading(false);
-      router.replace('/(ambulance)/dashboard');
+      router.replace({
+        pathname: '/(ambulance)/dashboard',
+        params: { justCompleted: effectiveTripId || 'completed' },
+      });
     }
   };
 

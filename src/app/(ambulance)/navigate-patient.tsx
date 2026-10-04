@@ -93,21 +93,15 @@ export default function NavigatePatient() {
     };
   }, [emergencyId, params.emergencyId]);
 
-  const handleMarkArrived = async () => {
+  const handleMarkArrived = () => {
     const effectiveTripId = activeTripId || params.tripId;
+    const targetEmgId = emergencyId || params.emergencyId;
     if (effectiveTripId) {
-      setSubmitting(true);
-      try {
-        await api.ambulances.arrivedPatient(effectiveTripId);
-      } catch (_err) {
-        // Handled
-      } finally {
-        setSubmitting(false);
-      }
+      api.ambulances.arrivedPatient(effectiveTripId).catch(() => {});
     }
-    router.push({
+    router.replace({
       pathname: '/(ambulance)/arrived-patient',
-      params: { emergencyId: emergencyId || params.emergencyId, tripId: effectiveTripId },
+      params: { emergencyId: targetEmgId, tripId: effectiveTripId },
     });
   };
 
@@ -134,7 +128,10 @@ export default function NavigatePatient() {
             useAppStore.getState().setEmergencyId(null);
             setSubmitting(false);
             Alert.alert('Mission Cancelled', 'Reported as False Alarm. Trust score penalty applied to caller.');
-            router.replace('/(ambulance)/dashboard');
+            router.replace({
+              pathname: '/(ambulance)/dashboard',
+              params: { justCompleted: effectiveTripId || 'false_alarm' },
+            });
           },
         },
       ]

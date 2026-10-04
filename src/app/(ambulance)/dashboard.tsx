@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator, Alert } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/constants/theme';
 import { Screen, Card, Pill, LabelEyebrow, TopBar, Button } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 export default function AmbulanceDashboard() {
   const { i18n } = useTranslation();
   const lang = i18n.language;
+  const params = useLocalSearchParams<{ justCompleted?: string }>();
 
   const userProfile = useAppStore((s) => s.userProfile);
   const activeTripId = useAppStore((s) => s.activeTripId);
@@ -28,6 +29,18 @@ export default function AmbulanceDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTrip, setActiveTrip] = useState<any | null>(null);
   const [dashboardTab, setDashboardTab] = useState<'active' | 'history'>('active');
+
+  // Closed/completed trip IDs blacklist to prevent race condition resurrecting stale completed missions
+  const closedTripIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (params.justCompleted) {
+      closedTripIdsRef.current.add(params.justCompleted);
+      setActiveTrip(null);
+      setActiveTripId(null);
+      setEmergencyId(null);
+    }
+  }, [params.justCompleted, setActiveTripId, setEmergencyId]);
 
   const vehiclePlate = userProfile?.ambulanceId || (userProfile as any)?.vehiclePlateNumber || 'Unit UP-70-AMB';
   const driverName = (userProfile as any)?.driverName || userProfile?.name || 'Crew Pilot';
@@ -66,8 +79,21 @@ export default function AmbulanceDashboard() {
       const [reqsRes, tripsRes]: any = await Promise.all([reqsPromise, tripsPromise]);
 
       if (Array.isArray(tripsRes)) {
-        const inProgress = tripsRes.find((t: any) => {
+        // Sort descending by most recent activity
+        const sorted = [...tripsRes].sort((a: any, b: any) =>
+          new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
+        );
+
+        const inProgress = sorted.find((t: any) => {
           const s = String(t.status || '').toUpperCase();
+          const tId = t.id || t._id;
+          const emId = t.emergencyId;
+          if (closedTripIdsRef.current.has(tId) || closedTripIdsRef.current.has(emId)) {
+            return false;
+          }
+          const ageHours = (Date.now() - new Date(t.createdAt || t.updatedAt || 0).getTime()) / (1000 * 60 * 60);
+          if (ageHours > 6) return false;
+
           return (
             s === 'ASSIGNED' ||
             s === 'EN_ROUTE' ||
@@ -172,26 +198,38 @@ export default function AmbulanceDashboard() {
     const emId = req.id || req.emergencyId;
     if (!emId) return;
 
+    const optimisticTripId = req.tripId || `trip-${emId}`;
+
+    // 1. Instant optimistic UI update
+    setActiveTripId(optimisticTripId);
+    setEmergencyId(emId);
+    setActiveTrip({
+      id: optimisticTripId,
+      emergencyId: emId,
+      status: 'EN_ROUTE_TO_PATIENT',
+      patientName: req.patientName,
+      location: req.location,
+    });
+    setRequests((prev) => prev.filter((r) => (r.id || r.emergencyId) !== emId));
+
+    // 2. Instant navigation without network stall
+    router.replace({
+      pathname: '/(ambulance)/navigate-patient',
+      params: { emergencyId: emId, tripId: optimisticTripId },
+    });
+
+    // 3. Asynchronously confirm on backend
     try {
       await api.ambulances.updateAvailability('AVAILABLE').catch(() => {});
       const res: any = await api.ambulances.acceptRequest(emId);
       const data = res?.data || res;
-      const tripId = data?.tripId || `trip-${emId}`;
-
-      setActiveTripId(tripId);
-      setEmergencyId(emId);
-
-      try {
-        await api.ambulances.startToPatient(tripId);
-      } catch (_e) {}
-
-      router.replace('/(ambulance)/navigate-patient');
+      const tripId = data?.tripId || optimisticTripId;
+      if (tripId && tripId !== optimisticTripId) {
+        useAppStore.getState().setActiveTripId(tripId);
+      }
+      await api.ambulances.startToPatient(tripId).catch(() => {});
     } catch (_err) {
-      setEmergencyId(emId);
-      router.push({
-        pathname: '/(ambulance)/request-detail',
-        params: { emergencyId: emId },
-      });
+      console.warn('Accept background error:', _err);
     }
   };
 
@@ -243,6 +281,11 @@ export default function AmbulanceDashboard() {
         {
           text: '✓ Safe Handover (Completed)',
           onPress: async () => {
+            if (effectiveTripId) closedTripIdsRef.current.add(effectiveTripId);
+            if (associatedEmgId) closedTripIdsRef.current.add(associatedEmgId);
+            setActiveTrip(null);
+            setActiveTripId(null);
+            setEmergencyId(null);
             try {
               if (effectiveTripId) {
                 await api.ambulances.completeTrip(effectiveTripId);
@@ -262,11 +305,16 @@ export default function AmbulanceDashboard() {
           text: '🚨 No Patient Found (False Alarm)',
           style: 'destructive',
           onPress: async () => {
+            if (effectiveTripId) closedTripIdsRef.current.add(effectiveTripId);
+            if (associatedEmgId) closedTripIdsRef.current.add(associatedEmgId);
+            setActiveTrip(null);
+            setActiveTripId(null);
+            setEmergencyId(null);
             try {
-              if (associatedEmgId) {
-                await api.emergencies.cancel(associatedEmgId, 'No patient found on scene - ground responder verified false alarm');
-              } else if (effectiveTripId) {
-                await api.ambulances.completeTrip(effectiveTripId);
+              if (effectiveTripId) {
+                await api.ambulances.cancelTrip(effectiveTripId, 'Ground responder reported false alarm');
+              } else if (associatedEmgId) {
+                await api.emergencies.cancel(associatedEmgId, 'Ground responder reported false alarm');
               }
             } catch (_err) {
               // Non-blocking fallback
@@ -276,7 +324,7 @@ export default function AmbulanceDashboard() {
               setEmergencyId(null);
               await api.ambulances.updateAvailability('AVAILABLE').catch(() => {});
               loadDashboardData();
-              Alert.alert('Reported', 'Mission closed. Ground report recorded as false alarm.');
+              Alert.alert('Reported', 'Mission closed. Caller trust score penalized (-20 points).');
             }
           },
         },
