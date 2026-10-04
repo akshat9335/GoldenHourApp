@@ -69,7 +69,15 @@ export default function HospitalRequests() {
     try {
       const res: any = await api.referrals.getHospitalReferrals(hospitalId);
       const raw = Array.isArray(res) ? res : (res?.data || []);
-      setReferrals(raw);
+      const seen = new Set<string>();
+      const deduped: any[] = [];
+      for (const r of raw) {
+        if (!r || !r.id || seen.has(r.id)) continue;
+        if (!r.patientName || r.patientName === 'undefined') continue;
+        seen.add(r.id);
+        deduped.push(r);
+      }
+      setReferrals(deduped);
     } catch (_err) {
       setReferrals([]);
     }
