@@ -119,7 +119,9 @@ export interface VoiceTriageResult {
   emergencyType: string;
   confidence: number;
   detectedSymptoms: string[];
-  recommendedAmbulance: "ALS" | "BLS";
+  recommendedAmbulance: "ALS" | "BLS" | "NONE";
+  isEmergency?: boolean;
+  suggestedAction?: "DISPATCH_AMBULANCE" | "CONSULT_DOCTOR" | "CLARIFY_INPUT";
   firstAidSteps: string[];
   avoidActions: string[];
   transcriptProcessed: string;

@@ -194,9 +194,11 @@ export async function analyzeVoiceEmergency(rawInput: unknown): Promise<VoiceTri
   const lower = rawTranscript.toLowerCase();
   const detectedSymptoms: string[] = [];
 
-  let severity: Severity = "HIGH";
-  let emergencyType = "Emergency Incident Reported via Voice";
-  let recommendedAmbulance: "ALS" | "BLS" = "BLS";
+  let severity: Severity = "LOW";
+  let emergencyType = "General Health Inquiry";
+  let recommendedAmbulance: "ALS" | "BLS" | "NONE" = "NONE";
+  let isEmergency = false;
+  let suggestedAction: "DISPATCH_AMBULANCE" | "CONSULT_DOCTOR" | "CLARIFY_INPUT" = "CONSULT_DOCTOR";
   let firstAidSteps: string[] = [];
   let avoidActions: string[] = [];
   let summary = "";
@@ -217,27 +219,51 @@ export async function analyzeVoiceEmergency(rawInput: unknown): Promise<VoiceTri
   const isAnimalBite =
     /(dog bite|snake bite|animal bite|rabies|kutta|saanp|काटा|सांप|कुत्ता|चावला|साप)/i.test(lower);
 
-  // 4. Minor Injury Pattern
+  // 4. Minor Cut / Scratch Pattern
   const isMinor =
-    /(minor|small cut|scratch|chhoti chot|mamooli|मामूली|हल्की चोट|किरकोळ)/i.test(lower);
+    /(minor cut|scratch|chhoti chot|mamooli chot|मामूली चोट|हल्की चोट|किरकोळ)/i.test(lower);
 
-  if (!rawTranscript || rawTranscript.length < 3) {
-    // Fail-safe default
-    severity = "CRITICAL";
-    emergencyType = "Rapid SOS Alert (Voice Initiated)";
-    recommendedAmbulance = "ALS";
-    detectedSymptoms.push("Emergency Voice SOS Triggered");
+  // 5. General / Non-Emergency Health Symptoms (OPD / Consultation)
+  const isNonEmergencyOrOpd =
+    /(fever|cough|cold|headache|stomach ache|stomach pain|pet dard|vomit|nausea|diarrhea|dast|loose motion|rash|allergy|weakness|tired|itching|throat pain|gala|sore throat|flu|infection|routine|doctor|appointment|consult|prescription|bukhar|khasi|jukham|sar dard|chhak|बुखार|खांसी|जुकाम|सिर दर्द|पेट दर्द|उल्टी|दस्त|कमजोरी|एलर्जी|ताप|खोकला|सर्दी|डोकेदुखी|पोटदुखी|उलटी|जुलाब)/i.test(
+      lower
+    );
+
+  // 6. Generic Greeting / Short ambiguous text
+  const isGreetingOrVague =
+    !rawTranscript ||
+    rawTranscript.length < 3 ||
+    /^(hi|hello|hey|namaste|kya haal|kya haal hai|help|check|test|testing|please|batao|kuch|sun|suno|bhai|sir)$/i.test(
+      lower.trim()
+    );
+
+  if (isGreetingOrVague) {
+    severity = "LOW";
+    emergencyType = "Symptom Clarification Required";
+    recommendedAmbulance = "NONE";
+    isEmergency = false;
+    suggestedAction = "CLARIFY_INPUT";
+    detectedSymptoms.push(rawTranscript || "General query");
     firstAidSteps = [
-      "Stay calm and keep the phone near you.",
-      "Emergency ambulance dispatch has been prioritized.",
-      "Do not exert yourself; sit in a safe position.",
+      lang === "hi"
+        ? "कृपया विशिष्ट लक्षण बताएं (जैसे सीने में दर्द, सांस की तकलीफ, सड़क दुर्घटना, या बुखार)।"
+        : lang === "mr"
+        ? "कृपया नेमकी लक्षणे सांगा (उदा. छातीत दुखणे, अपघात, श्वास घेण्यास त्रास किंवा ताप)."
+        : "Please describe specific symptoms (e.g. chest pain, breathing difficulty, accident, fever) to receive guidance.",
     ];
-    avoidActions = ["Do not hang up or leave the incident area."];
-    summary = "High-priority emergency call received. Paramedic dispatch initiated.";
+    avoidActions = [];
+    summary =
+      lang === "hi"
+        ? "स्पष्ट लक्षण दर्ज नहीं हैं। सही चिकित्सीय सहायता के लिए कृपया लक्षण बताएं।"
+        : lang === "mr"
+        ? "विशिष्ट लक्षणे आढळली नाहीत. कृपया तुमची समस्या स्पष्ट करा."
+        : "Please describe your symptoms clearly so the clinical AI can determine the right emergency or OPD care.";
   } else if (isCardiacOrResp) {
     severity = "CRITICAL";
     emergencyType = "Suspected Acute Cardiac / Respiratory Crisis";
     recommendedAmbulance = "ALS";
+    isEmergency = true;
+    suggestedAction = "DISPATCH_AMBULANCE";
     detectedSymptoms.push("Chest pain / Respiratory distress");
 
     if (lang === "mr") {
@@ -269,6 +295,8 @@ export async function analyzeVoiceEmergency(rawInput: unknown): Promise<VoiceTri
     severity = "HIGH";
     emergencyType = "Acute Physical Trauma / Neurological Emergency";
     recommendedAmbulance = "ALS";
+    isEmergency = true;
+    suggestedAction = "DISPATCH_AMBULANCE";
     detectedSymptoms.push("Physical trauma / Bleeding / Consciousness impairment");
 
     if (lang === "mr") {
@@ -294,12 +322,14 @@ export async function analyzeVoiceEmergency(rawInput: unknown): Promise<VoiceTri
         "Place an unconscious breathing patient in the recovery position (on their side).",
       ];
       avoidActions = ["Do not remove embedded objects from deep wounds.", "Do not bend or force fractured limbs."];
-      summary = "High severity: Physical trauma or bleeding. Urgent dispatch recommended.";
+      summary = "High severity: Physical trauma or bleeding. Urgent ambulance dispatch recommended.";
     }
   } else if (isAnimalBite) {
     severity = "MEDIUM";
     emergencyType = "Animal Bite / Potential Rabies Exposure";
     recommendedAmbulance = "BLS";
+    isEmergency = true;
+    suggestedAction = "DISPATCH_AMBULANCE";
     detectedSymptoms.push("Animal / Snake bite puncture");
 
     if (lang === "mr") {
@@ -324,10 +354,44 @@ export async function analyzeVoiceEmergency(rawInput: unknown): Promise<VoiceTri
       avoidActions = ["Never apply a tight tourniquet or cut into a snake bite wound."];
       summary = "Moderate severity: Animal or snake bite. Prompt clinical care required.";
     }
+  } else if (isNonEmergencyOrOpd) {
+    severity = "LOW";
+    emergencyType = "Non-Emergency · Doctor Consultation Recommended";
+    recommendedAmbulance = "NONE";
+    isEmergency = false;
+    suggestedAction = "CONSULT_DOCTOR";
+    detectedSymptoms.push("General health / Routine outpatient symptom");
+
+    if (lang === "mr") {
+      firstAidSteps = [
+        "भरपूर पाणी व द्रवपदार्थ घ्या आणि विश्रांती घ्या.",
+        "लक्षणे तपासा व जवळच्या डॉक्टरांचा ओपीडी सल्ला किंवा टेलीकन्सल्टेशन घ्या.",
+      ];
+      avoidActions = ["घाबरू नका, डॉक्टरांच्या सल्ल्याशिवाय अँटीबायोटिक्स घेऊ नका."];
+      summary = "सर्वसाधारण लक्षणे. अ‍ॅम्ब्युलन्सची गरज नाही. ओपीडी डॉक्टरांचा सल्ला पुरेसा आहे.";
+    } else if (lang === "hi") {
+      firstAidSteps = [
+        "पर्याप्त मात्रा में पानी व तरल पदार्थ पिएं और पर्याप्त आराम करें।",
+        "अपने लक्षणों पर नज़र रखें और नज़दीकी डॉक्टर से OPD परामर्श लें।",
+        "घर बैठे तुरंत टेलीकंसल्टेशन भी बुक कर सकते हैं।",
+      ];
+      avoidActions = ["घबराएं नहीं, बिना डॉक्टर की सलाह के खुद से एंटीबायोटिक्स न लें।"];
+      summary = "सामान्य स्वास्थ्य लक्षण (जैसे बुखार, खांसी, सिरदर्द)। आपातकालीन एम्बुलेंस की आवश्यकता नहीं है; डॉक्टर से परामर्श लें।";
+    } else {
+      firstAidSteps = [
+        "Stay hydrated with water/fluids and get adequate rest.",
+        "Monitor your symptoms and schedule an outpatient doctor consultation.",
+        "You can connect with a verified physician via Teleconsultation.",
+      ];
+      avoidActions = ["Do not self-prescribe antibiotics without a physician's advice."];
+      summary = "Non-emergency general symptom detected. Ambulance dispatch is not required. Routine OPD doctor consultation recommended.";
+    }
   } else if (isMinor) {
     severity = "LOW";
-    emergencyType = "Minor Injury or Discomfort";
-    recommendedAmbulance = "BLS";
+    emergencyType = "Minor Injury · First Aid Care";
+    recommendedAmbulance = "NONE";
+    isEmergency = false;
+    suggestedAction = "CONSULT_DOCTOR";
     detectedSymptoms.push("Minor cut or superficial discomfort");
 
     if (lang === "mr") {
@@ -343,15 +407,33 @@ export async function analyzeVoiceEmergency(rawInput: unknown): Promise<VoiceTri
         "साफ पट्टी लगाएं। जरूरत महसूस होने पर नज़दीकी क्लिनिक जाएं।",
       ];
       avoidActions = ["गंदे हाथों से घाव को न छुएं।"];
-      summary = "सामान्य चोट। प्राथमिक उपचार के बाद निगरानी रखें।";
+      summary = "सामान्य चोट। प्राथमिक उपचार के बाद निगरानी रखें। एम्बुलेंस की आवश्यकता नहीं है।";
     } else {
       firstAidSteps = [
         "Clean wound with clean water and apply an antiseptic ointment.",
         "Cover with a clean adhesive bandage and observe for signs of infection.",
       ];
       avoidActions = ["Do not touch the wound with unwashed hands."];
-      summary = "Low severity: Minor injury suitable for outpatient or self-care.";
+      summary = "Low severity: Minor injury suitable for outpatient or self-care. No ambulance needed.";
     }
+  } else {
+    // Default fallback: non-emergency clinical inquiry
+    severity = "LOW";
+    emergencyType = "Clinical Review & Doctor Guidance";
+    recommendedAmbulance = "NONE";
+    isEmergency = false;
+    suggestedAction = "CONSULT_DOCTOR";
+    detectedSymptoms.push(rawTranscript.slice(0, 40));
+    firstAidSteps = [
+      lang === "hi"
+        ? "यदि लक्षण गंभीर न हों, तो नज़दीकी डॉक्टर से परामर्श करें।"
+        : "If symptoms persist, consult a doctor or schedule an appointment.",
+    ];
+    avoidActions = [];
+    summary =
+      lang === "hi"
+        ? "आपातकालीन एम्बुलेंस की आवश्यकता नहीं है। सामान्य परामर्श के लिए डॉक्टर से संपर्क करें।"
+        : "No acute life-threatening emergency recognized. You can consult an OPD doctor or start teleconsultation.";
   }
 
   // Attempt Gemini enhancement if available
@@ -362,13 +444,16 @@ export async function analyzeVoiceEmergency(rawInput: unknown): Promise<VoiceTri
     try {
       const prompt = `You are an emergency voice triage AI for Golden Hour.
 User spoke in ${lang}: "${rawTranscript}".
+Analyze if this is an acute life-threatening emergency (cardiac arrest, stroke, severe trauma/bleeding, anaphylaxis) requiring an emergency ambulance (ALS/BLS), OR if it is a non-emergency / general symptom (fever, cold, headache, mild pain, routine consultation) where a doctor consultation is appropriate.
 Respond with JSON only:
 {
   "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
   "emergencyType": string,
   "confidence": number between 0 and 1,
+  "isEmergency": boolean,
+  "suggestedAction": "DISPATCH_AMBULANCE" | "CONSULT_DOCTOR" | "CLARIFY_INPUT",
   "detectedSymptoms": string[],
-  "recommendedAmbulance": "ALS" | "BLS",
+  "recommendedAmbulance": "ALS" | "BLS" | "NONE",
   "firstAidSteps": string[],
   "avoidActions": string[],
   "summary": string
@@ -380,6 +465,8 @@ Respond with JSON only:
         severity = parsed.severity;
         emergencyType = parsed.emergencyType || emergencyType;
         recommendedAmbulance = parsed.recommendedAmbulance || recommendedAmbulance;
+        if (typeof parsed.isEmergency === "boolean") isEmergency = parsed.isEmergency;
+        if (parsed.suggestedAction) suggestedAction = parsed.suggestedAction;
         firstAidSteps = Array.isArray(parsed.firstAidSteps) ? parsed.firstAidSteps : firstAidSteps;
         avoidActions = Array.isArray(parsed.avoidActions) ? parsed.avoidActions : avoidActions;
         summary = parsed.summary || summary;
@@ -397,6 +484,8 @@ Respond with JSON only:
     confidence: source === "gemini" ? 0.92 : 0.82,
     detectedSymptoms: detectedSymptoms.length > 0 ? detectedSymptoms : [rawTranscript.slice(0, 40)],
     recommendedAmbulance,
+    isEmergency,
+    suggestedAction,
     firstAidSteps,
     avoidActions,
     transcriptProcessed: rawTranscript,

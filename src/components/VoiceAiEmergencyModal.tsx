@@ -193,21 +193,58 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
         setTriageResult(res);
       }
     } catch {
-      // Offline fallback heuristic
-      setTriageResult({
-        severity: 'HIGH',
-        emergencyType: 'Emergency Voice Report',
-        recommendedAmbulance: 'ALS',
-        detectedSymptoms: [text || 'Voice SOS Activated'],
-        firstAidSteps: [
-          currentLang === 'mr'
-            ? 'शांत राहा आणि अ‍ॅम्ब्युलन्स येईपर्यंत रुग्णाला सुरक्षित ठेवा.'
-            : currentLang === 'hi'
-            ? 'शांत रहें और एम्बुलेंस आने तक मरीज़ को सुरक्षित स्थान पर रखें।'
-            : 'Keep the patient still and calm while emergency teams dispatch.',
-        ],
-        summary: 'Emergency services alerted.',
-      });
+      // Offline fallback heuristic with intelligent differentiation
+      const lower = text.toLowerCase();
+      const isCritical = /(chest pain|heart attack|difficulty breathing|shortness of breath|cardiac|chhaati|seene me dard|saans|सीने में दर्द|दिल का दौरा|सांस|accident|fracture|head injury|bleeding|unconscious|stroke|khoon|chot|खून|एक्सीडेंट|बेहोश|dog bite|snake bite|kutta|saanp)/i.test(lower);
+      const isOpd = /(fever|cough|cold|headache|stomach|pet dard|vomit|diarrhea|dast|loose motion|rash|allergy|weakness|doctor|appointment|consult|bukhar|khasi|jukham|sar dard|बुखार|खांसी|जुकाम|सिर दर्द|पेट दर्द)/i.test(lower);
+      const isVague = !text || text.length < 3 || /^(hi|hello|hey|namaste|kya haal|help|check|test|batao|sir|bhai)$/i.test(lower.trim());
+
+      if (isCritical) {
+        setTriageResult({
+          severity: 'HIGH',
+          emergencyType: 'Acute Emergency Detected',
+          recommendedAmbulance: 'ALS',
+          isEmergency: true,
+          suggestedAction: 'DISPATCH_AMBULANCE',
+          detectedSymptoms: [text || 'Critical Emergency'],
+          firstAidSteps: [
+            currentLang === 'hi'
+              ? 'शांत रहें और एम्बुलेंस आने तक मरीज़ को सुरक्षित स्थान पर रखें।'
+              : 'Keep the patient still and calm while emergency teams dispatch.',
+          ],
+          summary: currentLang === 'hi' ? 'गंभीर आपातकाल: तत्काल एम्बुलेंस डिस्पैच अनुशंसित।' : 'High priority emergency. Paramedic ambulance dispatch recommended.',
+        });
+      } else if (isOpd) {
+        setTriageResult({
+          severity: 'LOW',
+          emergencyType: 'Non-Emergency · General OPD Symptom',
+          recommendedAmbulance: 'NONE',
+          isEmergency: false,
+          suggestedAction: 'CONSULT_DOCTOR',
+          detectedSymptoms: [text || 'General Symptom'],
+          firstAidSteps: [
+            currentLang === 'hi'
+              ? 'पर्याप्त पानी पिएं, आराम करें और नज़दीकी डॉक्टर से परामर्श लें।'
+              : 'Stay hydrated, rest, and consult an OPD doctor or teleconsult.',
+          ],
+          summary: currentLang === 'hi' ? 'सामान्य स्वास्थ्य लक्षण। एम्बुलेंस की आवश्यकता नहीं है; डॉक्टर से परामर्श लें।' : 'Non-emergency condition detected. Ambulance not required. OPD doctor consultation recommended.',
+        });
+      } else {
+        setTriageResult({
+          severity: 'LOW',
+          emergencyType: isVague ? 'Symptom Clarification Required' : 'General Health Inquiry',
+          recommendedAmbulance: 'NONE',
+          isEmergency: false,
+          suggestedAction: isVague ? 'CLARIFY_INPUT' : 'CONSULT_DOCTOR',
+          detectedSymptoms: [text || 'General query'],
+          firstAidSteps: [
+            currentLang === 'hi'
+              ? 'कृपया लक्षण स्पष्ट बताएं (जैसे सीने में दर्द, सांस की तकलीफ, सड़क दुर्घटना, या बुखार)।'
+              : 'Please describe specific symptoms to receive tailored medical guidance.',
+          ],
+          summary: currentLang === 'hi' ? 'एम्बुलेंस की आवश्यकता नहीं है। परामर्श के लिए डॉक्टर से संपर्क करें।' : 'No acute emergency detected. You can consult an OPD doctor or start teleconsultation.',
+        });
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -246,17 +283,17 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
     en: [
       'Severe chest pain, cannot breathe!',
       'Road accident, bleeding heavily!',
-      'Dog bite on leg, need rabies shot',
+      'Mild fever and cough for 2 days',
     ],
     hi: [
       'सीने में बहुत तेज दर्द है, सांस फूल रही है!',
       'सड़क पर भीषण एक्सीडेंट हुआ है, खून बह रहा है!',
-      'कुत्ते ने काट लिया है, तुरंत मदद चाहिए!',
+      'दो दिन से हल्का बुखार और खांसी है',
     ],
     mr: [
       'छातीत खूप कळ येतेय आणि श्वास घेता येत नाहीये!',
       'मोठा अपघात झाला आहे, डोक्याला मार लागलाय!',
-      'पायाला कुत्रा चावला आहे, इंजेक्शन हवे आहे!',
+      'दोन दिवसांपासून ताप आणि खोकला आहे',
     ],
   };
 
@@ -395,61 +432,171 @@ export default function VoiceAiEmergencyModal({ visible, onClose }: VoiceAiEmerg
               </View>
             )}
 
-            {triageResult && !isAnalyzing && (
-              <View style={styles.resultCard}>
-                <View style={styles.resultHeader}>
-                  <View
-                    style={[
-                      styles.severityBadge,
-                      triageResult.severity === 'CRITICAL'
-                        ? styles.sevCritical
-                        : triageResult.severity === 'HIGH'
-                        ? styles.sevHigh
-                        : styles.sevMedium,
-                    ]}
-                  >
-                    <Text style={styles.severityText}>
-                      {triageResult.severity || 'EMERGENCY'}
-                    </Text>
-                  </View>
-                  <Text style={styles.ambulanceBadge}>
-                    🚑 {triageResult.recommendedAmbulance || 'ALS'} Ambulance
-                  </Text>
-                </View>
+            {triageResult && !isAnalyzing && (() => {
+              const isEmergencyCase = Boolean(
+                triageResult.isEmergency === true ||
+                  triageResult.suggestedAction === 'DISPATCH_AMBULANCE' ||
+                  triageResult.severity === 'CRITICAL' ||
+                  (triageResult.severity === 'HIGH' && triageResult.recommendedAmbulance !== 'NONE')
+              );
+              const isClarifyCase = Boolean(triageResult.suggestedAction === 'CLARIFY_INPUT');
 
-                <Text style={styles.emergencyType}>{triageResult.emergencyType}</Text>
-                <Text style={styles.summaryText}>{triageResult.summary}</Text>
-
-                {triageResult.firstAidSteps?.length > 0 && (
-                  <View style={styles.firstAidBox}>
-                    <Text style={styles.firstAidHeading}>
-                      🩺 {t('voiceSos.firstAidGuidance', 'Immediate First Aid Advice')}:
-                    </Text>
-                    {triageResult.firstAidSteps.map((step: string, sIdx: number) => (
-                      <Text key={sIdx} style={styles.firstAidStep}>
-                        • {step}
-                      </Text>
-                    ))}
-                  </View>
-                )}
-
-                {/* 1-Tap SOS Dispatch Confirmation */}
-                <TouchableOpacity
-                  style={styles.dispatchBtn}
-                  onPress={handleConfirmDispatch}
-                  disabled={isDispatching}
-                  activeOpacity={0.85}
+              return (
+                <View
+                  style={[
+                    styles.resultCard,
+                    isClarifyCase
+                      ? styles.resultCardClarify
+                      : !isEmergencyCase
+                      ? styles.resultCardNonEmergency
+                      : null,
+                  ]}
                 >
-                  {isDispatching ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.dispatchBtnText}>
-                      🚨 {t('voiceSos.dispatchNow', 'Dispatch Ambulance (SOS)')}
-                    </Text>
+                  <View style={styles.resultHeader}>
+                    <View
+                      style={[
+                        styles.severityBadge,
+                        isClarifyCase
+                          ? styles.sevInfo
+                          : triageResult.severity === 'CRITICAL'
+                          ? styles.sevCritical
+                          : triageResult.severity === 'HIGH'
+                          ? styles.sevHigh
+                          : isEmergencyCase
+                          ? styles.sevMedium
+                          : styles.sevLow,
+                      ]}
+                    >
+                      <Text style={styles.severityText}>
+                        {isClarifyCase
+                          ? 'INPUT REQUIRED'
+                          : isEmergencyCase
+                          ? (triageResult.severity || 'EMERGENCY')
+                          : 'NON-EMERGENCY'}
+                      </Text>
+                    </View>
+                    {isClarifyCase ? (
+                      <Text style={[styles.ambulanceBadge, { color: '#1E40AF' }]}>
+                        📋 Describe Symptoms
+                      </Text>
+                    ) : isEmergencyCase ? (
+                      <Text style={styles.ambulanceBadge}>
+                        🚑 {triageResult.recommendedAmbulance || 'ALS'} Ambulance
+                      </Text>
+                    ) : (
+                      <Text style={[styles.ambulanceBadge, { color: '#166534' }]}>
+                        👨‍⚕️ Doctor Consult (OPD)
+                      </Text>
+                    )}
+                  </View>
+
+                  <Text style={styles.emergencyType}>{triageResult.emergencyType}</Text>
+                  <Text style={styles.summaryText}>{triageResult.summary}</Text>
+
+                  {triageResult.firstAidSteps?.length > 0 && (
+                    <View
+                      style={[
+                        styles.firstAidBox,
+                        !isEmergencyCase && { borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' },
+                        isClarifyCase && { borderColor: '#FDE68A', backgroundColor: '#FEF3C7' },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.firstAidHeading,
+                          !isEmergencyCase && { color: '#166534' },
+                          isClarifyCase && { color: '#92400E' },
+                        ]}
+                      >
+                        🩺 {isEmergencyCase ? t('voiceSos.firstAidGuidance', 'Immediate First Aid Advice') : isClarifyCase ? 'Guidance' : 'Recommended Care'}:
+                      </Text>
+                      {triageResult.firstAidSteps.map((step: string, sIdx: number) => (
+                        <Text key={sIdx} style={styles.firstAidStep}>
+                          • {step}
+                        </Text>
+                      ))}
+                    </View>
                   )}
-                </TouchableOpacity>
-              </View>
-            )}
+
+                  {/* Actions Differentiated by Triage Category */}
+                  {isClarifyCase ? (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.inkSoft, marginBottom: 6 }}>
+                        TAP A SYMPTOM BELOW OR TYPE/SPEAK:
+                      </Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {[
+                          { label: '💔 Chest Pain', phrase: 'Severe chest pain, cannot breathe' },
+                          { label: '🚗 Road Accident', phrase: 'Road accident, bleeding heavily' },
+                          { label: '🌡️ High Fever', phrase: 'High fever and severe body pain' },
+                          { label: '🐕 Dog Bite', phrase: 'Dog bite on leg, need rabies shot' },
+                          { label: '🫁 Breathing Issue', phrase: 'Difficulty breathing and wheezing' },
+                        ].map((item, idx) => (
+                          <TouchableOpacity
+                            key={idx}
+                            style={styles.presetChip}
+                            onPress={() => handleSimulatePhrase(item.phrase)}
+                          >
+                            <Text style={styles.presetChipText}>{item.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  ) : isEmergencyCase ? (
+                    /* 1-Tap SOS Dispatch for Real Emergencies */
+                    <TouchableOpacity
+                      style={styles.dispatchBtn}
+                      onPress={handleConfirmDispatch}
+                      disabled={isDispatching}
+                      activeOpacity={0.85}
+                    >
+                      {isDispatching ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.dispatchBtnText}>
+                          🚨 {t('voiceSos.dispatchNow', 'Dispatch Ambulance (SOS)')}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ) : (
+                    /* Non-Emergency: Doctor Consultation Pathway */
+                    <View style={{ marginTop: 8, gap: 10 }}>
+                      <TouchableOpacity
+                        style={styles.consultDoctorBtn}
+                        onPress={() => {
+                          onClose();
+                          router.push('/(patient)/consult-doctor');
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.consultDoctorBtnText}>
+                          👨‍⚕️ {currentLang === 'hi' ? 'डॉक्टर से परामर्श लें (OPD / ऑनलाइन)' : currentLang === 'mr' ? 'डॉक्टरांचा सल्ला घ्या' : 'Consult Doctor (OPD / Online)'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Safety Failsafe */}
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert(
+                            'Dispatch Emergency Ambulance?',
+                            'General non-emergency symptoms were detected. If this is a life-threatening crisis, confirm to dispatch an ambulance.',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Confirm Dispatch', style: 'destructive', onPress: handleConfirmDispatch },
+                            ]
+                          );
+                        }}
+                        style={{ paddingVertical: 6, alignItems: 'center' }}
+                      >
+                        <Text style={{ fontSize: 11.5, color: colors.red, fontWeight: '700' }}>
+                          ⚠️ {currentLang === 'hi' ? 'फिर भी एम्बुलेंस (SOS) बुलाएं' : 'Dispatch Emergency SOS Anyway'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
           </ScrollView>
         </View>
       </View>
@@ -714,5 +861,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  resultCardNonEmergency: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  resultCardClarify: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  sevLow: {
+    backgroundColor: '#16A34A',
+  },
+  sevInfo: {
+    backgroundColor: '#3B82F6',
+  },
+  consultDoctorBtn: {
+    backgroundColor: colors.blue,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consultDoctorBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 });
