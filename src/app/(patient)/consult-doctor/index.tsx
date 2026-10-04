@@ -20,6 +20,8 @@ export default function ConsultDoctor() {
   const setUserToken = useAppStore((s) => s.setUserToken);
   const storeAppointments = useAppStore((s) => s.bookedAppointments || []);
   const setStoreAppointments = useAppStore((s) => s.setBookedAppointments);
+  const selectedDoctorId = useAppStore((s) => s.selectedDoctorId);
+  const liveStoreServingToken = useAppStore((s) => s.servingToken);
 
   const [hasLoadedServerAppts, setHasLoadedServerAppts] = useState(false);
 
@@ -40,7 +42,9 @@ export default function ConsultDoctor() {
             const mapped = data.map((d: any, idx: number) => {
               const rawDist = typeof d.distanceKm === 'number' ? d.distanceKm : 1.8;
               const distKm = Number(rawDist.toFixed(1));
-              const serving = typeof d.servingToken === 'number' ? d.servingToken : 0;
+              const rawServing = typeof d.servingToken === 'number' ? d.servingToken : 0;
+              const isMatch = d.doctorId === selectedDoctorId || d.id === selectedDoctorId || d.doctorId === 'doc-1' || d.id === 'doc-1';
+              const serving = isMatch && liveStoreServingToken === 0 ? 0 : rawServing;
               const queueLen = typeof d.queueLength === 'number' ? d.queueLength : 0;
               const currentTok = serving + queueLen;
 

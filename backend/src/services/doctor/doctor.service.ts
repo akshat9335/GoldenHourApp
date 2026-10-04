@@ -306,24 +306,32 @@ export class DoctorService {
         const docSnaps = await firestore.collection("doctors").get();
         for (const snap of docSnaps.docs) {
           const docData = snap.data() as DoctorProfile;
-          if (docData && docData.doctorId && !dataStore.doctors.has(docData.doctorId)) {
-            if (!docData.clinicId || !dataStore.clinics.has(docData.clinicId)) {
-              const clinicId = docData.clinicId || `clinic-${docData.doctorId}`;
-              docData.clinicId = clinicId;
-              if (!dataStore.clinics.has(clinicId)) {
-                dataStore.clinics.set(clinicId, {
-                  clinicId,
-                  clinicName: (docData as any).clinicName || `${docData.name}'s Clinic`,
-                  address: (docData as any).clinicAddress || "Civil Lines, Prayagraj",
-                  lat: 25.4538,
-                  lng: 81.8540,
-                  phone: "+91-532-2400000",
-                  workingHours: "09:00 - 20:00",
-                  facilities: ["General OPD", "Consultation"],
-                });
+          if (docData && docData.doctorId) {
+            const existing = dataStore.doctors.get(docData.doctorId);
+            if (existing) {
+              existing.servingToken = typeof docData.servingToken === 'number' ? docData.servingToken : 0;
+              existing.queueLength = typeof docData.queueLength === 'number' ? docData.queueLength : 0;
+              existing.estimatedWaitMinutes = typeof docData.estimatedWaitMinutes === 'number' ? docData.estimatedWaitMinutes : 0;
+              if (docData.availability) existing.availability = docData.availability;
+            } else {
+              if (!docData.clinicId || !dataStore.clinics.has(docData.clinicId)) {
+                const clinicId = docData.clinicId || `clinic-${docData.doctorId}`;
+                docData.clinicId = clinicId;
+                if (!dataStore.clinics.has(clinicId)) {
+                  dataStore.clinics.set(clinicId, {
+                    clinicId,
+                    clinicName: (docData as any).clinicName || `${docData.name}'s Clinic`,
+                    address: (docData as any).clinicAddress || "Civil Lines, Prayagraj",
+                    lat: 25.4538,
+                    lng: 81.8540,
+                    phone: "+91-532-2400000",
+                    workingHours: "09:00 - 20:00",
+                    facilities: ["General OPD", "Consultation"],
+                  });
+                }
               }
+              dataStore.doctors.set(docData.doctorId, docData);
             }
-            dataStore.doctors.set(docData.doctorId, docData);
           }
         }
 
@@ -406,19 +414,23 @@ export class DoctorService {
       }
 
       const today = new Date().toISOString().split("T")[0];
+      const raw = (doc.doctorId || "").trim();
+      const withoutDoc = raw.replace(/^(doc-)+/, "");
       const aliases = [
-        doc.doctorId,
-        doc.doctorId.replace(/^(doc-)+/, ""),
-        `doc-${doc.doctorId.replace(/^(doc-)+/, "")}`,
-        `doc-doc-${doc.doctorId.replace(/^(doc-)+/, "")}`,
+        raw,
+        withoutDoc,
+        `doc-${withoutDoc}`,
+        `doc-doc-${withoutDoc}`,
+        `doc-demo-${withoutDoc}`,
+        `demo-${withoutDoc}`,
       ];
       let liveQueue: any;
       for (const a of aliases) {
         liveQueue = dataStore.queues.get(`${a}_${today}`);
         if (liveQueue) break;
       }
-      const servingToken = liveQueue?.servingToken ?? doc.servingToken ?? 0;
-      const queueLength = liveQueue?.waitingCount ?? doc.queueLength ?? 0;
+      const servingToken = liveQueue ? liveQueue.servingToken : (doc.servingToken ?? 0);
+      const queueLength = liveQueue ? liveQueue.waitingCount : (doc.queueLength ?? 0);
       const estimatedWaitMinutes = queueLength * (liveQueue?.avgConsultationMinutes ?? 8);
 
       results.push({

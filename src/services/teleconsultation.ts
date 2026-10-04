@@ -290,13 +290,41 @@ export function subscribeMessages(
             ...(d.data() as Omit<ChatMessage, 'id'>),
           }));
 
-          // Merge remote with any pending local messages
-          const existing = localMessageStore.get(consultationId) || [];
-          const combinedMap = new Map<string, ChatMessage>();
-          for (const m of existing) combinedMap.set(m.id, m);
-          for (const m of remoteMsgs) combinedMap.set(m.id, m);
+          // Strict de-duplication: by doc id, or by exact same sender + content within 3s
+          const deduped: ChatMessage[] = [];
+          const seenIds = new Set<string>();
+          for (const m of remoteMsgs) {
+            if (seenIds.has(m.id)) continue;
+            const isDup = deduped.some(
+              (prev) =>
+                prev.senderId === m.senderId &&
+                prev.message.trim() === m.message.trim() &&
+                Math.abs(prev.createdAt - m.createdAt) < 3000
+            );
+            if (!isDup) {
+              seenIds.add(m.id);
+              deduped.push(m);
+            }
+          }
 
-          const merged = Array.from(combinedMap.values()).sort((a, b) => a.createdAt - b.createdAt);
+          // Merge any optimistic local messages that haven't synced yet
+          const existing = localMessageStore.get(consultationId) || [];
+          for (const loc of existing) {
+            if (!seenIds.has(loc.id)) {
+              const alreadyHas = deduped.some(
+                (prev) =>
+                  prev.senderId === loc.senderId &&
+                  prev.message.trim() === loc.message.trim() &&
+                  Math.abs(prev.createdAt - loc.createdAt) < 3000
+              );
+              if (!alreadyHas) {
+                seenIds.add(loc.id);
+                deduped.push(loc);
+              }
+            }
+          }
+
+          const merged = deduped.sort((a, b) => a.createdAt - b.createdAt);
           localMessageStore.set(consultationId, merged);
 
           const listeners = messageListeners.get(consultationId);
@@ -323,8 +351,9 @@ export async function sendMessage(
   consultationId: string,
   msg: { senderId: string; senderRole: SenderRole; message: string },
 ): Promise<void> {
+  const newMsgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const newMsg: ChatMessage = {
-    id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    id: newMsgId,
     ...msg,
     createdAt: Date.now(),
   };
@@ -335,17 +364,37 @@ export async function sendMessage(
   localMessageStore.set(consultationId, updated);
   messageListeners.get(consultationId)?.forEach((fn) => fn(updated));
 
-  // 2. Persist to Firestore
+  // 2. Persist to Firestore with the EXACT SAME ID so remote snapshot never duplicates!
   try {
     const db = await getDb();
     if (db) {
-      await addDoc(collection(db, 'teleconsultations', consultationId, 'messages'), {
+      await setDoc(doc(db, 'teleconsultations', consultationId, 'messages', newMsgId), {
         ...msg,
         createdAt: newMsg.createdAt,
       });
     }
   } catch (err) {
     console.warn('[teleconsultation] sendMessage Firestore persist warn:', err);
+  }
+}
+
+export async function clearMessages(consultationId: string): Promise<void> {
+  localMessageStore.delete(consultationId);
+  const listeners = messageListeners.get(consultationId);
+  if (listeners) {
+    listeners.forEach((fn) => fn([]));
+  }
+  try {
+    const db = await getDb();
+    if (db) {
+      const { getDocs: gd } = require('firebase/firestore');
+      const snap = await gd(collection(db, 'teleconsultations', consultationId, 'messages'));
+      const batch = writeBatch(db);
+      snap.docs.forEach((d: any) => batch.delete(d.ref));
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn('[teleconsultation] clearMessages Firestore warn:', err);
   }
 }
 
