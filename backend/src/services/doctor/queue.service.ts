@@ -136,18 +136,23 @@ export class QueueService {
 
   /**
    * Advances the queue: calls next token.
+   * If targetToken is provided, advances directly to that token (closing any empty gaps).
    * If all issued tokens are served, increments next walk-in token
    * so doctor queue NEVER resets to 0 or errors on advance.
    */
-  public async advanceQueue(doctorId: string): Promise<LiveQueueState> {
+  public async advanceQueue(doctorId: string, targetToken?: number): Promise<LiveQueueState> {
     const today = new Date().toISOString().split("T")[0];
     const queue = this.getOrCreateQueue(doctorId, today);
 
-    if (queue.servingToken >= queue.totalTokensIssued) {
-      queue.totalTokensIssued = queue.servingToken + 1;
+    const nextToken = (typeof targetToken === 'number' && targetToken > queue.servingToken)
+      ? targetToken
+      : queue.servingToken + 1;
+
+    if (nextToken > queue.totalTokensIssued) {
+      queue.totalTokensIssued = nextToken;
     }
 
-    queue.servingToken += 1;
+    queue.servingToken = nextToken;
     queue.waitingCount = Math.max(0, queue.totalTokensIssued - queue.servingToken);
 
     const docIds = this.getDoctorAliases(doctorId);
@@ -258,6 +263,17 @@ export class QueueService {
           },
           { merge: true }
         ).catch(() => {});
+        firestore.collection("queues").doc(`${dId}_${today}`).set(
+          {
+            doctorId: dId,
+            date: today,
+            servingToken: 0,
+            totalTokensIssued: 0,
+            avgConsultationMinutes: 10,
+            waitingCount: 0,
+          },
+          { merge: true }
+        ).catch(() => {});
       }
     }
 
@@ -305,6 +321,12 @@ export class QueueService {
         }
         if (count > 0) {
           await batch.commit();
+        }
+
+        // Clean up stale teleconsultation records for doctor
+        const tcSnap = await firestore.collection("teleconsultations").where("doctorId", "in", docIds).get();
+        for (const tcDoc of tcSnap.docs) {
+          await tcDoc.ref.delete().catch(() => {});
         }
       } catch (err) {
         console.warn("[queueService] Error archiving/cancelling Firestore appointments on reset:", err);

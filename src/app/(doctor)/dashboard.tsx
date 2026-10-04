@@ -54,7 +54,8 @@ export default function DoctorDashboard() {
       .getDoctorAppointments({ doctorId: cleanId })
       .then((apptData: any) => {
         if (Array.isArray(apptData)) {
-          const mapped = apptData.map((a: any) => ({
+          const cleanAppts = apptData.filter((a: any) => !a.isArchived);
+          const mapped = cleanAppts.map((a: any) => ({
             id: a.appointmentId || a.id,
             doctorId: a.doctorId,
             patientName: a.patientName || 'Patient',
@@ -144,16 +145,22 @@ export default function DoctorDashboard() {
   };
 
   const handleCallNext = async () => {
+    const nextWaiting = appointments.find(
+      (a) => a.status !== 'completed' && a.status !== 'cancelled' && a.token > servingToken
+    );
+    const targetToken = nextWaiting ? nextWaiting.token : servingToken + 1;
+
     try {
-      const res: any = await api.queues.advanceQueue(doctorId);
+      const res: any = await api.queues.advanceQueue(doctorId, targetToken);
       if (res && typeof res.servingToken === 'number') {
         useAppStore.setState({ servingToken: res.servingToken });
       } else {
-        advanceServingToken();
+        useAppStore.setState({ servingToken: targetToken });
       }
     } catch {
-      advanceServingToken();
+      useAppStore.setState({ servingToken: targetToken });
     }
+    loadDoctorData(doctorId);
   };
 
   const handleResetQueue = async () => {

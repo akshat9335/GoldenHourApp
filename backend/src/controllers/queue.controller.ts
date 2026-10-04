@@ -18,7 +18,8 @@ export class QueueController {
   public async advanceQueue(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const doctorId = req.params.doctorId;
-      const updatedQueue = await queueService.advanceQueue(doctorId);
+      const targetToken = req.body?.targetToken ? parseInt(req.body.targetToken, 10) : undefined;
+      const updatedQueue = await queueService.advanceQueue(doctorId, targetToken);
       sendSuccess(res, updatedQueue, `Called next patient: Serving token #${updatedQueue.servingToken}`);
     } catch (err) {
       next(err);

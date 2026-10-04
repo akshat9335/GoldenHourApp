@@ -115,6 +115,7 @@ export default function ConsultDoctor() {
 
   const activeAppointments = combinedAppointments.filter(
     (a: any) =>
+      !a.isArchived &&
       (a.status || '').toUpperCase() !== 'COMPLETED' &&
       (a.status || '').toUpperCase() !== 'CANCELLED' &&
       (a.status || '').toUpperCase() !== 'NO_SHOW' &&
