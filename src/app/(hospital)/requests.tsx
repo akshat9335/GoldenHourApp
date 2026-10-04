@@ -28,7 +28,7 @@ export default function HospitalRequests() {
   const [refreshing, setRefreshing] = useState(false);
   const setActiveHospitalRequestId = useAppStore((s) => s.setActiveHospitalRequestId);
   const userProfile = useAppStore((s) => s.userProfile);
-  const hospitalId = userProfile?.uid || 'hosp-srn-prayagraj';
+  const hospitalId = (userProfile as any)?.hospitalId || (userProfile as any)?.assignedHospitalId || userProfile?.uid || 'hosp-srn-prayagraj';
 
   const fetchRequests = useCallback(async () => {
     try {
@@ -77,13 +77,14 @@ export default function HospitalRequests() {
         if (!r.patientName || r.patientName === 'undefined') continue;
         seen.add(r.id);
 
-        const patientKey = `${(r.patientName || '').toLowerCase().trim()}_${r.patientId || ''}`;
+        const sourcePrefix = ((r.doctorName || '').toLowerCase().includes('asha') || r.doctorId === 'asha-worker' || (r.id && r.id.includes('comm'))) ? 'asha' : 'doc';
+        const patientKey = `${sourcePrefix}_${(r.patientName || '').toLowerCase().trim()}_${r.patientId || ''}`;
         const existing = patientMap.get(patientKey);
         if (!existing) {
           patientMap.set(patientKey, r);
         } else {
-          const isRActive = r.status === 'PENDING' || r.status === 'ACCEPTED' || r.status === 'ADMITTED';
-          const isExistActive = existing.status === 'PENDING' || existing.status === 'ACCEPTED' || existing.status === 'ADMITTED';
+          const isRActive = r.status === 'PENDING' || r.status === 'ACCEPTED' || r.status === 'ADMITTED' || r.status === 'COMPLETED';
+          const isExistActive = existing.status === 'PENDING' || existing.status === 'ACCEPTED' || existing.status === 'ADMITTED' || existing.status === 'COMPLETED';
           if (isRActive && !isExistActive) {
             patientMap.set(patientKey, r);
           } else if (isRActive === isExistActive) {

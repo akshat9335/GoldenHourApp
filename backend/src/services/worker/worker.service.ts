@@ -337,47 +337,16 @@ export async function createCommunityReferral(
 ): Promise<CommunityReferral> {
   const now = new Date().toISOString();
 
-  // 1. Idempotency: Check if referral with the specified ID already exists
+  // Deduplicate rapid double-clicks (within 3 seconds for exact same ID)
   if (data.id && dataStore.communityReferrals.has(data.id)) {
-    return dataStore.communityReferrals.get(data.id)!;
-  }
-
-  // 2. Check for duplicate pending referral for same patient
-  for (const existing of dataStore.communityReferrals.values()) {
-    const isSamePat = existing.patientId === data.patientId ||
-      (existing.patientName && data.patientName && existing.patientName.toLowerCase().trim() === data.patientName.toLowerCase().trim());
-    if (isSamePat && (existing.status === "PENDING" || existing.status === "ACCEPTED")) {
+    const existing = dataStore.communityReferrals.get(data.id)!;
+    const diffMs = Math.abs(Date.now() - new Date(existing.createdAt || 0).getTime());
+    if (diffMs < 3000) {
       return existing;
     }
   }
 
-  // Also check Firestore if duplicate pending submission exists
-  if (isFirebaseConfigured() && firestore) {
-    try {
-      if (data.id) {
-        const docSnap = await firestore.collection(REFERRALS_COL).doc(data.id).get();
-        if (docSnap.exists) {
-          const existingData = docSnap.data() as CommunityReferral;
-          dataStore.communityReferrals.set(data.id, existingData);
-          return existingData;
-        }
-      }
-
-      const snap = await firestore
-        .collection(REFERRALS_COL)
-        .where("patientId", "==", data.patientId)
-        .get();
-      for (const d of snap.docs) {
-        const existing = d.data() as CommunityReferral;
-        if (existing && (existing.status === "PENDING" || existing.status === "ACCEPTED")) {
-          dataStore.communityReferrals.set(d.id, existing);
-          return existing;
-        }
-      }
-    } catch {}
-  }
-
-  const id = data.id || `ref-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const id = data.id || `ref-comm-${data.patientId || Date.now()}-${Date.now()}`;
   const referralCode = data.referralCode || `REF-ASHA-${Date.now().toString(36).toUpperCase()}`;
 
   const referral: CommunityReferral = {
@@ -390,11 +359,35 @@ export async function createCommunityReferral(
     updatedAt: now,
   } as CommunityReferral;
 
+  // Store in memory
   dataStore.communityReferrals.set(id, referral);
 
+  // If there were other pending referrals for this patient in-memory, supersede them
+  for (const [key, existing] of dataStore.communityReferrals.entries()) {
+    if (key !== id && existing.patientId === data.patientId && existing.status === "PENDING") {
+      existing.status = "RESOLVED" as any;
+      existing.updatedAt = now;
+    }
+  }
+
+  // Persist to Firestore
   if (isFirebaseConfigured() && firestore) {
     try {
-      await firestore.collection(REFERRALS_COL).doc(id).set(referral);
+      await firestore.collection(REFERRALS_COL).doc(id).set(referral, { merge: true });
+
+      // Clean up older pending referrals for this patient in Firestore so no duplicates exist
+      const snap = await firestore
+        .collection(REFERRALS_COL)
+        .where("patientId", "==", data.patientId)
+        .get();
+      for (const d of snap.docs) {
+        if (d.id !== id) {
+          const oldData = d.data();
+          if (oldData && oldData.status === "PENDING") {
+            await d.ref.set({ status: "RESOLVED", updatedAt: now }, { merge: true });
+          }
+        }
+      }
     } catch (err) {
       console.warn("[WorkerService] Firestore referral write failed:", err);
     }
