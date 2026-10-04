@@ -243,9 +243,27 @@ export async function getPatientById(
   }
 
   // Get referrals
-  const referrals = Array.from(dataStore.communityReferrals.values()).filter(
-    (r) => r.patientId === patientId
-  );
+  let referrals: CommunityReferral[] = [];
+  if (isFirebaseConfigured() && firestore) {
+    try {
+      const refSnap = await firestore
+        .collection(REFERRALS_COL)
+        .where("patientId", "==", patientId)
+        .get();
+      if (!refSnap.empty) {
+        referrals = refSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as CommunityReferral));
+        referrals.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  if (referrals.length === 0) {
+    referrals = Array.from(dataStore.communityReferrals.values()).filter(
+      (r) => r.patientId === patientId
+    );
+  }
 
   return { patient, visits, referrals };
 }
@@ -391,13 +409,38 @@ export async function createCommunityReferral(
  * Get all referrals initiated by the worker.
  */
 export async function getWorkerReferrals(workerUid: string): Promise<CommunityReferral[]> {
-  const all = Array.from(dataStore.communityReferrals.values());
-  const filtered = all.filter((r) => r.workerUid === workerUid);
-  if (filtered.length > 0) return filtered;
-  if (!workerUid || workerUid === "asha-worker-prayagraj") {
-    return all;
+  const map = new Map<string, CommunityReferral>();
+
+  if (isFirebaseConfigured() && firestore) {
+    try {
+      let query: FirebaseFirestore.Query = firestore.collection(REFERRALS_COL);
+      if (workerUid && workerUid !== "asha-worker-prayagraj") {
+        query = query.where("workerUid", "==", workerUid);
+      }
+      const snap = await query.get();
+      for (const d of snap.docs) {
+        const item = { id: d.id, ...(d.data() as any) } as CommunityReferral;
+        if (item && item.id) {
+          map.set(item.id, item);
+        }
+      }
+    } catch (err) {
+      console.warn("[WorkerService] Firestore get referrals failed:", err);
+    }
   }
-  return [];
+
+  // Fallback / merge with memory store
+  for (const item of dataStore.communityReferrals.values()) {
+    if (!map.has(item.id)) {
+      if (!workerUid || workerUid === "asha-worker-prayagraj" || item.workerUid === workerUid) {
+        map.set(item.id, item);
+      }
+    }
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
 }
 
 /**

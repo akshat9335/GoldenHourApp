@@ -219,6 +219,16 @@ export default function WorkerDashboard() {
         const list = JSON.parse(raw);
         setPendingReferralsCount(list.filter((r: any) => r.status === 'PENDING').length);
       }
+
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        const res: any = await api.worker.getReferrals();
+        const serverRefs = Array.isArray(res) ? res : (res?.data || []);
+        if (Array.isArray(serverRefs) && serverRefs.length > 0) {
+          setPendingReferralsCount(serverRefs.filter((r: any) => r.status === 'PENDING').length);
+          await AsyncStorage.setItem(REFERRALS_KEY, JSON.stringify(serverRefs));
+        }
+      }
     } catch {
       // ignore
     }
