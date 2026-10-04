@@ -71,8 +71,17 @@ def build_final_pptx():
     add_solid_transparent_hyperlink(slide3, 705.0, 405.0, 85.0, 95.0, "https://youtu.be/xpn0V2G659g?si=DTu2QmqTG9jVX1Li")
     print("Added clickable hotspots over Slide 3 QR codes in PPTX.")
 
-    # 2. Update Slide 6 (Research & References) with full-coverage clickable solid-transparent shapes
+    # 2. Update Slide 6 (Research & References)
     slide6 = prs.slides[5]
+
+    # Fix typo: Comparision -> Comparison
+    for sh in slide6.shapes:
+        if sh.has_text_frame:
+            for p in sh.text_frame.paragraphs:
+                for r in p.runs:
+                    if 'Comparision' in r.text:
+                        r.text = r.text.replace('Comparision', 'Comparison')
+                        print("Fixed typo on Slide 6: Comparision -> Comparison")
 
     clickable_links = [
         ("Smart India Hackathon 2026", 15.75, 96.0, 444.0, 45.0, "https://www.sih.gov.in/"),
@@ -115,8 +124,24 @@ def build_final_pdf():
     })
     print("Replaced Page 3 image and added clickable QR code links in PDF.")
 
-    # 2. Update Page 6 (Research & References) with full-card links
+    # 2. Update Page 6 (Research & References)
     page6 = doc[5]
+
+    # Fix typo in heading: Comparision -> Comparison
+    rect_heading = fitz.Rect(495, 52, 930, 88)
+    page6.add_redact_annot(rect_heading, fill=(1, 1, 1))
+    page6.apply_redactions()
+    page6.insert_text(
+        fitz.Point(496.65, 79.73),
+        ' Comparison with the existing System',
+        fontfile=r'C:\Windows\Fonts\calibri.ttf',
+        fontname='Calibri',
+        fontsize=27.775,
+        color=(0/255, 32/255, 96/255)
+    )
+    print("Fixed typo on Page 6 PDF: Comparision -> Comparison")
+
+    # Clear old links and re-add full-card links
     for l in page6.get_links():
         page6.delete_link(l)
 
