@@ -54,40 +54,28 @@ export default function AmbulanceRequestDetail() {
   const handleAccept = async () => {
     if (!activeEmergencyId) return;
 
-    setAccepting(true);
-    try {
-      // Ensure driver is active/available
-      await api.ambulances.updateAvailability('AVAILABLE').catch(() => {});
+    const optimisticTripId = `trip-${activeEmergencyId}`;
+    setActiveTripId(optimisticTripId);
+    setEmergencyId(activeEmergencyId);
 
-      // 1. Accept request and assign ambulance
+    // Instant transition
+    router.replace({
+      pathname: '/(ambulance)/navigate-patient',
+      params: { emergencyId: activeEmergencyId, tripId: optimisticTripId },
+    });
+
+    // Background sync
+    try {
+      await api.ambulances.updateAvailability('AVAILABLE').catch(() => {});
       const res: any = await api.ambulances.acceptRequest(activeEmergencyId);
       const data = res?.data || res;
-      const tripId = data?.tripId || `trip-${activeEmergencyId}`;
-
-      setActiveTripId(tripId);
-      setEmergencyId(activeEmergencyId);
-
-      // 2. Transition trip to EN_ROUTE_TO_PATIENT
-      try {
-        await api.ambulances.startToPatient(tripId);
-      } catch (_startErr) {
-        // Non-fatal if already transitioned
+      const tripId = data?.tripId || optimisticTripId;
+      if (tripId && tripId !== optimisticTripId) {
+        useAppStore.getState().setActiveTripId(tripId);
       }
-
-      router.replace('/(ambulance)/navigate-patient');
-    } catch (err: any) {
-      const errMsg =
-        err?.message ||
-        'This emergency dispatch may have already been claimed by another ambulance unit.';
-
-      Alert.alert('Unable to Accept Dispatch', errMsg, [
-        {
-          text: 'Return to Dashboard',
-          onPress: () => router.replace('/(ambulance)/dashboard'),
-        },
-      ]);
-    } finally {
-      setAccepting(false);
+      await api.ambulances.startToPatient(tripId).catch(() => {});
+    } catch (_startErr) {
+      // Handled
     }
   };
 
