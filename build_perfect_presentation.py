@@ -26,11 +26,35 @@ def enhance_techstack_image():
     print("Generated enhanced_techstack_sharp.png at (2455x1390) resolution.")
 
 
+def add_solid_transparent_hyperlink(slide, x, y, w, h, url):
+    """Adds a solid-fill 1% alpha transparent shape that catches mouse clicks across 100% of its area."""
+    shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Pt(x), Pt(y), Pt(w), Pt(h))
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor(255, 255, 255)
+
+    # 1% opacity in drawingML = completely invisible to eye, but solid to hit testing!
+    spPr = shape.element.spPr
+    solidFill = spPr.find('{http://schemas.openxmlformats.org/drawingml/2006/main}solidFill')
+    srgbClr = solidFill.find('{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr')
+    alpha = etree.SubElement(srgbClr, '{http://schemas.openxmlformats.org/drawingml/2006/main}alpha')
+    alpha.set('val', '1000')
+
+    # No outline/border line
+    ln = spPr.find('{http://schemas.openxmlformats.org/drawingml/2006/main}ln')
+    if ln is not None:
+        spPr.remove(ln)
+    noFillLn = etree.SubElement(spPr, '{http://schemas.openxmlformats.org/drawingml/2006/main}ln')
+    etree.SubElement(noFillLn, '{http://schemas.openxmlformats.org/drawingml/2006/main}noFill')
+
+    shape.click_action.hyperlink.address = url
+    return shape
+
+
 def build_final_pptx():
     source_pptx = r"C:\Users\Admin\Downloads\SIH2026_LifeLineCoders_GoldenHour_Clickable_Links.pptx"
     prs = Presentation(source_pptx)
 
-    # 1. Update Slide 3 (Technical Approach) with sharp high-res image
+    # 1. Update Slide 3 (Technical Approach) with sharp high-res image & clickable QR code hotspots
     slide3 = prs.slides[2]
     sh18 = slide3.shapes[18]
     blip_elem = sh18._element.xpath('.//a:blip')
@@ -39,6 +63,13 @@ def build_final_pptx():
     with open("enhanced_techstack_sharp.png", "rb") as f:
         image_part._blob = f.read()
     print("Replaced Slide 3 Tech Stack image in PPTX with high-res sharp version.")
+
+    # Add clickable hotspots over QR codes on Slide 3
+    # Left QR: Download APK
+    add_solid_transparent_hyperlink(slide3, 610.0, 405.0, 85.0, 95.0, "https://drive.google.com/file/d/1DjNVllfmDO0dMCmqSco1yLzNUFJ_s1Ie/view?usp=drivesdk")
+    # Right QR: Demo Video
+    add_solid_transparent_hyperlink(slide3, 705.0, 405.0, 85.0, 95.0, "https://youtu.be/xpn0V2G659g?si=DTu2QmqTG9jVX1Li")
+    print("Added clickable hotspots over Slide 3 QR codes in PPTX.")
 
     # 2. Update Slide 6 (Research & References) with full-coverage clickable solid-transparent shapes
     slide6 = prs.slides[5]
@@ -54,25 +85,7 @@ def build_final_pptx():
     ]
 
     for name, x, y, w, h, url in clickable_links:
-        shape = slide6.shapes.add_shape(MSO_SHAPE.RECTANGLE, Pt(x), Pt(y), Pt(w), Pt(h))
-        shape.fill.solid()
-        shape.fill.fore_color.rgb = RGBColor(255, 255, 255)
-
-        # 1% opacity = invisible to eye, solid to mouse clicks everywhere
-        spPr = shape.element.spPr
-        solidFill = spPr.find('{http://schemas.openxmlformats.org/drawingml/2006/main}solidFill')
-        srgbClr = solidFill.find('{http://schemas.openxmlformats.org/drawingml/2006/main}srgbClr')
-        alpha = etree.SubElement(srgbClr, '{http://schemas.openxmlformats.org/drawingml/2006/main}alpha')
-        alpha.set('val', '1000')
-
-        # No border line
-        ln = spPr.find('{http://schemas.openxmlformats.org/drawingml/2006/main}ln')
-        if ln is not None:
-            spPr.remove(ln)
-        noFillLn = etree.SubElement(spPr, '{http://schemas.openxmlformats.org/drawingml/2006/main}ln')
-        etree.SubElement(noFillLn, '{http://schemas.openxmlformats.org/drawingml/2006/main}noFill')
-
-        shape.click_action.hyperlink.address = url
+        add_solid_transparent_hyperlink(slide6, x, y, w, h, url)
         print(f"Added PPTX full-surface clickable hotspot: {name} -> {url}")
 
     out_pptx = "Golden_Hour_SIH26133_Presentation.pptx"
@@ -86,10 +99,21 @@ def build_final_pdf():
     pdf_path = r"C:\Users\Admin\.gemini\antigravity\brain\160a95f8-5e11-42e1-8655-2a7f95c1d2d8\.user_uploaded\media_1791143357210.pdf"
     doc = fitz.open(pdf_path)
 
-    # 1. Update Page 3 (Technical Approach) with sharp high-res image
+    # 1. Update Page 3 (Technical Approach) with sharp high-res image & clickable QR links
     p3 = doc[2]
     p3.replace_image(59, filename="enhanced_techstack_sharp.png")
-    print("Replaced Page 3 image in PDF with high-res sharp version.")
+    # Add clickable QR links on Page 3
+    p3.insert_link({
+        "kind": fitz.LINK_URI,
+        "from": fitz.Rect(610.0, 405.0, 695.0, 500.0),
+        "uri": "https://drive.google.com/file/d/1DjNVllfmDO0dMCmqSco1yLzNUFJ_s1Ie/view?usp=drivesdk"
+    })
+    p3.insert_link({
+        "kind": fitz.LINK_URI,
+        "from": fitz.Rect(705.0, 405.0, 790.0, 500.0),
+        "uri": "https://youtu.be/xpn0V2G659g?si=DTu2QmqTG9jVX1Li"
+    })
+    print("Replaced Page 3 image and added clickable QR code links in PDF.")
 
     # 2. Update Page 6 (Research & References) with full-card links
     page6 = doc[5]
