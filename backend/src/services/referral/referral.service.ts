@@ -12,14 +12,20 @@ class ReferralService {
       throw new AppError(400, "MISSING_FIELDS", "patientId, doctorId, hospitalId, and reason are required.");
     }
 
-    // 1. Check for recent pending referral for same patient & hospital
+    // Check for rapid double-click submissions (within 3 seconds)
     for (const existing of this.inMemoryReferrals.values()) {
       if (
-        existing.status === "PENDING" &&
         existing.hospitalId === data.hospitalId &&
         (existing.patientId === data.patientId || (existing.patientName && data.patientName && existing.patientName.toLowerCase().trim() === data.patientName.toLowerCase().trim()))
       ) {
-        return existing;
+        const diffMs = Math.abs(Date.now() - new Date(existing.createdAt || 0).getTime());
+        if (diffMs < 3000) {
+          return existing;
+        }
+        if (existing.status === "PENDING") {
+          existing.status = "RESOLVED" as any;
+          existing.updatedAt = new Date().toISOString();
+        }
       }
     }
 
@@ -27,15 +33,13 @@ class ReferralService {
       try {
         const snap = await firestore
           .collection("referrals")
-          .where("hospitalId", "==", data.hospitalId)
           .where("patientId", "==", data.patientId)
           .get();
 
         for (const doc of snap.docs) {
           const item = doc.data() as DoctorReferral;
-          if (item && (item.status === "PENDING" || item.status === "ACCEPTED")) {
-            this.inMemoryReferrals.set(doc.id, item);
-            return item;
+          if (item && item.status === "PENDING") {
+            await doc.ref.set({ status: "RESOLVED", updatedAt: new Date().toISOString() }, { merge: true });
           }
         }
       } catch {}
