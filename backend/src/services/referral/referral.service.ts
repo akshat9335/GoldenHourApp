@@ -75,14 +75,21 @@ class ReferralService {
 
   public async getReferralsByHospital(hospitalId: string): Promise<DoctorReferral[]> {
     const resultMap = new Map<string, DoctorReferral>();
+    const normHosp = (hospitalId || "").toLowerCase().trim();
+    const isDemoHosp = normHosp === "hosp-srn-prayagraj" || normHosp === "hosp-demo-apollo" || normHosp.includes("demo") || normHosp === "all" || !normHosp;
 
     // 1. Fetch Doctor-to-Hospital referrals
     if (firestore && process.env.NODE_ENV !== "test") {
       try {
-        const snap = await firestore
-          .collection("referrals")
-          .where("hospitalId", "==", hospitalId)
-          .get();
+        let snap;
+        if (isDemoHosp) {
+          snap = await firestore.collection("referrals").get();
+        } else {
+          snap = await firestore
+            .collection("referrals")
+            .where("hospitalId", "==", hospitalId)
+            .get();
+        }
 
         for (const doc of snap.docs) {
           const item = doc.data() as DoctorReferral;
@@ -96,7 +103,17 @@ class ReferralService {
     }
 
     for (const ref of this.inMemoryReferrals.values()) {
-      if (ref.hospitalId === hospitalId || hospitalId === "all" || ref.hospitalId.includes(hospitalId) || hospitalId.includes(ref.hospitalId)) {
+      const normRefHosp = (ref.hospitalId || "").toLowerCase().trim();
+      const normRefName = (ref.hospitalName || "").toLowerCase().trim();
+      const isDocMatch =
+        isDemoHosp ||
+        normRefHosp === normHosp ||
+        (normRefHosp && (normRefHosp.includes(normHosp) || normHosp.includes(normRefHosp))) ||
+        (normRefName && (normRefName.includes(normHosp) || normHosp.includes(normRefName))) ||
+        (normHosp.includes("srn") && (normRefName.includes("srn") || normRefName.includes("swaroop"))) ||
+        (normHosp.includes("apollo") && (normRefName.includes("apollo") || normRefHosp.includes("apollo")));
+
+      if (isDocMatch) {
         if (ref.patientName && ref.patientName !== "undefined") {
           resultMap.set(ref.id, ref);
         }
@@ -110,16 +127,22 @@ class ReferralService {
         for (const doc of commSnap.docs) {
           const item = doc.data() as any;
           if (item && item.id) {
-            const isMatch =
-              hospitalId === "all" ||
-              item.hospitalId === hospitalId ||
-              (item.hospitalId && (item.hospitalId.includes(hospitalId) || hospitalId.includes(item.hospitalId))) ||
-              (item.destinationFacility && (
-                item.destinationFacility.toLowerCase().includes(hospitalId.toLowerCase()) ||
-                hospitalId.toLowerCase().includes(item.destinationFacility.toLowerCase())
-              ));
+            const normDest = (item.destinationFacility || "").toLowerCase().trim();
+            const normItemHosp = (item.hospitalId || "").toLowerCase().trim();
 
-            if (isMatch) {
+            const isCommMatch =
+              isDemoHosp ||
+              normItemHosp === normHosp ||
+              (normItemHosp && (normItemHosp.includes(normHosp) || normHosp.includes(normItemHosp))) ||
+              (normDest && normHosp && (normDest.includes(normHosp) || normHosp.includes(normDest))) ||
+              (normHosp.includes("srn") && (normDest.includes("srn") || normDest.includes("swaroop") || normDest.includes("district") || normDest.includes("trauma") || normItemHosp.includes("srn"))) ||
+              (normHosp.includes("apollo") && (normDest.includes("apollo") || normItemHosp.includes("apollo"))) ||
+              (normHosp.includes("medanta") && (normDest.includes("medanta") || normItemHosp.includes("medanta"))) ||
+              (normHosp.includes("saket") && (normDest.includes("saket") || normItemHosp.includes("saket"))) ||
+              (normHosp.includes("kamla") && (normDest.includes("kamla") || normItemHosp.includes("kamla"))) ||
+              (normHosp.includes("naini") && (normDest.includes("naini") || normItemHosp.includes("naini")));
+
+            if (isCommMatch) {
               const mapped: DoctorReferral = {
                 id: item.id,
                 patientId: item.patientId,
@@ -137,7 +160,6 @@ class ReferralService {
                 createdAt: item.createdAt || new Date().toISOString(),
                 updatedAt: item.updatedAt || new Date().toISOString(),
               };
-              // Overwrite or add: communityReferral has richer information for ASHA patients
               resultMap.set(item.id, mapped);
             }
           }
@@ -151,16 +173,22 @@ class ReferralService {
     if (dataStore && dataStore.communityReferrals) {
       for (const item of dataStore.communityReferrals.values() as any) {
         if (!resultMap.has(item.id)) {
-          const isMatch =
-            hospitalId === "all" ||
-            item.hospitalId === hospitalId ||
-            (item.hospitalId && (item.hospitalId.includes(hospitalId) || hospitalId.includes(item.hospitalId))) ||
-            (item.destinationFacility && (
-              item.destinationFacility.toLowerCase().includes(hospitalId.toLowerCase()) ||
-              hospitalId.toLowerCase().includes(item.destinationFacility.toLowerCase())
-            ));
+          const normDest = (item.destinationFacility || "").toLowerCase().trim();
+          const normItemHosp = (item.hospitalId || "").toLowerCase().trim();
 
-          if (isMatch) {
+          const isCommMatch =
+            isDemoHosp ||
+            normItemHosp === normHosp ||
+            (normItemHosp && (normItemHosp.includes(normHosp) || normHosp.includes(normItemHosp))) ||
+            (normDest && normHosp && (normDest.includes(normHosp) || normHosp.includes(normDest))) ||
+            (normHosp.includes("srn") && (normDest.includes("srn") || normDest.includes("swaroop") || normDest.includes("district") || normDest.includes("trauma") || normItemHosp.includes("srn"))) ||
+            (normHosp.includes("apollo") && (normDest.includes("apollo") || normItemHosp.includes("apollo"))) ||
+            (normHosp.includes("medanta") && (normDest.includes("medanta") || normItemHosp.includes("medanta"))) ||
+            (normHosp.includes("saket") && (normDest.includes("saket") || normItemHosp.includes("saket"))) ||
+            (normHosp.includes("kamla") && (normDest.includes("kamla") || normItemHosp.includes("kamla"))) ||
+            (normHosp.includes("naini") && (normDest.includes("naini") || normItemHosp.includes("naini")));
+
+          if (isCommMatch) {
             resultMap.set(item.id, {
               id: item.id,
               patientId: item.patientId,
@@ -183,12 +211,11 @@ class ReferralService {
       }
     }
 
-    // Deduplicate by patient: keep only the most recent active referral per patient
+    // Deduplicate by patient: keep only the most recent active referral per patient per source (ASHA vs Doctor)
     const patientMap = new Map<string, DoctorReferral>();
     for (const ref of resultMap.values()) {
-      const patientKey = (ref.patientId && !ref.patientId.startsWith('demo-') && !ref.patientId.startsWith('patient-token-'))
-        ? ref.patientId
-        : (ref.patientName || '').toLowerCase().trim();
+      const sourcePrefix = ((ref.doctorName || '').toLowerCase().includes('asha') || ref.doctorId === 'asha-worker' || (ref.id && ref.id.includes('comm'))) ? 'asha' : 'doc';
+      const patientKey = `${sourcePrefix}_${(ref.patientId && !ref.patientId.startsWith('demo-') && !ref.patientId.startsWith('patient-token-')) ? ref.patientId : (ref.patientName || '').toLowerCase().trim()}`;
 
       const existing = patientMap.get(patientKey);
       if (!existing) {
