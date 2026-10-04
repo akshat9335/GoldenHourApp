@@ -229,7 +229,10 @@ export class QueueService {
    */
   public async resetQueue(doctorId: string, cancelUnserved: boolean = true): Promise<LiveQueueState> {
     const today = new Date().toISOString().split("T")[0];
-    const docIds = this.getDoctorAliases(doctorId);
+    const docIds = Array.from(new Set([
+      ...this.getDoctorAliases(doctorId),
+      ...(doctorId.includes("1") || doctorId.includes("demo") ? ["doc-1", "1", "doc-demo-1", "demo-1"] : []),
+    ]));
 
     const queue: LiveQueueState = {
       doctorId,

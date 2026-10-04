@@ -15,6 +15,7 @@ import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, Button, LabelEyebrow, Divider, DoctorNav, Icon } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import { clearMessages } from '@/services/teleconsultation';
 
 const statusColor: Record<string, 'success' | 'amber' | 'grey'> = {
   running: 'success',
@@ -307,6 +308,7 @@ export default function DoctorQueue() {
       if (apptId) {
         try {
           await api.appointments.complete(apptId);
+          clearMessages(apptId).catch(() => {});
         } catch (completeErr) {
           console.warn('Appointment complete error:', completeErr);
         }
@@ -348,6 +350,7 @@ export default function DoctorQueue() {
     const applyResetState = () => {
       useAppStore.setState({ servingToken: 0 });
       setAppointments([]);
+      clearMessages(`appt_${doctorId}_1`).catch(() => {});
       fetchQueueData();
     };
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, FlatList, Pressable, StyleSheet } from 'react-native';
 import { colors, radii, shadow } from '@/constants/theme';
 import {
-  subscribeMessages, sendMessage, type ChatMessage,
+  subscribeMessages, sendMessage, clearMessages, type ChatMessage,
 } from '@/services/teleconsultation';
 
 interface Props {
@@ -14,6 +14,7 @@ interface Props {
 export const ChatPanel = ({ consultationId, selfId, selfRole }: Props) => {
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeMessages(consultationId, setMsgs);
@@ -22,16 +23,30 @@ export const ChatPanel = ({ consultationId, selfId, selfRole }: Props) => {
 
   const onSend = async () => {
     const trimmed = draft.trim();
-    if (!trimmed) return;
+    if (!trimmed || isSending) return;
+    setIsSending(true);
     setDraft('');
-    await sendMessage(consultationId, {
-      senderId: selfId, senderRole: selfRole, message: trimmed,
-    });
+    try {
+      await sendMessage(consultationId, {
+        senderId: selfId, senderRole: selfRole, message: trimmed,
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleClear = () => {
+    clearMessages(consultationId).catch(() => {});
   };
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>Consultation Chat</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Consultation Chat</Text>
+        <Pressable onPress={handleClear} style={styles.clearBtn} hitSlop={8}>
+          <Text style={styles.clearText}>Clear / Fresh Chat</Text>
+        </Pressable>
+      </View>
       <FlatList
         data={msgs}
         keyExtractor={(m) => m.id}
@@ -57,8 +72,9 @@ export const ChatPanel = ({ consultationId, selfId, selfRole }: Props) => {
           placeholder="Type a message…"
           value={draft}
           onChangeText={setDraft}
+          onSubmitEditing={onSend}
         />
-        <Pressable onPress={onSend} style={styles.sendBtn}>
+        <Pressable onPress={onSend} style={[styles.sendBtn, isSending && { opacity: 0.6 }]} disabled={isSending}>
           <Text style={{ color: '#fff', fontWeight: '700' }}>Send</Text>
         </Pressable>
       </View>
@@ -68,7 +84,10 @@ export const ChatPanel = ({ consultationId, selfId, selfRole }: Props) => {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.card, borderRadius: radii.lg, ...shadow.card, overflow: 'hidden' },
-  title: { padding: 12, fontWeight: '700', color: colors.ink, borderBottomWidth: 1, borderColor: colors.line },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderColor: colors.line },
+  title: { fontWeight: '700', color: colors.ink, fontSize: 13.5 },
+  clearBtn: { backgroundColor: '#f3f4f6', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6 },
+  clearText: { fontSize: 11, color: colors.inkFaint, fontWeight: '600' },
   list: { flex: 1 },
   bubble: { maxWidth: '80%', padding: 10, borderRadius: radii.md, marginVertical: 4 },
   bubbleOwn: { alignSelf: 'flex-end', backgroundColor: colors.blue },
