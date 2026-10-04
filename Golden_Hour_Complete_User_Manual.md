@@ -1,245 +1,184 @@
-# 🚑 Golden Hour (Project 911) — Complete End-to-End User Manual
+# 🚑 Golden Hour (Project 911) — Complete User Manual
 
-> **Golden Hour** is an AI-powered, mission-critical Emergency Medical Response & Healthcare Interoperability platform. Designed around the crucial first 60 minutes after trauma or acute onset, Golden Hour seamlessly coordinates Citizens/Patients, Ambulance Pilots, Hospital Emergency Rooms, OPD Doctors, and Rural ASHA Sanginis in real time.
+> **Golden Hour** is an AI-powered, mission-critical Emergency Medical Response & Healthcare Interoperability platform. Designed around the crucial first 60 minutes after trauma or acute onset ("The Golden Hour"), it connects Citizens/Patients, Ambulance Pilots, Hospital Emergency Rooms, OPD Doctors, and Rural ASHA Sanginis in real time.
 
 ---
 
 ## 📑 Table of Contents
-1. [Architecture Overview & Role Matrix](#1-architecture-overview--role-matrix)
-2. [Getting Started & Quick Demo Access](#2-getting-started--quick-demo-access)
-3. [Language Selector & Global Role Switching](#3-language-selector--global-role-switching)
+1. [Installation & APK Download](#1-installation--apk-download)
+2. [Quick Demo Credentials & Role Switching](#2-quick-demo-credentials--role-switching)
+3. [Language Selector & Global Navigation](#3-language-selector--global-navigation)
 4. [Role 1: Citizen / Patient Emergency Portal](#4-role-1-citizen--patient-emergency-portal)
-   - 4.1 [One-Tap SOS & Intelligent Safety Countdown](#41-one-tap-sos--intelligent-safety-countdown)
-   - 4.2 [Voice AI SOS with Smart Clinical Verification](#42-voice-ai-sos-with-smart-clinical-verification)
+   - 4.1 [One-Tap SOS & 3-Second Safety Countdown](#41-one-tap-sos--3-second-safety-countdown)
+   - 4.2 [Voice AI SOS with Clinical Validation](#42-voice-ai-sos-with-clinical-validation)
    - 4.3 [False Alarm Cancellation Flow](#43-false-alarm-cancellation-flow)
    - 4.4 [Live Ambulance Telemetry & Route Map](#44-live-ambulance-telemetry--route-map)
-   - 4.5 [Doctor Appointment Accordion / History Dropdown](#45-doctor-appointment-accordion--history-dropdown)
-   - 4.6 [Emergency Medical Profile & ICE Contacts](#46-emergency-medical-profile--ice-contacts)
+   - 4.5 [Doctor Appointment History Dropdown](#45-doctor-appointment-history-dropdown)
+   - 4.6 [Medical Profile & ICE Emergency Contacts](#46-medical-profile--ice-emergency-contacts)
 5. [Role 2: Ambulance Pilot / Driver Console](#5-role-2-ambulance-pilot--driver-console)
-   - 5.1 [Login & Duty State Management](#51-login--duty-state-management)
+   - 5.1 [Duty State Management (On-Duty / Off-Duty)](#51-duty-state-management-on-duty--off-duty)
    - 5.2 [Incoming Emergency Dispatch Acceptance](#52-incoming-emergency-dispatch-acceptance)
    - 5.3 [On-Site Arrival: "Marked at Patient Location"](#53-on-site-arrival-marked-at-patient-location)
    - 5.4 [False Request / "Patient Not Found" Handling](#54-false-request--patient-not-found-handling)
    - 5.5 [Patient Onboard, Live Vitals & ER Handover](#55-patient-onboard-live-vitals--er-handover)
 6. [Role 3: Hospital ER Command Center](#6-role-3-hospital-er-command-center)
-   - 6.1 [Dashboard & Real-Time Capacity Monitoring](#61-dashboard--real-time-capacity-monitoring)
+   - 6.1 [ER Command Center & Live Capacity Monitoring](#61-er-command-center--live-capacity-monitoring)
    - 6.2 [Live Bed, ICU & Oxygen Capacity Controls](#62-live-bed-icu--oxygen-capacity-controls)
    - 6.3 [Incoming Ambulance Triage & Bed Reservation](#63-incoming-ambulance-triage--bed-reservation)
    - 6.4 [Doctor & ASHA Referrals Hub (with Unread Bell Badge)](#64-doctor--asha-referrals-hub-with-unread-bell-badge)
    - 6.5 [Referral Admission & Bed Freeing on Discharge](#65-referral-admission--bed-freeing-on-discharge)
 7. [Role 4: Doctor OPD Clinic & Teleconsultation](#7-role-4-doctor-opd-clinic--teleconsultation)
-   - 7.1 [Digital OPD Queue & Token Serving](#71-digital-opd-queue--token-serving)
+   - 7.1 [Digital OPD Queue & Token Calling](#71-digital-opd-queue--token-calling)
    - 7.2 [Clinical Consultation, Vitals & Prescriptions](#72-clinical-consultation-vitals--prescriptions)
-   - 7.3 [Hospital Referral with Severity & Facility Selection](#73-hospital-referral-with-severity--facility-selection)
-   - 7.4 [Live WebRTC / Audio-Visual Teleconsultation](#74-live-webrtc--audio-visual-teleconsultation)
+   - 7.3 [Hospital Referral with Priority & Hospital Selection](#73-hospital-referral-with-priority--hospital-selection)
+   - 7.4 [Live Video / Audio Teleconsultation](#74-live-video--audio-teleconsultation)
 8. [Role 5: ASHA Sangini / Rural Frontline Health Worker](#8-role-5-asha-sangini--rural-frontline-health-worker)
-   - 8.1 [Community Patient Registry & Search](#81-community-patient-registry--search)
-   - 8.2 [Home Visit Logging & Vitals Screening](#82-home-visit-logging--vitals-screening)
-   - 8.3 [Dual-Language AI Clinical Guidance (Hindi & English)](#83-dual-language-ai-clinical-guidance-hindi--english)
+   - 8.1 [Rural Community Patient Directory & Search](#81-rural-community-patient-directory--search)
+   - 8.2 [Home Visit Logging & Point-of-Care Vitals](#82-home-visit-logging--point-of-care-vitals)
+   - 8.3 [Dual-Language AI Guidance (Hindi & English)](#83-dual-language-ai-guidance-hindi--english)
    - 8.4 [Digital Referral to PHC / District Hospital](#84-digital-referral-to-phc--district-hospital)
    - 8.5 [Offline-First Sync Engine](#85-offline-first-sync-engine)
 9. [Role 6: Medical Administrator & Authority Dashboard](#9-role-6-medical-administrator--authority-dashboard)
-10. [Troubleshooting & Evaluation Verification Guide](#10-troubleshooting--evaluation-verification-guide)
+10. [Troubleshooting & Verification Guide](#10-troubleshooting--verification-guide)
 
 ---
 
-## 1. Architecture Overview & Role Matrix
+## 1. Installation & APK Download
 
-```mermaid
-flowchart TD
-    subgraph CorePlatform ["Golden Hour Central Backend Engine"]
-        CloudDB[("Firestore Cloud DB + In-Memory Fallback")]
-        DispatchEngine["Emergency Dispatch & Geo-Matching Service"]
-        ReferralEngine["Inter-Facility Referral Pipeline"]
-        CapacityEngine["Hospital Bed & ICU Live Ledger"]
-    end
-
-    Patient["1. Citizen / Patient\n(Mobile App)"] <-->|SOS Alert / Tracking| DispatchEngine
-    Driver["2. Ambulance Pilot\n(Mobile App)"] <-->|GPS Telemetry & Vitals| DispatchEngine
-    Hospital["3. Hospital ER Desk\n(Tablet / Web)"] <-->|Bed Reservation & Referrals| CapacityEngine
-    Doctor["4. OPD Clinic Doctor\n(Mobile / Tablet)"] <-->|Prescriptions & Referrals| ReferralEngine
-    ASHA["5. ASHA Sangini\n(Mobile App - Offline First)"] <-->|Rural Screening & Referrals| ReferralEngine
-    Admin["6. Medical Authority\n(Desktop Admin Portal)"] <-->|Provider Audits & Analytics| CloudDB
-```
+### 📲 Standalone Android Application
+1. Download the pre-built Golden Hour APK package using your provided APK download link or QR code.
+2. Tap on the downloaded `.apk` file on your Android device.
+3. If prompted, allow **"Install unknown apps"** in Android Settings.
+4. Launch the **Golden Hour** app from your home screen or app drawer.
+5. On the first launch, allow **Location Permissions ("While using the app")** to enable live emergency matching and ambulance telemetry.
 
 ---
 
-## 2. Getting Started & Quick Demo Access
+## 2. Quick Demo Credentials & Role Switching
 
-### 2.1 Launching the Application
-Run the Expo development bundler from the project root:
-```bash
-npx expo start -c
-```
-Scan the QR code with **Expo Go** on Android/iOS, or install the compiled standalone Android APK.
+For testing, presentations, and jury review, each role includes a **1-Tap Quick Demo Button** on its login screen (no passwords, OTPs, or setup needed):
 
-### 2.2 Instant Demo Bypasses (No Registration Required)
-For jury reviews, hackathons, and rapid evaluation, every login screen is equipped with a dedicated **Quick Demo Button**:
-
-| Role | Screen Route | Demo Button Label | Pre-configured Identity |
+| Role | Screen Route | Demo Button | Pre-loaded Profile Details |
 | :--- | :--- | :--- | :--- |
-| **Patient** | `/login` | `Explore as Demo Patient` | Rahul Sharma (`+91 98765 43210`) |
-| **Ambulance** | `/driver-login` | `Quick Demo Pilot` | Rajesh Kumar (Ambulance `UP-70-EMG-108`) |
-| **Hospital** | `/hospital-login` | `Quick Demo Hospital` | Apollo Multi-Specialty Hospital / SRN Trauma Center |
-| **Doctor** | `/doctor-login` | `Quick Demo Doctor` | Dr. Priya Sharma, MD (Civil Lines OPD Clinic) |
-| **ASHA Worker** | `/asha-login` | `Quick Demo ASHA` | Sunita Verma (ASHA Sangini, Prayagraj Rural) |
-| **Admin** | `/admin-dashboard` | Direct role select | Chief Medical Officer (CMO Console) |
+| **Citizen / Patient** | `/login` | `Explore as Demo Patient` | **Rahul Sharma** (`+91 98765 43210`, Blood Group: O+) |
+| **Ambulance Pilot** | `/driver-login` | `Quick Demo Pilot` | **Rajesh Kumar** (Ambulance `UP-70-EMG-108`) |
+| **Hospital ER Desk** | `/hospital-login` | `Quick Demo Hospital` | **Apollo Multi-Specialty** / **SRN Trauma Center** |
+| **OPD Doctor** | `/doctor-login` | `Quick Demo Doctor` | **Dr. Priya Sharma, MD** (Civil Lines OPD Clinic) |
+| **ASHA Worker** | `/asha-login` | `Quick Demo ASHA` | **Sunita Verma** (ASHA Sangini, Prayagraj Rural) |
+| **Medical Admin** | `/admin-dashboard` | Role Select screen | **Chief Medical Officer (CMO Console)** |
 
 ---
 
-## 3. Language Selector & Global Role Switching
+## 3. Language Selector & Global Navigation
 
-### 🌐 Trilingual Support
-- **Top-Right Language Toggle:** Available across all screens.
-- **Languages:** **English**, **हिंदी (Hindi)**, and **मराठी (Marathi)**.
-- Switching language instantly translates buttons, badges, medical advice, and notification banners.
-
-### 🔄 One-Tap Role Switching
-- Every dashboard features a **‹ Back / Switch Role** button at the top-left corner.
-- Tapping it opens an action sheet allowing you to log out or jump immediately to another role without re-entering credentials.
+- **Trilingual Localization:** Tap the **Globe icon** at the top-right corner of any screen to toggle between **English**, **हिंदी (Hindi)**, and **मराठी (Marathi)**. All clinical instructions, badges, and interface copy translate instantly.
+- **One-Tap Role Switching:** Tap the **‹ Back / Switch Role** button at the top-left of any dashboard to log out or jump immediately to another role.
 
 ---
 
 ## 4. Role 1: Citizen / Patient Emergency Portal
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Patient / Bystander
-    participant App as Golden Hour App
-    participant Backend as Dispatch Engine
-    actor Pilot as Nearest Ambulance
+![Patient Emergency Portal](patient_voice_sos_1790928620228.jpg)
 
-    User->>App: Press SOS Button
-    App->>App: 3-Second Abort Countdown
-    App->>Backend: Transmit GPS (Lat/Lng) + Medical Profile + Severity
-    Backend->>Pilot: Push High-Priority Emergency Sound & Notification
-    Pilot->>Backend: Accept Emergency
-    Backend->>App: Live Ambulance Stream (Driver Name, Plate, ETA)
-    App->>User: Display Live GPS Route Map & Dynamic ETA
-```
+### 4.1 One-Tap SOS & 3-Second Safety Countdown
+- Tap the pulsating red **"SOS EMERGENCY"** button on the home screen.
+- A 3-second safety countdown initiates with an audible vibration.
+- When the countdown finishes, GPS coordinates, medical history, blood group, and emergency contacts are immediately transmitted to the closest active ambulance and trauma hospital.
 
-### 4.1 One-Tap SOS & Intelligent Safety Countdown
-1. **Trigger:** Tap the pulsating red **"SOS EMERGENCY"** button on the home screen.
-2. **Safety Countdown:** A 3-second safety window gives you time to cancel accidental touches.
-3. **Automated Dispatch:** Once 0 is reached, the system packages your precise GPS coordinates, pre-existing conditions, allergies, and blood group, dispatching to the closest active ambulance and trauma hospital.
-
-### 4.2 Voice AI SOS with Smart Clinical Verification
-- Tap the **Voice SOS Microphone** or enter symptoms via speech-to-text (e.g., *"Severe crushing chest pain and breathlessness"*).
-- **Clinical Verification:** Casual queries (e.g., *"What is paracetamol?"*) are handled without triggering emergency alarms. Genuine medical crises (accidents, heart attacks, stroke symptoms) immediately activate ambulance dispatch.
+### 4.2 Voice AI SOS with Clinical Validation
+- Tap the **Voice SOS Microphone** or enter symptoms via speech-to-text (e.g., *"Severe crushing chest pain radiating to left arm"*).
+- **Smart Clinical Validation:** Non-emergency queries (e.g., *"What is paracetamol?"*) are handled conversationally without triggering emergency alarms. Genuine medical crises (accidents, heart attacks, stroke) trigger automated emergency dispatch.
 
 ### 4.3 False Alarm Cancellation Flow
-- If triggered inadvertently:
-  1. Tap **"Cancel Emergency (False Alarm)"**.
-  2. Select an option (*Accidental Press*, *Resolved Independently*, *Testing*).
-  3. The dispatched ambulance is instantly notified, preventing wasted emergency resources.
+- If triggered accidentally, tap **"Cancel Emergency (False Alarm)"**.
+- Select the cancellation reason (*Accidental Press*, *Resolved Independently*, *Testing*).
+- Dispatched units are notified immediately, preventing wasted emergency runs.
 
 ### 4.4 Live Ambulance Telemetry & Route Map
-- Once accepted:
-  - **Live GPS Map:** Shows the ambulance vehicle approaching your location in real time.
-  - **Dynamic ETA:** Recalculated dynamically as the ambulance navigates city traffic.
-  - **Driver Identity:** Displays driver name, phone number, and vehicle registration.
+- Once an ambulance accepts:
+  - **Live GPS Map:** Real-time movement of the ambulance approaching your location.
+  - **Dynamic ETA:** Recalculates dynamically with traffic conditions.
+  - **Pilot Identity:** Displays pilot name, mobile number, and vehicle registration.
 
-### 4.5 Doctor Appointment Accordion / History Dropdown
-- Located on the Patient Home Dashboard.
-- **Upcoming Appointments:** Displayed at the top with queue token numbers.
+### 4.5 Doctor Appointment History Dropdown
+- Upcoming appointments are shown with token queue numbers.
 - **Past Clinical Encounters:** Collapsed in a clean **Dropdown/Accordion** to prevent clutter. Tapping expands past consultations, diagnoses, and digital prescriptions.
 
-### 4.6 Emergency Medical Profile & ICE Contacts
-- **Medical Setup (`/medical-setup`):** Stores Blood Type, Chronic Conditions (Hypertension, Diabetes, Asthma), Allergies, and Current Medications.
-- **ICE Contacts (`/contacts-setup`):** Configures primary family emergency contacts who receive automatic SOS SMS notifications with your live GPS location.
+### 4.6 Medical Profile & ICE Emergency Contacts
+- **Medical Setup (`/medical-setup`):** Stores Blood Group, Chronic Conditions, Allergies, and Current Medications.
+- **ICE Contacts (`/contacts-setup`):** Stores primary family contacts who receive automatic SOS SMS alerts with live GPS tracking links.
 
 ---
 
 ## 5. Role 2: Ambulance Pilot / Driver Console
 
-```mermaid
-stateDiagram-v2
-    [*] --> Idle: Driver Logs In (On Duty)
-    Idle --> EmergencyAlert: Incoming SOS Dispatch
-    EmergencyAlert --> EnRouteToPatient: Accept Emergency
-    EmergencyAlert --> Idle: Reject / Timeout
-    EnRouteToPatient --> AtPatientLocation: Tap "Marked at Patient Location"
-    AtPatientLocation --> FalseAlarmCancelled: Tap "Patient Not Found / False Request"
-    FalseAlarmCancelled --> Idle: Trip Reset Without Penalty
-    AtPatientLocation --> EnRouteToHospital: Tap "Patient Onboard"
-    EnRouteToHospital --> TripCompleted: Tap "Complete Handover at ER Gate"
-    TripCompleted --> Idle: Ready for Next Mission
-```
+![Ambulance Pilot Console](ambulance_pilot_telemetry_1790928727636.jpg)
 
-### 5.1 Login & Duty State Management
+### 5.1 Duty State Management (On-Duty / Off-Duty)
 1. Open **Driver Login** ➔ Tap **"Quick Demo Pilot"**.
-2. Toggle the **"ON DUTY"** switch at the top. When green, the vehicle is discoverable by the dispatch engine.
+2. Toggle the switch at the top to **"ON DUTY"** to receive proximity dispatches.
 
 ### 5.2 Incoming Emergency Dispatch Acceptance
-- When an emergency matches your proximity:
+- When an emergency occurs nearby:
   - An audible alert sounds with an Emergency Dispatch Card.
   - Card displays: Patient Name, Incident Nature (Cardiac, Trauma, Burn), Distance, and ETA.
   - Tap **"Accept Emergency"**.
 
 ### 5.3 On-Site Arrival: "Marked at Patient Location"
-- Follow GPS turn-by-turn navigation.
-- Upon pulling up to the scene, tap **"Marked at Patient Location"**.
-- This updates both the patient and receiving hospital dashboards that paramedics have arrived on site.
+- Follow GPS turn-by-turn routing.
+- When reaching the patient's coordinates, tap **"Marked at Patient Location"**.
+- This updates both the patient and the hospital ER desk that paramedics are on-scene.
 
 ### 5.4 False Request / "Patient Not Found" Handling
 - If the patient is missing or the call was fraudulent:
   1. Tap **"Patient Not Found / False Request"**.
-  2. Confirm the reason in the prompt.
-  3. The trip terminates with status `FALSE_ALARM`, and the ambulance returns to active standby immediately.
+  2. Select the reason.
+  3. The trip terminates with status `FALSE_ALARM` without penalizing the driver, returning the ambulance to active standby.
 
 ### 5.5 Patient Onboard, Live Vitals & ER Handover
 1. Once stabilized inside the ambulance, tap **"Patient Onboard ➔ En Route to Hospital"**.
 2. Stream vitals (BP, SpO2, Pulse) directly to the receiving trauma center.
-3. At the ER bay, tap **"Complete Handover & Trip"**. The ER desk receives clinical custody of the patient.
+3. At the ER bay, tap **"Complete Handover & Trip"** to hand over clinical custody.
 
 ---
 
 ## 6. Role 3: Hospital ER Command Center
 
-```mermaid
-flowchart LR
-    A["Doctor or ASHA Worker\nSubmits Referral"] -->|Instant WebSocket / DB Push| B["Hospital Header\nBell Icon Badge: 1"]
-    B -->|ER Desk Clicks Bell| C["'Doctor / Community Referrals' Tab\n(Badge Cleared to 0)"]
-    C -->|Review Details & Vitals| D["Click 'Accept & Reserve Bed'\n(1 Bed Reserved)"]
-    D -->|Patient Transferred to ER| E["Click 'Patient Arrived / Admit'\n(Status: ADMITTED)"]
-    E -->|Treatment Concluded| F["Click 'Discharge & Free Bed'\n(1 Bed Released to Ledger)"]
-```
+![Hospital ER Command Center](hospital_er_dashboard_1790928700037.jpg)
 
-### 6.1 Dashboard & Real-Time Capacity Monitoring
-- Displays live statistics:
+### 6.1 ER Command Center & Live Capacity Monitoring
+- Real-time command dashboard displays:
   - **Active Emergency Arrivals**
-  - **Total Bed Count & Available General Beds**
+  - **Total Beds & Available General Beds**
   - **ICU & Ventilator Availability**
   - **In-Transit Ambulance Telemetry**
 
 ### 6.2 Live Bed, ICU & Oxygen Capacity Controls
 - Navigate to the **Capacity** tab.
-- Easily increment or decrement available beds:
+- Increment or decrement available beds with a single tap:
   - `Total Beds` (e.g., 50)
   - `Available General Beds` (e.g., 18)
   - `ICU Beds` (e.g., 12 total, 4 available)
-- Any update syncs instantly across the city network so drivers and doctors refer patients only to facilities with open beds.
+- Updates synchronize across the network so doctors and pilots refer patients only to facilities with open beds.
 
 ### 6.3 Incoming Ambulance Triage & Bed Reservation
-- When an ambulance selects this hospital:
-  - The ER console chimes with patient details and telemetry.
-  - Pre-triage allows doctors to prepare trauma bays before the vehicle arrives.
-  - Tap **"Reserve Bed"** to guarantee bed availability upon arrival.
+- When an inbound ambulance selects this facility:
+  - The ER console chimes with incoming patient vitals.
+  - Tap **"Reserve Bed"** to guarantee bed availability before the patient arrives.
 
 ### 6.4 Doctor & ASHA Referrals Hub (with Unread Bell Badge)
 - Top Navigation: **[Emergencies]** vs **[Doctor / Community Referrals]**.
 - **Unread Notification Bell:**
-  - Whenever a Doctor or rural ASHA worker sends a referral, the header bell icon displays a red **"1"** badge.
-  - Tapping the bell opens the referrals tab and clears the badge.
+  - When a Doctor or rural ASHA worker sends a referral, the header bell icon displays a red **"1"** badge.
+  - Tapping the bell opens the referrals tab and clears the badge to 0.
 - **Referral Cards:**
-  - Shows Patient Name, Referring Provider (*"Dr. Priya Sharma"* or *"Sunita Verma (ASHA Sangini)"*), Priority Badge (*CRITICAL / HIGH / NORMAL*), Patient Vitals snapshot, and clinical notes.
+  - Displays Patient Name, Referring Provider (*"Dr. Priya Sharma"* or *"Sunita Verma (ASHA Sangini)"*), Priority Badge (*CRITICAL / HIGH / NORMAL*), Patient Vitals snapshot, and clinical notes.
   - Deduplication cleanly keeps Doctor and ASHA referrals separated so neither overwrites the other.
 
 ### 6.5 Referral Admission & Bed Freeing on Discharge
 1. **Accept:** Tap **"Accept & Reserve Bed"** ➔ 1 hospital bed is reserved.
 2. **Admit:** When the patient arrives, tap **"Patient Arrived / Admit"** ➔ Status moves to `COMPLETED / ADMITTED`.
-3. **Discharge:** Once treatment or surgery concludes, tap **"Discharge & Free Bed"**.
+3. **Discharge:** When treatment concludes, tap **"Discharge & Free Bed"**.
    - Confirmation prompt verifies release.
    - The reserved bed is released back into the hospital's live bed inventory.
 
@@ -247,50 +186,44 @@ flowchart LR
 
 ## 7. Role 4: Doctor OPD Clinic & Teleconsultation
 
-### 7.1 Digital OPD Queue & Token Serving
+![Doctor OPD & Teleconsultation](teleconsultation_console_1790928673883.jpg)
+
+### 7.1 Digital OPD Queue & Token Calling
 1. Open **Doctor Login** ➔ Tap **"Quick Demo Doctor"**.
 2. Go to **Queue (`/queue`)**:
    - Lists today's queued patients by token (Token #1, #2, #3...).
    - Tap **"Call Next Patient"** to advance the queue and start consultation.
 
 ### 7.2 Clinical Consultation, Vitals & Prescriptions
-- The consultation modal enables quick documentation:
+- The consultation modal enables rapid clinical documentation:
   - **Diagnosis:** Select from standard conditions (e.g., *Acute Angina*, *Typhoid*, *Fracture*) or type custom.
   - **Vitals:** Blood Pressure, Pulse, SpO2, Temperature.
   - **Rx Medications:** Pick from pre-indexed medicines with dosage, frequency (`1-0-1`), and duration.
 
-### 7.3 Hospital Referral with Severity & Facility Selection
+### 7.3 Hospital Referral with Priority & Hospital Selection
 - If the patient requires emergency hospitalization or tertiary care:
   1. Toggle **"Refer Patient to Hospital"** to ON.
   2. Select the destination facility (e.g., *Swaroop Rani Nehru Hospital* or *Apollo Multi-Specialty*).
-  3. Select Priority: **HIGH** (Immediate / Red) or **NORMAL** (Scheduled / Amber).
+  3. Select Priority: **HIGH** (Immediate) or **NORMAL** (Scheduled).
   4. Enter Reason (e.g., *"Urgent ICU bed & emergency cardiac catheterization required"*).
   5. Tap **"Complete Consultation"**.
-  - The digital referral is transmitted instantly to the receiving hospital ER console.
+  - The digital referral transmits instantly to the receiving hospital ER console.
 
-### 7.4 Live WebRTC / Audio-Visual Teleconsultation
+### 7.4 Live Video / Audio Teleconsultation
 - Access remote appointments with rural or home-quarantined patients through HD audio/video consultation with integrated in-call chat.
 
 ---
 
 ## 8. Role 5: ASHA Sangini / Rural Frontline Health Worker
 
-```mermaid
-flowchart TD
-    ASHA["ASHA Worker in Village"] -->|Vitals Screening| Visit["Home Visit Logged\n(BP, Pulse, SpO2, Blood Sugar)"]
-    Visit -->|AI Clinical Triage| AI["Dual-Language AI Engine\n(Severe Hypertension / High Risk Alert)"]
-    AI -->|Actionable Hindi/English Advice| Referral["Create Digital Referral\nDestination: District Hospital (SRN)"]
-    Referral -->|Offline Queue| Storage["Local AsyncStorage Engine"]
-    Storage -->|Network Reconnects| Sync["Auto-Sync to Cloud Firestore\nRef Code: REF-ASHA-XXXX"]
-    Sync -->|Live Push| HospDesk["Hospital ER Referrals Desk"]
-```
+![ASHA Rural Worker Console](asha_rural_console_1790928646305.jpg)
 
-### 8.1 Community Patient Registry & Search
+### 8.1 Rural Community Patient Directory & Search
 - Open **ASHA Login** ➔ Tap **"Quick Demo ASHA"**.
-- View high-risk rural profiles: pregnant women, elderly patients with hypertension, and infants.
+- Access high-risk rural profiles: pregnant women, elderly patients with hypertension, and infants.
 - Search instantly by name or patient ID.
 
-### 8.2 Home Visit Logging & Vitals Screening
+### 8.2 Home Visit Logging & Point-of-Care Vitals
 - Tap **"Log Home Visit"**.
 - Record point-of-care diagnostics:
   - Blood Pressure (e.g., `150/100 mmHg`)
@@ -299,7 +232,7 @@ flowchart TD
   - Random Blood Sugar (`180 mg/dL`)
   - Symptoms Description (e.g., *"Severe headache, chest heaviness"*).
 
-### 8.3 Dual-Language AI Clinical Guidance (Hindi & English)
+### 8.3 Dual-Language AI Guidance (Hindi & English)
 - The system automatically evaluates vitals and provides clear, actionable clinical advice in **Hindi**:
   - *Risk Level: उच्च जोखिम (HIGH)*
   - *Clinical Guidance: मरीज को तुरंत नजदीकी प्राथमिक स्वास्थ्य केंद्र (PHC) या जिला अस्पताल रेफर करें। पर्याप्त आराम दें और पानी पिलाएं।*
@@ -314,7 +247,7 @@ flowchart TD
    - The referral immediately appears in the hospital console's referral queue.
 
 ### 8.5 Offline-First Sync Engine
-- Works seamlessly in rural areas with zero internet connectivity.
+- Works in rural areas with zero internet connectivity.
 - Referrals and visits are persisted in encrypted local storage.
 - An automatic background synchronization worker triggers the moment mobile data or Wi-Fi reconnects.
 
@@ -330,17 +263,12 @@ flowchart TD
 
 ---
 
-## 10. Troubleshooting & Evaluation Verification Guide
+## 10. Troubleshooting & Verification Guide
 
 | Scenario | Root Cause | Solution |
 | :--- | :--- | :--- |
-| **Referral not visible on hospital desk** | Hospital was viewing wrong tab or stale cache | Ensure you are on the **"Doctor / Community Referrals"** tab. Pull down from top to refresh the list. |
+| **Referral not visible on hospital desk** | Viewing wrong tab or stale cache | Ensure you are on the **"Doctor / Community Referrals"** tab. Pull down from top to refresh the list. |
 | **Unread Bell Badge stays at 1** | Referrals screen not opened yet | Tap directly on the Bell Icon in the header; it immediately opens the referrals queue and clears the badge to 0. |
 | **Location permission prompt appears** | GPS disabled on test device | Allow "Precise Location While In Use" in device settings to enable live ambulance routing. |
 | **Quick evaluation across multiple roles** | Switching roles without logging out | Tap the **‹ Back / Switch Role** button at the top-left of any dashboard to instantly select another role. |
 | **Testing with no active internet** | Simulating remote village | Use ASHA or Driver mode freely; all operations queue in offline storage and sync automatically when internet returns. |
-
----
-
-### 🌟 Project Summary
-**Golden Hour** bridges the critical gap between distress calls and hospital doors. Through coordinated AI triage, live hospital bed synchronization, driver false-alarm protection, and rural ASHA connectivity, the platform ensures that no life is lost due to delays during the golden hour.
