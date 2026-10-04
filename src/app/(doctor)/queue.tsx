@@ -351,7 +351,6 @@ export default function DoctorQueue() {
   };
 
   const handleResetQueue = async () => {
-    const unservedCount = waitingAppointments.length;
     const applyResetState = () => {
       useAppStore.setState({ servingToken: 0 });
       setAppointments([]);
@@ -359,55 +358,26 @@ export default function DoctorQueue() {
       fetchQueueData();
     };
 
-    if (unservedCount > 0) {
-      Alert.alert(
-        '⚠️ Active Patients in Queue',
-        `There are currently ${unservedCount} patient(s) waiting in queue. Resetting will reset the serving counter back to 0.\n\nChoose an action:`,
-        [
-          { text: 'Keep Queue', style: 'cancel' },
-          {
-            text: 'Rollover & Reset',
-            onPress: async () => {
-              try {
-                await api.doctors.closeClinicAndRollover();
-                await api.queues.resetQueue(doctorId);
-                applyResetState();
-                Alert.alert('Queue Rolled Over', `${unservedCount} patients shifted to tomorrow's priority list.`);
-              } catch {
-                applyResetState();
-              }
-            },
-          },
-          {
-            text: 'Force Reset',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await api.queues.resetQueue(doctorId);
-                applyResetState();
-              } catch {
-                applyResetState();
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      Alert.alert('Reset Queue', 'Queue is clear. Reset serving token counter back to 0?', [
+    Alert.alert(
+      'Reset OPD Queue',
+      'This will reset the serving token counter back to 0 and clear all completed and waiting appointments for a fresh start.\n\nAre you sure you want to proceed?',
+      [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset to 0',
+          text: 'Reset to 0 (Fresh Start)',
+          style: 'destructive',
           onPress: async () => {
             try {
               await api.queues.resetQueue(doctorId);
               applyResetState();
+              Alert.alert('Queue Reset', 'OPD Queue has been reset back to Token #0.');
             } catch {
               applyResetState();
             }
           },
         },
-      ]);
-    }
+      ]
+    );
   };
 
   return (

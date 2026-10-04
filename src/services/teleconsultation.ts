@@ -290,37 +290,20 @@ export function subscribeMessages(
             ...(d.data() as Omit<ChatMessage, 'id'>),
           }));
 
-          // Strict de-duplication: by doc id, or by exact same sender + content within 3s
+          // Strict de-duplication: by doc id, or by exact same sender + content within 4s
           const deduped: ChatMessage[] = [];
           const seenIds = new Set<string>();
           for (const m of remoteMsgs) {
             if (seenIds.has(m.id)) continue;
             const isDup = deduped.some(
               (prev) =>
-                prev.senderId === m.senderId &&
+                prev.senderRole === m.senderRole &&
                 prev.message.trim() === m.message.trim() &&
-                Math.abs(prev.createdAt - m.createdAt) < 3000
+                Math.abs(prev.createdAt - m.createdAt) < 4000
             );
             if (!isDup) {
               seenIds.add(m.id);
               deduped.push(m);
-            }
-          }
-
-          // Merge any optimistic local messages that haven't synced yet
-          const existing = localMessageStore.get(consultationId) || [];
-          for (const loc of existing) {
-            if (!seenIds.has(loc.id)) {
-              const alreadyHas = deduped.some(
-                (prev) =>
-                  prev.senderId === loc.senderId &&
-                  prev.message.trim() === loc.message.trim() &&
-                  Math.abs(prev.createdAt - loc.createdAt) < 3000
-              );
-              if (!alreadyHas) {
-                seenIds.add(loc.id);
-                deduped.push(loc);
-              }
             }
           }
 
@@ -358,23 +341,29 @@ export async function sendMessage(
     createdAt: Date.now(),
   };
 
-  // 1. Optimistic append & notify listeners instantly
-  const existing = localMessageStore.get(consultationId) || [];
-  const updated = [...existing, newMsg];
-  localMessageStore.set(consultationId, updated);
-  messageListeners.get(consultationId)?.forEach((fn) => fn(updated));
+  const db = await getDb();
+  if (!db) {
+    // In-memory fallback if Firestore is not available
+    const existing = localMessageStore.get(consultationId) || [];
+    const updated = [...existing, newMsg];
+    localMessageStore.set(consultationId, updated);
+    messageListeners.get(consultationId)?.forEach((fn) => fn(updated));
+    return;
+  }
 
-  // 2. Persist to Firestore with the EXACT SAME ID so remote snapshot never duplicates!
+  // When Firestore is active, writing triggers onSnapshot instantly on local device with 0 latency
   try {
-    const db = await getDb();
-    if (db) {
-      await setDoc(doc(db, 'teleconsultations', consultationId, 'messages', newMsgId), {
-        ...msg,
-        createdAt: newMsg.createdAt,
-      });
-    }
+    await setDoc(doc(db, 'teleconsultations', consultationId, 'messages', newMsgId), {
+      ...msg,
+      createdAt: newMsg.createdAt,
+    });
   } catch (err) {
     console.warn('[teleconsultation] sendMessage Firestore persist warn:', err);
+    // Fallback if write fails
+    const existing = localMessageStore.get(consultationId) || [];
+    const updated = [...existing, newMsg];
+    localMessageStore.set(consultationId, updated);
+    messageListeners.get(consultationId)?.forEach((fn) => fn(updated));
   }
 }
 

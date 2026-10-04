@@ -280,47 +280,22 @@ export class QueueService {
       }
     }
 
-    // 3. Update appointments in memory & archive previous completed appointments
-    const now = new Date().toISOString();
-    for (const appt of dataStore.appointments.values()) {
+    // 3. Purge appointments in memory for this doctor completely
+    for (const appt of Array.from(dataStore.appointments.values())) {
       if (docIds.includes(appt.doctorId)) {
-        if (appt.status === "COMPLETED") {
-          appt.isArchived = true;
-          appt.updatedAt = now;
-          dataStore.appointments.set(appt.appointmentId, appt);
-        } else if (cancelUnserved && appt.status !== "CANCELLED") {
-          appt.status = "CANCELLED";
-          appt.notes = (appt.notes ? `${appt.notes} · ` : "") + "[Cancelled during queue reset]";
-          appt.updatedAt = now;
-          dataStore.appointments.set(appt.appointmentId, appt);
-        }
+        dataStore.appointments.delete(appt.appointmentId);
       }
     }
 
-    // 4. Firestore query & batch update
+    // 4. Firestore query & permanent deletion of appointments and teleconsultations
     if (firestore && process.env.NODE_ENV !== "test") {
       try {
         const snap = await firestore.collection("appointments").where("doctorId", "in", docIds).get();
         const batch = firestore.batch();
         let count = 0;
         for (const doc of snap.docs) {
-          const appt = doc.data() as Appointment;
-          if (appt.status === "COMPLETED") {
-            batch.set(doc.ref, { isArchived: true, updatedAt: now }, { merge: true });
-            count++;
-          } else if (cancelUnserved && appt.status !== "CANCELLED") {
-            const updatedNotes = (appt.notes ? `${appt.notes} · ` : "") + "[Cancelled during queue reset]";
-            batch.set(
-              doc.ref,
-              {
-                status: "CANCELLED",
-                notes: updatedNotes,
-                updatedAt: now,
-              },
-              { merge: true }
-            );
-            count++;
-          }
+          batch.delete(doc.ref);
+          count++;
         }
         if (count > 0) {
           await batch.commit();
@@ -332,7 +307,7 @@ export class QueueService {
           await tcDoc.ref.delete().catch(() => {});
         }
       } catch (err) {
-        console.warn("[queueService] Error archiving/cancelling Firestore appointments on reset:", err);
+        console.warn("[queueService] Error deleting Firestore appointments on reset:", err);
       }
     }
 
