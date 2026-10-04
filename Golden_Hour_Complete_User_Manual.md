@@ -1,4 +1,4 @@
-# 🚑 Golden Hour (Project 911) — Complete User Manual
+# 🚑 Golden Hour — Complete User Manual
 
 > **Golden Hour** is an AI-powered, mission-critical Emergency Medical Response & Healthcare Interoperability platform. Designed around the crucial first 60 minutes after trauma or acute onset ("The Golden Hour"), it connects Citizens/Patients, Ambulance Pilots, Hospital Emergency Rooms, OPD Doctors, and Rural ASHA Sanginis in real time.
 
@@ -276,4 +276,4 @@ For rapid evaluation and live presentations without entering passwords or receiv
 ---
 
 ### 🌟 Project Mission
-**Golden Hour (Project 911)** bridges the critical divide between distress calls and hospital doors. Through coordinated AI triage, live hospital bed synchronization, driver false-alarm protection, and rural ASHA connectivity, the platform ensures that no life is lost due to delays during the golden hour.
+**Golden Hour** bridges the critical divide between distress calls and hospital doors. Through coordinated AI triage, live hospital bed synchronization, driver false-alarm protection, and rural ASHA connectivity, the platform ensures that no life is lost due to delays during the golden hour.

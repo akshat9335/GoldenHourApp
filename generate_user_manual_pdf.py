@@ -45,7 +45,7 @@ class NumberedCanvas(canvas.Canvas):
 
             self.setFont("Helvetica-Bold", 8)
             self.setFillColor(colors.HexColor("#E11D48"))
-            self.drawString(36, 812, "GOLDEN HOUR (PROJECT 911)")
+            self.drawString(36, 812, "GOLDEN HOUR")
 
             self.setFont("Helvetica", 8)
             self.setFillColor(colors.HexColor("#64748B"))
@@ -205,7 +205,7 @@ def create_user_manual_pdf(filename="Golden_Hour_Complete_User_Manual.pdf"):
     badge_html = "<font color='#E11D48'><b>EMERGENCY MEDICAL RESPONSE PLATFORM</b></font> | VERSION 1.0 (PRODUCTION APK BUILD)"
     story.append(Paragraph(badge_html, ParagraphStyle("Badge", fontName="Helvetica-Bold", fontSize=8.5, textColor=colors.HexColor("#E11D48"))))
     story.append(Spacer(1, 3))
-    story.append(Paragraph("🚑 Golden Hour (Project 911)", title_style))
+    story.append(Paragraph("🚑 Golden Hour", title_style))
     story.append(Paragraph("Official Comprehensive User Manual & Operations Guide", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#E11D48"), spaceBefore=2, spaceAfter=7))
 
@@ -902,7 +902,7 @@ def create_user_manual_pdf(filename="Golden_Hour_Complete_User_Manual.pdf"):
     story.append(Spacer(1, 14))
 
     signoff_p = (
-        "<b>Golden Hour (Project 911)</b> bridges the critical divide between distress calls and hospital trauma bays. "
+        "<b>Golden Hour</b> bridges the critical divide between distress calls and hospital trauma bays. "
         "Through coordinated AI triage, live hospital bed synchronization, driver false-alarm protection, and rural "
         "ASHA connectivity, the platform ensures that no life is lost due to delays during the golden hour.<br/><br/>"
         "<b>Architected for India's Healthcare Ecosystem:</b> Fully compliant with ABDM standards, trilingual English/Hindi/Marathi support, "
