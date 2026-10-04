@@ -3,6 +3,7 @@ import { AppError } from "../utils/AppError";
 import {
   transitionTrip,
   getTripHistory,
+  cancelTripAsFalseAlarm,
 } from "../services/ambulance/trip.service";
 
 async function updateTripStatus(
@@ -107,6 +108,31 @@ export async function getTripHistoryController(
       success: true,
       data: trips,
       message: "Trip history fetched successfully.",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function cancelTripController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      throw new AppError(401, "UNAUTHORIZED", "Authentication is required.");
+    }
+    const { reason } = req.body || {};
+    const result = await cancelTripAsFalseAlarm(
+      req.params.id,
+      req.user.uid,
+      reason || "Patient not found / false alarm reported by pilot",
+    );
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: "Trip cancelled as false alarm / patient no-show. Trust penalty applied.",
     });
   } catch (error) {
     next(error);

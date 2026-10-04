@@ -135,34 +135,28 @@ export default function WorkerDashboard() {
             return `sem::${normName}_${p.age || 0}`;
           };
 
-          const idMap = new Map<string, CommunityPatient>();
           const dedupMap = new Map<string, CommunityPatient>();
 
-          // Backend is primary source of truth for IDs & synced timestamps
+          // Backend is primary source of truth for synced profiles
           validBackendList.forEach((p: CommunityPatient) => {
-            idMap.set(p.id, p);
-            dedupMap.set(getDedupKey(p), p);
+            const key = getDedupKey(p);
+            if (!dedupMap.has(key)) {
+              dedupMap.set(key, p);
+            }
           });
 
           // Merge local cache
           localList.forEach((localP: CommunityPatient) => {
             const semKey = getDedupKey(localP);
-            if (idMap.has(localP.id)) {
-              const existing = idMap.get(localP.id)!;
-              idMap.set(localP.id, { ...localP, ...existing });
-            } else if (dedupMap.has(semKey)) {
-              // Same patient registered with local temporary ID vs backend generated ID
-              const existing = dedupMap.get(semKey)!;
-              const merged = { ...localP, ...existing };
-              idMap.set(existing.id, merged);
-              dedupMap.set(semKey, merged);
-            } else {
-              idMap.set(localP.id, localP);
+            if (!dedupMap.has(semKey)) {
               dedupMap.set(semKey, localP);
+            } else {
+              const existing = dedupMap.get(semKey)!;
+              dedupMap.set(semKey, { ...localP, ...existing });
             }
           });
 
-          const merged = Array.from(idMap.values()).sort(
+          const merged = Array.from(dedupMap.values()).sort(
             (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
           );
           setPatients(merged);

@@ -111,6 +111,36 @@ export default function NavigatePatient() {
     });
   };
 
+  const handleCancelFalseAlarm = () => {
+    Alert.alert(
+      'Cancel Mission / Report False Alarm?',
+      'Are you unable to locate the patient, or was this a false emergency call?\n\n• Trip will be terminated\n• Caller trust score will be penalized (-20 points)\n• Ambulance will return to AVAILABLE status',
+      [
+        { text: 'Back to Navigation', style: 'cancel' },
+        {
+          text: 'Confirm False Alarm',
+          style: 'destructive',
+          onPress: async () => {
+            const effectiveTripId = activeTripId || params.tripId;
+            setSubmitting(true);
+            try {
+              if (effectiveTripId) {
+                await api.ambulances.cancelTrip(effectiveTripId, 'Pilot reported false alarm / patient unreachable');
+              } else if (emergencyId) {
+                await api.emergencies.cancel(emergencyId, 'Pilot reported false alarm / patient unreachable');
+              }
+            } catch (_e) {}
+            useAppStore.getState().setActiveTripId(null);
+            useAppStore.getState().setEmergencyId(null);
+            setSubmitting(false);
+            Alert.alert('Mission Cancelled', 'Reported as False Alarm. Trust score penalty applied to caller.');
+            router.replace('/(ambulance)/dashboard');
+          },
+        },
+      ]
+    );
+  };
+
   const parsedPLat = Number(emergency?.location?.latitude) || Number(lastKnownLocation?.latitude) || 28.6139;
   const parsedPLng = Number(emergency?.location?.longitude) || Number(lastKnownLocation?.longitude) || 77.2090;
   const pLat = parsedPLat;
@@ -262,6 +292,25 @@ export default function NavigatePatient() {
               loading={submitting}
               onPress={handleMarkArrived}
             />
+            <TouchableOpacity
+              disabled={submitting}
+              onPress={handleCancelFalseAlarm}
+              style={{
+                marginTop: 10,
+                paddingVertical: 13,
+                borderRadius: 12,
+                borderWidth: 1.5,
+                borderColor: '#EF4444',
+                backgroundColor: '#FEF2F2',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '800' }}>
+                ⚠️ Report False Call / Cancel Mission
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
