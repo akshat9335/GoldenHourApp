@@ -26,17 +26,6 @@ class InMemoryDataStore {
 
   public seedInitialData(): void {
     // Seed Clinics
-    const clinic1: ClinicDetails = {
-      clinicId: "clinic-apollo-cr",
-      clinicName: "Apollo Emergency & Trauma Care Clinic",
-      address: "Plot 14, Sector 18, Connaught Place, New Delhi",
-      lat: 28.6328,
-      lng: 77.2197,
-      phone: "+91-11-23456789",
-      workingHours: "09:00 - 21:00",
-      facilities: ["ECG", "X-Ray", "Emergency Dressing", "Triage Room"],
-    };
-
     const clinic2: ClinicDetails = {
       clinicId: "clinic-max-south",
       clinicName: "Max Care Orthopedic & Trauma Center",
@@ -48,7 +37,6 @@ class InMemoryDataStore {
       facilities: ["Digital X-Ray", "Plaster Room", "Minor OT", "Pharmacy"],
     };
 
-    this.clinics.set(clinic1.clinicId, clinic1);
     this.clinics.set(clinic2.clinicId, clinic2);
 
     // Seed Prayagraj Regional Clinics
@@ -329,29 +317,11 @@ class InMemoryDataStore {
       verified: true,
     };
 
-    const hospBlr3: HospitalFacility = {
-      hospitalId: "hosp-apollo-blr",
-      name: "Apollo Speciality",
-      address: "Jayanagar, Bengaluru",
-      lat: 12.9116,
-      lng: 77.6389,
-      distanceKm: 0,
-      etaMinutes: 0,
-      emergencyCapability: ["Level 2 Trauma", "Cardiac Care", "Pediatric ICU"],
-      availableCapacity: 9,
-      traumaLevel: 2,
-      icuAvailable: true,
-      specialistsAvailable: ["Emergency Physician", "Pediatrician"],
-      diagnosticAvailability: ["CT Scan", "Ultrasound", "Pathology Lab"],
-      verified: true,
-    };
-
     this.hospitals.set(hosp1.hospitalId, hosp1);
     this.hospitals.set(hosp2.hospitalId, hosp2);
     this.hospitals.set(hosp3.hospitalId, hosp3);
     this.hospitals.set(hospBlr1.hospitalId, hospBlr1);
     this.hospitals.set(hospBlr2.hospitalId, hospBlr2);
-    this.hospitals.set(hospBlr3.hospitalId, hospBlr3);
 
     // Seed Prayagraj Regional Registered Hospitals
     const hospPrayag1: HospitalFacility = {
