@@ -12,6 +12,35 @@ class ReferralService {
       throw new AppError(400, "MISSING_FIELDS", "patientId, doctorId, hospitalId, and reason are required.");
     }
 
+    // 1. Check for recent pending referral for same patient & hospital
+    for (const existing of this.inMemoryReferrals.values()) {
+      if (
+        existing.status === "PENDING" &&
+        existing.hospitalId === data.hospitalId &&
+        (existing.patientId === data.patientId || (existing.patientName && data.patientName && existing.patientName.toLowerCase().trim() === data.patientName.toLowerCase().trim()))
+      ) {
+        return existing;
+      }
+    }
+
+    if (firestore && process.env.NODE_ENV !== "test") {
+      try {
+        const snap = await firestore
+          .collection("referrals")
+          .where("hospitalId", "==", data.hospitalId)
+          .where("patientId", "==", data.patientId)
+          .get();
+
+        for (const doc of snap.docs) {
+          const item = doc.data() as DoctorReferral;
+          if (item && (item.status === "PENDING" || item.status === "ACCEPTED")) {
+            this.inMemoryReferrals.set(doc.id, item);
+            return item;
+          }
+        }
+      } catch {}
+    }
+
     const id = `ref-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
 
@@ -154,7 +183,30 @@ class ReferralService {
       }
     }
 
-    return Array.from(resultMap.values()).sort(
+    // Deduplicate by patient: keep only the most recent active referral per patient
+    const patientMap = new Map<string, DoctorReferral>();
+    for (const ref of resultMap.values()) {
+      const patientKey = (ref.patientId && !ref.patientId.startsWith('demo-') && !ref.patientId.startsWith('patient-token-'))
+        ? ref.patientId
+        : (ref.patientName || '').toLowerCase().trim();
+
+      const existing = patientMap.get(patientKey);
+      if (!existing) {
+        patientMap.set(patientKey, ref);
+      } else {
+        const isRefActive = ref.status === 'PENDING' || ref.status === 'ACCEPTED' || ref.status === 'ADMITTED';
+        const isExistActive = existing.status === 'PENDING' || existing.status === 'ACCEPTED' || existing.status === 'ADMITTED';
+        if (isRefActive && !isExistActive) {
+          patientMap.set(patientKey, ref);
+        } else if (isRefActive === isExistActive) {
+          if (new Date(ref.createdAt || 0).getTime() > new Date(existing.createdAt || 0).getTime()) {
+            patientMap.set(patientKey, ref);
+          }
+        }
+      }
+    }
+
+    return Array.from(patientMap.values()).sort(
       (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
     );
   }

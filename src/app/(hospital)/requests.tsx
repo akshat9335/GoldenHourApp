@@ -5,6 +5,7 @@ import { colors } from '@/constants/theme';
 import { Screen, TopBar, Card, Pill, HospitalNav, Icon, Button } from '@/components/ui';
 import { useAppStore } from '@/store/useAppStore';
 import { api } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface HospitalRequestItem {
   id: string;
@@ -70,14 +71,29 @@ export default function HospitalRequests() {
       const res: any = await api.referrals.getHospitalReferrals(hospitalId);
       const raw = Array.isArray(res) ? res : (res?.data || []);
       const seen = new Set<string>();
-      const deduped: any[] = [];
+      const patientMap = new Map<string, any>();
       for (const r of raw) {
         if (!r || !r.id || seen.has(r.id)) continue;
         if (!r.patientName || r.patientName === 'undefined') continue;
         seen.add(r.id);
-        deduped.push(r);
+
+        const patientKey = `${(r.patientName || '').toLowerCase().trim()}_${r.patientId || ''}`;
+        const existing = patientMap.get(patientKey);
+        if (!existing) {
+          patientMap.set(patientKey, r);
+        } else {
+          const isRActive = r.status === 'PENDING' || r.status === 'ACCEPTED' || r.status === 'ADMITTED';
+          const isExistActive = existing.status === 'PENDING' || existing.status === 'ACCEPTED' || existing.status === 'ADMITTED';
+          if (isRActive && !isExistActive) {
+            patientMap.set(patientKey, r);
+          } else if (isRActive === isExistActive) {
+            if (new Date(r.createdAt || 0).getTime() > new Date(existing.createdAt || 0).getTime()) {
+              patientMap.set(patientKey, r);
+            }
+          }
+        }
       }
-      setReferrals(deduped);
+      setReferrals(Array.from(patientMap.values()));
     } catch (_err) {
       setReferrals([]);
     }
@@ -85,9 +101,12 @@ export default function HospitalRequests() {
 
   const loadAll = useCallback(async () => {
     await Promise.all([fetchRequests(), fetchReferrals()]);
+    if (hospitalId) {
+      AsyncStorage.setItem(`@golden_hour_last_seen_referral_${hospitalId}`, String(Date.now())).catch(() => {});
+    }
     setLoading(false);
     setRefreshing(false);
-  }, [fetchRequests, fetchReferrals]);
+  }, [fetchRequests, fetchReferrals, hospitalId]);
 
   useEffect(() => {
     loadAll();

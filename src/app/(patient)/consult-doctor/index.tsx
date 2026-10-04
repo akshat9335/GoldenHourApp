@@ -24,6 +24,8 @@ export default function ConsultDoctor() {
   const liveStoreServingToken = useAppStore((s) => s.servingToken);
 
   const [hasLoadedServerAppts, setHasLoadedServerAppts] = useState(false);
+  const [showPastAppointments, setShowPastAppointments] = useState(false);
+  const [showAllActive, setShowAllActive] = useState(false);
 
   React.useEffect(() => {
     let mounted = true;
@@ -197,6 +199,7 @@ export default function ConsultDoctor() {
         <View style={{ height: 14 }} />
 
         {/* My Booked Appointments Section */}
+        {/* My Booked Appointments Section */}
         {/* Active Booked Appointments (Today or Future) */}
         {activeAppointments.length > 0 && (
           <View style={{ marginBottom: 18 }}>
@@ -204,7 +207,7 @@ export default function ConsultDoctor() {
               <Text style={styles.eyebrow}>MY ACTIVE APPOINTMENTS</Text>
               <Pill color="blue">{activeAppointments.length} In Progress</Pill>
             </View>
-            {activeAppointments.map((apt: any) => {
+            {(showAllActive ? activeAppointments : [activeAppointments[0]]).map((apt: any) => {
               const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
               const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
               const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';
@@ -258,85 +261,143 @@ export default function ConsultDoctor() {
                 </Card>
               );
             })}
-          </View>
-        )}
 
-        {/* Past Stale / Expired Appointments */}
-        {expiredAppointments.length > 0 && (
-          <View style={{ marginBottom: 18 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <Text style={[styles.eyebrow, { color: colors.inkFaint }]}>PAST UNATTENDED APPOINTMENTS ({expiredAppointments.length})</Text>
+            {activeAppointments.length > 1 && (
               <Pressable
-                onPress={() => {
-                  expiredAppointments.forEach((a) => handleCancelAppointment(a.appointmentId || a.id));
+                onPress={() => setShowAllActive((prev) => !prev)}
+                style={{
+                  paddingVertical: 7,
+                  paddingHorizontal: 12,
+                  backgroundColor: '#eff6ff',
+                  borderRadius: 8,
+                  alignItems: 'center',
+                  marginBottom: 6,
+                  borderWidth: 1,
+                  borderColor: '#bfdbfe',
                 }}
-                style={{ paddingVertical: 3, paddingHorizontal: 8, backgroundColor: '#f1f3f5', borderRadius: 6 }}
               >
-                <Text style={{ fontSize: 11, color: colors.inkFaint, fontWeight: '700' }}>Clear All</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.blue }}>
+                  {showAllActive
+                    ? '▲ Hide Additional Appointments'
+                    : `▼ Show ${activeAppointments.length - 1} Other Active Appointment${activeAppointments.length - 1 > 1 ? 's' : ''}`}
+                </Text>
               </Pressable>
-            </View>
-            {expiredAppointments.map((apt: any) => {
-              const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
-              const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
-              return (
-                <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.line, borderWidth: 1, backgroundColor: '#f8f9fa', marginBottom: 8 }]}>
-                  <View style={styles.rowTop}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.name, { color: colors.inkFaint }]}>{docName}</Text>
-                      <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot} · Token #{apt.tokenNumber}</Text>
-                    </View>
-                    <Pressable
-                      onPress={() => handleCancelAppointment(apt.appointmentId || apt.id)}
-                      style={{ paddingVertical: 4, paddingHorizontal: 10, backgroundColor: '#e9ecef', borderRadius: 6 }}
-                    >
-                      <Text style={{ fontSize: 11, color: colors.ink, fontWeight: '600' }}>Dismiss</Text>
-                    </Pressable>
-                  </View>
-                </Card>
-              );
-            })}
+            )}
           </View>
         )}
 
-        {/* Past Completed Consultations */}
-        {completedAppointments.length > 0 && (
+        {/* Collapsible Past Consultations & History Dropdown */}
+        {(completedAppointments.length > 0 || expiredAppointments.length > 0) && (
           <View style={{ marginBottom: 18 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <Text style={styles.eyebrow}>COMPLETED CONSULTATIONS</Text>
-              <Pill color="success">{completedAppointments.length} Finished</Pill>
-            </View>
-            {completedAppointments.map((apt: any) => {
-              const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
-              const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
-              const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';
+            <Pressable
+              onPress={() => setShowPastAppointments((prev) => !prev)}
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#f8fafc',
+                borderWidth: 1.5,
+                borderColor: colors.line,
+                borderRadius: 12,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Icon name="history" size={16} color={colors.ink} />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.ink }}>
+                  Past Consultations & Records
+                </Text>
+                <View style={{ backgroundColor: colors.blueBg, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.blue }}>
+                    {completedAppointments.length + expiredAppointments.length}
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.blue }}>
+                {showPastAppointments ? 'Hide ▲' : 'View History ▼'}
+              </Text>
+            </Pressable>
 
-              return (
-                <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.line, borderWidth: 1, backgroundColor: '#fcfdfd', marginBottom: 10 }]}>
-                  <View style={styles.rowTop}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.name, { color: colors.ink }]}>{docName}</Text>
-                      <Text style={styles.sub}>{clinicName}</Text>
-                      <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot}</Text>
-                    </View>
-                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                      <Pill color="success">✓ COMPLETED</Pill>
-                      <Text style={{ fontSize: 11, color: colors.inkFaint }}>Token #{apt.tokenNumber}</Text>
-                    </View>
+            {showPastAppointments && (
+              <View style={{ marginTop: 12 }}>
+                {/* Past Completed Consultations */}
+                {completedAppointments.length > 0 && (
+                  <View style={{ marginBottom: 12 }}>
+                    <Text style={[styles.eyebrow, { marginBottom: 8 }]}>COMPLETED CONSULTATIONS ({completedAppointments.length})</Text>
+                    {completedAppointments.map((apt: any) => {
+                      const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
+                      const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
+                      const clinicName = matchedDoc?.clinic || apt.clinicName || 'Prayagraj Health Center';
+
+                      return (
+                        <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.line, borderWidth: 1, backgroundColor: '#fcfdfd', marginBottom: 10 }]}>
+                          <View style={styles.rowTop}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.name, { color: colors.ink }]}>{docName}</Text>
+                              <Text style={styles.sub}>{clinicName}</Text>
+                              <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot}</Text>
+                            </View>
+                            <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                              <Pill color="success">✓ COMPLETED</Pill>
+                              <Text style={{ fontSize: 11, color: colors.inkFaint }}>Token #{apt.tokenNumber}</Text>
+                            </View>
+                          </View>
+                          <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={{ fontSize: 12, color: colors.success, fontWeight: '600', flex: 1 }}>
+                              ✓ Health record & prescription recorded
+                            </Text>
+                            <Pressable
+                              onPress={() => router.push('/(patient)/health-records' as any)}
+                              style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colors.blueBg, borderRadius: 6 }}
+                            >
+                              <Text style={{ fontSize: 11, color: colors.blue, fontWeight: '700' }}>View Rx →</Text>
+                            </Pressable>
+                          </View>
+                        </Card>
+                      );
+                    })}
                   </View>
-                  <View style={{ marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.line, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 12, color: colors.success, fontWeight: '600', flex: 1 }}>
-                      ✓ Health record & prescription recorded
-                    </Text>
-                    <Pressable
-                      onPress={() => router.push('/(patient)/health-records' as any)}
-                      style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colors.blueBg, borderRadius: 6 }}
-                    >
-                      <Text style={{ fontSize: 11, color: colors.blue, fontWeight: '700' }}>View Rx →</Text>
-                    </Pressable>
+                )}
+
+                {/* Past Stale / Expired Appointments */}
+                {expiredAppointments.length > 0 && (
+                  <View style={{ marginBottom: 4 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <Text style={[styles.eyebrow, { color: colors.inkFaint, marginBottom: 0 }]}>UNATTENDED APPOINTMENTS ({expiredAppointments.length})</Text>
+                      <Pressable
+                        onPress={() => {
+                          expiredAppointments.forEach((a) => handleCancelAppointment(a.appointmentId || a.id));
+                        }}
+                        style={{ paddingVertical: 3, paddingHorizontal: 8, backgroundColor: '#f1f3f5', borderRadius: 6 }}
+                      >
+                        <Text style={{ fontSize: 11, color: colors.inkFaint, fontWeight: '700' }}>Clear All</Text>
+                      </Pressable>
+                    </View>
+                    {expiredAppointments.map((apt: any) => {
+                      const matchedDoc = allDoctors.find((d) => d.id === apt.doctorId);
+                      const docName = matchedDoc?.name || apt.doctorName || 'Dr. Medical Practitioner';
+                      return (
+                        <Card key={apt.appointmentId || apt.id} style={[styles.card, { borderColor: colors.line, borderWidth: 1, backgroundColor: '#f8f9fa', marginBottom: 8 }]}>
+                          <View style={styles.rowTop}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.name, { color: colors.inkFaint }]}>{docName}</Text>
+                              <Text style={styles.sub}>📅 {apt.date} · ⏰ {apt.timeSlot} · Token #{apt.tokenNumber}</Text>
+                            </View>
+                            <Pressable
+                              onPress={() => handleCancelAppointment(apt.appointmentId || apt.id)}
+                              style={{ paddingVertical: 4, paddingHorizontal: 10, backgroundColor: '#e9ecef', borderRadius: 6 }}
+                            >
+                              <Text style={{ fontSize: 11, color: colors.ink, fontWeight: '600' }}>Dismiss</Text>
+                            </Pressable>
+                          </View>
+                        </Card>
+                      );
+                    })}
                   </View>
-                </Card>
-              );
-            })}
+                )}
+              </View>
+            )}
           </View>
         )}
 
