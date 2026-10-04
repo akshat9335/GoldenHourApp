@@ -342,22 +342,16 @@ export async function createCommunityReferral(
     return dataStore.communityReferrals.get(data.id)!;
   }
 
-  // 2. Check for duplicate submission within last 30 seconds (same patient, worker, facility)
+  // 2. Check for duplicate pending referral for same patient
   for (const existing of dataStore.communityReferrals.values()) {
-    if (
-      existing.workerUid === workerUid &&
-      existing.patientId === data.patientId &&
-      existing.destinationFacility.toLowerCase().trim() === (data.destinationFacility || "").toLowerCase().trim()
-    ) {
-      const timeDiff = Math.abs(new Date(now).getTime() - new Date(existing.createdAt || 0).getTime());
-      if (timeDiff < 30000) {
-        // Less than 30s ago, return existing referral
-        return existing;
-      }
+    const isSamePat = existing.patientId === data.patientId ||
+      (existing.patientName && data.patientName && existing.patientName.toLowerCase().trim() === data.patientName.toLowerCase().trim());
+    if (isSamePat && (existing.status === "PENDING" || existing.status === "ACCEPTED")) {
+      return existing;
     }
   }
 
-  // Also check Firestore if client passed an explicit ID or duplicate recent submission exists
+  // Also check Firestore if duplicate pending submission exists
   if (isFirebaseConfigured() && firestore) {
     try {
       if (data.id) {
@@ -375,16 +369,9 @@ export async function createCommunityReferral(
         .get();
       for (const d of snap.docs) {
         const existing = d.data() as CommunityReferral;
-        if (
-          existing &&
-          existing.status === "PENDING" &&
-          (existing.destinationFacility || "").toLowerCase().trim() === (data.destinationFacility || "").toLowerCase().trim()
-        ) {
-          const timeDiff = Math.abs(Date.now() - new Date(existing.createdAt || 0).getTime());
-          if (timeDiff < 60000) {
-            dataStore.communityReferrals.set(d.id, existing);
-            return existing;
-          }
+        if (existing && (existing.status === "PENDING" || existing.status === "ACCEPTED")) {
+          dataStore.communityReferrals.set(d.id, existing);
+          return existing;
         }
       }
     } catch {}

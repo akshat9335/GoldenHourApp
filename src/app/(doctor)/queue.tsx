@@ -291,24 +291,6 @@ export default function DoctorQueue() {
 
       await api.healthRecords.create(payload);
 
-      if (isReferralActive) {
-        try {
-          await api.referrals.create({
-            patientId: currentAppt?.patientId || `patient-token-${servingToken}`,
-            patientName: currentPatientName,
-            doctorId,
-            doctorName,
-            hospitalId: selectedHospitalId,
-            hospitalName: selectedHosp?.name || 'Tertiary Care Hospital',
-            reason: referralReason || diagnosis,
-            priority: referralPriority,
-            notes: notes || `Referred by ${doctorName}`,
-          });
-        } catch (refErr) {
-          console.warn('Referral creation warning:', refErr);
-        }
-      }
-
       const apptId = currentAppt?.appointmentId || currentAppt?.id;
       if (apptId) {
         try {

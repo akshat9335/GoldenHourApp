@@ -153,7 +153,7 @@ export default function CreateReferralScreen() {
 
     const referralCode = `REF-ASHA-${Date.now().toString(36).toUpperCase()}`;
     const payload = {
-      id: `ref-${Date.now()}`,
+      id: `ref-comm-${selectedPatientId}`,
       referralCode,
       patientId: selectedPatientId,
       patientName: selectedPatient?.name || 'Community Patient',

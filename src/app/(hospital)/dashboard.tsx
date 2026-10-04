@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, RefreshControl, TouchableOpacity, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { colors } from '@/constants/theme';
@@ -25,6 +25,15 @@ export default function HospitalDashboard() {
   const [criticalCount, setCriticalCount] = useState<number>(0);
   const [completedCases, setCompletedCases] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadReferralCount, setUnreadReferralCount] = useState<number>(0);
+  const lastSeenRefTimestampRef = useRef<number>(0);
+
+  useEffect(() => {
+    const hospId = userProfile?.uid || 'hosp-srn-prayagraj';
+    AsyncStorage.getItem(`@golden_hour_last_seen_referral_${hospId}`).then((val) => {
+      if (val) lastSeenRefTimestampRef.current = Number(val) || 0;
+    }).catch(() => {});
+  }, [userProfile?.uid]);
 
   const [capacity, setCapacity] = useState({
     totalBeds: 50,
@@ -131,6 +140,14 @@ export default function HospitalDashboard() {
         seenRefIds.add(r.id);
         refsRaw.push(r);
       }
+
+      // Check for unread pending referrals for notification badge
+      const pendingRefs = refsRaw.filter((r: any) => String(r.status || '').toUpperCase() === 'PENDING');
+      const unread = pendingRefs.filter((r: any) => {
+        const createdTime = new Date(r.createdAt || 0).getTime();
+        return createdTime > lastSeenRefTimestampRef.current;
+      });
+      setUnreadReferralCount(unread.length > 0 ? unread.length : (pendingRefs.length > 0 && lastSeenRefTimestampRef.current === 0 ? pendingRefs.length : 0));
 
       const pending = items.filter((d: any) => {
         const s = String(d.status || 'NEW').toUpperCase();
@@ -360,6 +377,15 @@ export default function HospitalDashboard() {
     );
   };
 
+  const handleOpenBell = () => {
+    const hospId = userProfile?.uid || 'hosp-srn-prayagraj';
+    const now = Date.now();
+    lastSeenRefTimestampRef.current = now;
+    setUnreadReferralCount(0);
+    AsyncStorage.setItem(`@golden_hour_last_seen_referral_${hospId}`, String(now)).catch(() => {});
+    router.push('/(hospital)/requests');
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <Screen
@@ -395,8 +421,13 @@ export default function HospitalDashboard() {
                 {lang === 'mr' ? '‹ भूमिका बदला' : lang === 'hi' ? '‹ रोल बदलें' : '‹ Switch Role'}
               </Text>
             </TouchableOpacity>
-            <Pressable style={styles.bellBtn} onPress={() => router.push('/notifications')}>
+            <Pressable style={styles.bellBtn} onPress={handleOpenBell}>
               <Icon name="bell" />
+              {unreadReferralCount > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{unreadReferralCount}</Text>
+                </View>
+              )}
             </Pressable>
           </View>
         </View>
@@ -728,7 +759,27 @@ export default function HospitalDashboard() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  bellBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  bellBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  bellBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#EF4444',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    elevation: 4,
+  },
+  bellBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
   switchBtn: { paddingHorizontal: 9, paddingVertical: 8, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1', alignItems: 'center', justifyContent: 'center' },
   switchBtnText: { fontSize: 11, fontWeight: '700', color: colors.inkSoft },
   incomingCard: { padding: 14, marginBottom: 14, borderWidth: 1.5, borderColor: colors.line },
