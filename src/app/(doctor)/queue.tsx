@@ -112,7 +112,7 @@ export default function DoctorQueue() {
       .getDoctorAppointments({ doctorId, date: todayStr })
       .then((data: any) => {
         if (Array.isArray(data)) {
-          const clean = data.filter((a: any) => !a.isArchived);
+          const clean = data.filter((a: any) => !a.isArchived && (a.status || '').toUpperCase() !== 'CANCELLED');
           setAppointments(clean);
         }
       })
@@ -147,6 +147,11 @@ export default function DoctorQueue() {
   const isCompletedOrEnded = (status: string) => {
     const s = (status || '').toUpperCase();
     return s === 'COMPLETED' || s === 'CANCELLED' || s === 'NO_SHOW';
+  };
+
+  const cleanNotes = (notes?: string) => {
+    if (!notes) return '';
+    return notes.replace(/\[.*?\]/g, '').replace(/^[·\s]+|[·\s]+$/g, '').trim();
   };
 
   const waitingAppointments = appointments.filter(
@@ -423,7 +428,7 @@ export default function DoctorQueue() {
           <Text style={styles.tokenBig}>Token #{servingToken}</Text>
           <Text style={styles.patientName}>{currentPatientName}</Text>
           {currentAppt?.timeSlot && (
-            <Text style={styles.slotText}>Slot: {currentAppt.timeSlot} · {currentAppt.notes || 'General OPD'}</Text>
+            <Text style={styles.slotText}>Slot: {currentAppt.timeSlot} · {cleanNotes(currentAppt.notes) || 'General OPD'}</Text>
           )}
 
           {servingToken === 0 ? (
@@ -520,7 +525,9 @@ export default function DoctorQueue() {
                   <View style={styles.row}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.rowToken}>Token #{tok} · {a.patientName}</Text>
-                      <Text style={styles.rowSub}>{a.timeSlot || 'Scheduled'} {a.notes ? `· ${a.notes}` : ''}</Text>
+                      <Text style={styles.rowSub}>
+                        {a.timeSlot || 'Scheduled'}{cleanNotes(a.notes) ? ` · ${cleanNotes(a.notes)}` : ''}
+                      </Text>
                     </View>
                     <Pill color={i === 0 ? 'amber' : 'grey'}>{i === 0 ? 'NEXT' : 'WAITING'}</Pill>
                   </View>

@@ -199,7 +199,7 @@ export class AppointmentService {
     const results: Appointment[] = [];
     for (const appt of dataStore.appointments.values()) {
       if (docIds.includes(appt.doctorId) && (!date || appt.date === date)) {
-        if (!includeArchived && appt.isArchived) {
+        if (!includeArchived && (appt.isArchived || appt.status === "CANCELLED")) {
           continue;
         }
         results.push(appt);
