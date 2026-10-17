@@ -34,25 +34,22 @@ def build_startup_pptx():
     prs = Presentation(source_pptx)
     s1 = prs.slides[0]
 
-    # Remove SIH shapes from Slide 1
-    # Shapes to delete: Shape 6 (SIH logo), Shape 2 (SIH brain bulb), Shape 3, Shape 4, Shape 5
-    # Delete backwards by index to avoid index shifting
+    # 1. Clean Slide 1: Remove SIH shapes
     to_delete = []
-    for i, sh in enumerate(s1.shapes):
+    for sh in s1.shapes:
         if sh.name in ['Picture 1', 'Picture 4', 'Title 7', 'Subtitle 3', 'TextBox 9', 'Freeform: Shape 26']:
             to_delete.append(sh._element)
 
     for elem in to_delete:
         elem.getparent().remove(elem)
 
-    # 1. Top Bar Rectangle
+    # 2. Slide 1 Top Bar Rectangle & Text
     top_bar = s1.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(13.333), Inches(0.76))
     top_bar.fill.solid()
     top_bar.fill.fore_color.rgb = RGBColor(245, 247, 250)
     top_bar.line.color.rgb = RGBColor(218, 224, 233)
     top_bar.line.width = Pt(1)
 
-    # Top Bar Text
     tb_text = s1.shapes.add_textbox(Inches(0.4), Inches(0.12), Inches(9.5), Inches(0.5))
     p = tb_text.text_frame.paragraphs[0]
     r1 = p.add_run()
@@ -83,8 +80,7 @@ def build_startup_pptx():
     br.font.size = Pt(12)
     br.font.color.rgb = RGBColor(16, 120, 72)
 
-    # 2. Golden Hour Logo & Title positioning
-    # Position existing logo (Shape with hourglass) and title (TextBox 5)
+    # 3. Golden Hour Logo & Title positioning
     for sh in s1.shapes:
         if sh.name == 'Picture 8':
             sh.left = Inches(0.5)
@@ -121,8 +117,8 @@ def build_startup_pptx():
     tr.font.size = Pt(14)
     tr.font.color.rgb = RGBColor(71, 85, 105)
 
-    # 3. Startup Details Table Box
-    info_box = s1.shapes.add_textbox(Inches(0.5), Inches(2.6), Inches(7.0), Inches(4.0))
+    # 4. Startup Details Table Box on the Left
+    info_box = s1.shapes.add_textbox(Inches(0.5), Inches(2.6), Inches(6.8), Inches(4.0))
     tf = info_box.text_frame
     tf.word_wrap = True
 
@@ -173,8 +169,90 @@ def build_startup_pptx():
     cr.font.size = Pt(11)
     cr.font.color.rgb = RGBColor(71, 85, 105)
 
-    # 4. Right side: Live Working Prototype screens
-    s1.shapes.add_picture("s3_mockups.png", Inches(7.6), Inches(0.95), width=Inches(5.2), height=Inches(6.3))
+    # 5. Slide 1 Right Side: Core Value Proposition & Impact Container (NO repeated mockups!)
+    val_container = s1.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(7.6), Inches(0.95), Inches(5.3), Inches(6.3))
+    val_container.fill.solid()
+    val_container.fill.fore_color.rgb = RGBColor(248, 250, 254)
+    val_container.line.color.rgb = RGBColor(210, 222, 240)
+    val_container.line.width = Pt(1)
+
+    val_header = s1.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(7.6), Inches(0.95), Inches(5.3), Inches(0.55))
+    val_header.fill.solid()
+    val_header.fill.fore_color.rgb = RGBColor(0, 32, 96)
+    val_header.line.fill.background()
+    vhp = val_header.text_frame.paragraphs[0]
+    vhp.alignment = PP_ALIGN.CENTER
+    vhr = vhp.add_run()
+    vhr.text = "CORE VALUE PROPOSITION & IMPACT"
+    vhr.font.name = "Calibri"
+    vhr.font.bold = True
+    vhr.font.size = Pt(13)
+    vhr.font.color.rgb = RGBColor(255, 255, 255)
+
+    cards_info = [
+        ("The 60-Minute 'Golden Hour'",
+         "Over 50% of trauma fatalities occur in the first hour. Golden Hour eliminates discovery, routing, and triage delays to maximize patient survival rates.",
+         RGBColor(245, 158, 11)),
+        ("Multilingual Voice AI Triage",
+         "Empowers rural citizens and ASHA workers with instant vernacular voice SOS parsing and AI clinical severity scoring (Gemini-backed).",
+         RGBColor(16, 120, 72)),
+        ("Real-Time Telemetry & ER Prep",
+         "Streams live patient vitals directly from ambulance to hospital trauma bays, enabling surgical teams and ICU beds to be ready before arrival.",
+         RGBColor(0, 102, 153)),
+        ("ABDM & Scalable SaaS Model",
+         "Seamless Ayushman Bharat (ABDM/FHIR) digital health records sync + B2B subscription for private hospitals & B2G integration for 108 fleets.",
+         RGBColor(107, 70, 193))
+    ]
+
+    card_y = 1.62
+    for title, desc, col in cards_info:
+        # Mini card
+        mc = s1.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(7.75), Inches(card_y), Inches(5.0), Inches(1.25))
+        mc.fill.solid()
+        mc.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        mc.line.color.rgb = RGBColor(225, 232, 242)
+        mc.line.width = Pt(1)
+
+        # Left color bar
+        bar = s1.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(7.75), Inches(card_y), Inches(0.08), Inches(1.25))
+        bar.fill.solid()
+        bar.fill.fore_color.rgb = col
+        bar.line.fill.background()
+
+        # Text in mini card
+        mtb = s1.shapes.add_textbox(Inches(7.9), Inches(card_y + 0.05), Inches(4.75), Inches(1.15))
+        mtb.text_frame.word_wrap = True
+        p1 = mtb.text_frame.paragraphs[0]
+        r_t = p1.add_run()
+        r_t.text = title
+        r_t.font.name = "Calibri"
+        r_t.font.bold = True
+        r_t.font.size = Pt(12.5)
+        r_t.font.color.rgb = RGBColor(0, 32, 96)
+
+        p2 = mtb.text_frame.add_paragraph()
+        p2.space_before = Pt(3)
+        r_d = p2.add_run()
+        r_d.text = desc
+        r_d.font.name = "Calibri"
+        r_d.font.size = Pt(10.5)
+        r_d.font.color.rgb = RGBColor(51, 65, 85)
+
+        card_y += 1.34
+
+    # 6. Slides 2 to 6: Remove top-right SIH logo picture on all slides
+    for idx in range(1, len(prs.slides)):
+        s = prs.slides[idx]
+        to_del = []
+        for sh in s.shapes:
+            if sh.shape_type == 13: # Picture
+                left_in = sh.left / 914400
+                top_in = sh.top / 914400
+                if left_in > 10.0 and top_in < 1.0:
+                    to_del.append(sh._element)
+        for elem in to_del:
+            elem.getparent().remove(elem)
+            print(f"Slide {idx+1}: Removed top-right SIH logo shape!")
 
     out_pptx = "Golden_Hour_Startup_PitchDeck.pptx"
     art_pptx = r"C:\Users\Admin\.gemini\antigravity\brain\160a95f8-5e11-42e1-8655-2a7f95c1d2d8\Golden_Hour_Startup_PitchDeck.pptx"
@@ -274,7 +352,7 @@ def build_startup_pdf():
         y_pos += 44
 
     # Bottom Contact info bar
-    p1.draw_rect(fitz.Rect(40, 492, 540, 524), color=None, fill=(0.95, 0.96, 0.98))
+    p1.draw_rect(fitz.Rect(40, 492, 530, 524), color=None, fill=(0.95, 0.96, 0.98))
     p1.insert_text(
         fitz.Point(50, 511),
         'Contact: akshatsrivastava912@gmail.com   |   GitHub: akshat9335/GoldenHourApp',
@@ -284,8 +362,67 @@ def build_startup_pdf():
         color=(71/255, 85/255, 105/255)
     )
 
-    # 4. Right side: Live Working Prototype screens
-    p1.insert_image(fitz.Rect(565, 70, 935, 522), filename='s3_mockups.png')
+    # 4. Slide 1 Right Side: Core Value Proposition & Impact Container (NO repeated mockups!)
+    rx0, ry0, rx1, ry1 = 555, 72, 935, 524
+    p1.draw_rect(fitz.Rect(rx0, ry0, rx1, ry1), color=(0.82, 0.87, 0.94), fill=(0.97, 0.98, 1.0), width=1)
+
+    # Header Bar
+    p1.draw_rect(fitz.Rect(rx0, ry0, rx1, ry0 + 38), color=None, fill=(0, 32/255, 96/255))
+    p1.insert_text(
+        fitz.Point(rx0 + 20, ry0 + 25),
+        'CORE VALUE PROPOSITION & IMPACT',
+        fontfile=r'C:\Windows\Fonts\calibrib.ttf',
+        fontname='Calibri-Bold',
+        fontsize=13.5,
+        color=(1, 1, 1)
+    )
+
+    cards = [
+        ("The 60-Minute 'Golden Hour'",
+         "Over 50% of trauma fatalities occur in the first hour. Golden Hour eliminates discovery, routing, and triage delays to maximize patient survival rates.",
+         (245/255, 158/255, 11/255)),
+        ("Multilingual Voice AI Triage",
+         "Empowers rural citizens and ASHA workers with instant vernacular voice SOS parsing and AI clinical severity scoring (Gemini-backed).",
+         (16/255, 120/255, 72/255)),
+        ("Real-Time Telemetry & ER Prep",
+         "Streams live patient vitals directly from ambulance to hospital trauma bays, enabling surgical teams and ICU beds to be ready before arrival.",
+         (0, 102/255, 153/255)),
+        ("ABDM & Scalable SaaS Model",
+         "Seamless Ayushman Bharat (ABDM/FHIR) digital health records sync + B2B subscription for private hospitals & B2G integration for 108 fleets.",
+         (107/255, 70/255, 193/255))
+    ]
+
+    cy = ry0 + 48
+    for title, desc, accent_color in cards:
+        p1.draw_rect(fitz.Rect(rx0 + 10, cy, rx1 - 10, cy + 90), color=(0.88, 0.91, 0.95), fill=(1, 1, 1), width=1)
+        p1.draw_rect(fitz.Rect(rx0 + 10, cy, rx0 + 15, cy + 90), color=None, fill=accent_color)
+
+        p1.insert_text(
+            fitz.Point(rx0 + 24, cy + 20),
+            title,
+            fontfile=r'C:\Windows\Fonts\calibrib.ttf',
+            fontname='Calibri-Bold',
+            fontsize=13,
+            color=(0, 32/255, 96/255)
+        )
+
+        tb_rect = fitz.Rect(rx0 + 24, cy + 26, rx1 - 18, cy + 86)
+        p1.insert_textbox(
+            tb_rect,
+            desc,
+            fontfile=r'C:\Windows\Fonts\calibri.ttf',
+            fontname='Calibri',
+            fontsize=11,
+            color=(51/255, 65/255, 85/255)
+        )
+        cy += 100
+
+    # 5. Pages 2 to 6: Remove top-right SIH logo with surgical precision
+    for p_idx in range(1, 6):
+        p = doc[p_idx]
+        p.add_redact_annot(fitz.Rect(825, 0, 955, 54), fill=(1, 1, 1))
+        p.apply_redactions()
+        print(f"Page {p_idx+1}: Removed top-right SIH logo in PDF.")
 
     out_pdf = "Golden_Hour_Startup_PitchDeck.pdf"
     art_pdf = r"C:\Users\Admin\.gemini\antigravity\brain\160a95f8-5e11-42e1-8655-2a7f95c1d2d8\Golden_Hour_Startup_PitchDeck.pdf"
